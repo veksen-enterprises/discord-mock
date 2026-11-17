@@ -2,9 +2,10 @@
  * Runs the same bot-triggerable scenarios against the mock and, when DISCORD_CONTRACT_TOKEN is
  * set, against the real test guild, then compares response statuses and shapes.
  *
- * Accepted differences live in baseline.json. A new difference fails the run; so does a
- * baseline entry that no longer occurs, so the baseline only shrinks. UPDATE_BASELINE=1
- * rewrites it from the current run.
+ * A status or error-code difference always fails: the mock answered the bot differently,
+ * and that's never accepted unreviewed. Shape differences can be accepted in baseline.json.
+ * A new one fails the run; so does a baseline entry that no longer occurs, so the baseline
+ * only shrinks. UPDATE_BASELINE=1 rewrites it from the current run's shape differences.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
@@ -65,6 +66,7 @@ describe.skipIf(!TOKEN)("mock against real Discord", () => {
       const mock = await observe(await mockTarget());
 
       const differences: string[] = [];
+      const statusDifferences: string[] = [];
       const compare = (
         section: string,
         a: Record<string, unknown>,
@@ -92,7 +94,7 @@ describe.skipIf(!TOKEN)("mock against real Discord", () => {
       for (const [key, real] of Object.entries(statusOf(discord.responses))) {
         const ours = statusOf(mock.responses)[key];
         if (JSON.stringify(real) !== JSON.stringify(ours))
-          differences.push(
+          statusDifferences.push(
             `status.${key}: Discord ${JSON.stringify(real)}, mock ${JSON.stringify(ours)}`,
           );
       }
@@ -109,8 +111,13 @@ describe.skipIf(!TOKEN)("mock against real Discord", () => {
 
       writeFileSync(
         REPORT,
-        JSON.stringify({ differences, discord, mock }, null, 2),
+        JSON.stringify(
+          { statusDifferences, differences, discord, mock },
+          null,
+          2,
+        ),
       );
+      expect(statusDifferences).toEqual([]);
       if (process.env.UPDATE_BASELINE) {
         writeFileSync(BASELINE, JSON.stringify(differences, null, 2) + "\n");
         return;
