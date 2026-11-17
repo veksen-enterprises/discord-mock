@@ -25,6 +25,84 @@ mock.use(
 );
 ```
 
+## Before and after
+
+A `/join` command, as sin-bot writes it: defer ephemerally, find the ladder from the channel's category, store the member's server nickname, answer with an embed. The full runnable version is in [`examples/ladder/`](examples/ladder).
+
+### Before: hand-rolled fakes
+
+```ts
+import { createMockChatInputCommandInteraction } from "../test/discord-utils";
+// ^ importing this runs its top-level vi.mock("discord.js"): every builder in this file is a stub
+
+it("should add the member to the ladder", async () => {
+  const interaction = createMockChatInputCommandInteraction({
+    displayName: "Bravo",
+  });
+  // = { user: { id: "123456789", ... }, member: { displayName: "Bravo" },
+  //     deferReply: vi.fn(), editReply: vi.fn() } as unknown as ChatInputCommandInteraction
+  vi.spyOn(ladders, "fromChannel").mockReturnValue(store.get("Test Ladder"));
+  vi.spyOn(replyModule, "reply").mockReturnValue({
+    withSuccess: vi.fn(),
+    withError: vi.fn(),
+  });
+
+  await executeJoin(interaction, store);
+
+  expect(interaction.deferReply).toHaveBeenCalled();
+  expect(store.get("Test Ladder")?.get("123456789")).toBe("Bravo");
+  expect(replyModule.reply(interaction).withSuccess).toHaveBeenCalledWith({
+    title: "Joined the Ladder!",
+    description: "You have successfully joined the ladder. Good luck!",
+  });
+});
+```
+
+The test checks that `executeJoin` called what it was written to call. The ladder lookup and the reply are spied out, the interaction is a cast object, and `execute` is called directly, so command registration and routing never run either.
+
+### After: the bot logs in to the mock
+
+```ts
+const mock = await createDiscordMock();
+const guild = mock.createGuild("sin");
+const ladder = mock.createCategory(guild, "Test Ladder");
+const challenges = mock.createTextChannel(guild, "challenges", {
+  parent: ladder,
+});
+const alice = mock.createUser("alice");
+mock.addMember(guild, alice, { nick: "Bravo" });
+
+await registerCommands({
+  token: mock.token,
+  applicationId: mock.state.applicationId,
+  guildId: guild.id,
+  api: mock.apiUrl,
+});
+const { client } = createBot(store, mock.clientOptions); // the bot's only test seam
+await client.login(mock.token);
+
+it("adds the member under their server nickname and confirms privately", async () => {
+  const run = mock.as(alice).slashCommand(challenges, "join");
+  const reply = await run.reply();
+
+  expect(run.ephemeral).toBe(true);
+  expect(reply.embeds[0]).toMatchObject({ title: "Joined the Ladder!" });
+  expect(store.get("Test Ladder")?.get(alice.id)).toBe("Bravo");
+});
+```
+
+No `vi.mock`, no spies, no casts. Alice runs `/join` in a channel, and the test reads the message Discord would show her.
+
+### Three bugs, both suites
+
+Each bug was planted in `examples/ladder/` and both suites were run:
+
+| Bug                                                                                | Fakes | Mock                                                                            |
+| ---------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------- |
+| `reply.ts` calls `interaction.reply` after the defer instead of `editReply`        | pass  | fail: discord.js throws `InteractionAlreadyReplied`, Alice never gets an answer |
+| The ladder is looked up by category id instead of name                             | pass  | fail: "No Ladder" in a ladder channel                                           |
+| The command is renamed to `join-ladder` in the registration but not in the handler | pass  | fail: `/join` isn't registered                                                  |
+
 ## How it hooks in
 
 One option: `rest: { api: mock.apiUrl }`. Checked in discord.js 14.28:
