@@ -28,13 +28,11 @@ One option: `rest: { api: mock.apiUrl }`. Checked in discord.js 14.28:
 - The gateway URL is not configured anywhere. `@discordjs/ws` calls `GET /gateway/bot` through that same REST client and connects to whatever `url` comes back (`WebSocketManager.fetchGatewayInformation`), so pointing REST at the mock also points the gateway at it.
 - No global patching, no module mocking. Tests can run in parallel, each with its own mock on its own port.
 
-Why not msw: in Node, `@discordjs/rest` calls `undici.request` directly and `@discordjs/ws` uses the `ws` package (`shouldUseGlobalFetchAndWebSocket()` is false outside Deno/Bun). msw intercepts `http`/`ClientRequest` and global `fetch`/`WebSocket`, so neither surface goes through it. The msw ideas worth keeping are the API ones: `mock.use()` overrides with `{ once }`, and failing on unhandled requests (`mock.assertNoUnhandledRequests()`).
+Why not msw: neither discord.js transport goes through what msw intercepts. See [ADR 0001](docs/adr/0001-bots-connect-to-real-local-servers.md).
 
-## Design
+## Rules the mock enforces
 
-**Stateful core, overrides on top.** REST writes mutate the model and the gateway announces them. A bot that sends a message, then fetches history, sees its message, without the test stubbing each call. Overrides (`mock.use`) sit in front for things the model can't produce: 5xx, 429, dropped connections, or a one-off error.
-
-**Discord's rules, enforced.** The point is certainty, so the mock refuses what Discord refuses:
+Why it's strict: [ADR 0003](docs/adr/0003-strict-by-default.md). The other decisions are in [`docs/adr/`](docs/adr), the product direction in [VISION.md](VISION.md), the vocabulary in [GLOSSARY.md](GLOSSARY.md).
 
 | Rule | Mock behaviour |
 | --- | --- |
@@ -67,4 +65,6 @@ The "closed vs reset" split is a real asymmetry in `@discordjs/rest`. Which one 
 - Most of the API surface. Unimplemented routes return 404 and are recorded; `assertNoUnhandledRequests()` turns that into a test failure so a gap is never mistaken for a pass.
 - Gateway `zlib-stream` and ETF. discord.js asks for zlib-stream when `zlib-sync` is installed; the mock closes the socket with a clear reason instead of misbehaving.
 - Reactions, threads, forums, DMs, members fetch, autocomplete, modals, select menus, attachments upload, partials.
-- A contract check against real Discord. The mock is only as truthful as its model; see `DESIGN.md`.
+- A contract check against real Discord (VISION.md, open questions). Until then, fidelity is modelled from the docs, not checked.
+
+What each consumer needs next: [docs/adoption.md](docs/adoption.md).
