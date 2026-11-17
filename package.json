@@ -5,7 +5,11 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
   "repository": {
     "type": "git",
@@ -23,6 +27,8 @@
     "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "discord.js": "^14.28.1",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
