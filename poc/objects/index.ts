@@ -79,12 +79,23 @@ export class Discord {
   /**
    * Log `client` in (it must have been built with `clientOptions`), wait for ready, and register
    * `commands` the way a deploy script would. The client is destroyed when the test ends.
+   *
+   * `permissions` are what your invite link asks for: the bot gets a role with them in every
+   * guild. Without it the bot has only @everyone's.
    */
   async start(
     client: Client,
-    opts: { commands?: RESTPostAPIApplicationCommandsJSONBody[] } = {},
+    opts: {
+      commands?: RESTPostAPIApplicationCommandsJSONBody[];
+      permissions?: bigint;
+    } = {},
   ) {
     this.client = client;
+    if (opts.permissions !== undefined)
+      for (const guild of this.mock.state.guilds.values())
+        this.mock.createRole(guild, "bot", opts.permissions, [
+          this.mock.state.bot,
+        ]);
     const ready = once(client, "clientReady");
     await client.login(this.mock.token);
     await ready;
@@ -114,6 +125,11 @@ export class Discord {
       .as(this.u(member))
       .forumPost(this.mock.state.requireChannel(forum.id), post);
     return { thread: brand(thread, post.title), message };
+  }
+
+  /** Discord archives `thread` for inactivity: it leaves the active list for the archived one. */
+  archive(thread: Thread) {
+    this.mock.archiveThread(this.mock.state.requireChannel(thread.id));
   }
 
   react(member: Member, message: Message, emoji: string) {
