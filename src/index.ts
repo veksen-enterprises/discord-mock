@@ -233,6 +233,24 @@ export class DiscordMock {
     );
   }
 
+  /**
+   * Archive `thread`, as Discord does to an inactive one. docs.discord.food/topics/threads:
+   * archiving sets archive_timestamp and is announced as THREAD_UPDATE with the full channel.
+   */
+  archiveThread(thread: APIChannel) {
+    const record = this.state.requireChannel(thread.id);
+    if (!("thread_metadata" in record) || !record.thread_metadata)
+      throw new Error(`discord-mock: ${thread.id} is not a thread`);
+    record.thread_metadata.archived = true;
+    record.thread_metadata.archive_timestamp = new Date().toISOString();
+    this.gateway.dispatch(
+      GatewayDispatchEvents.ThreadUpdate,
+      record,
+      GatewayIntentBits.Guilds,
+    );
+    return record;
+  }
+
   addMember(guild: GuildRecord, user: APIUser, opts: { nick?: string } = {}) {
     const member = this.state.addMember(guild.id, user.id, opts);
     this.gateway.dispatch(
