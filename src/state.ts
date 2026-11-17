@@ -102,13 +102,17 @@ export class DiscordState extends EventEmitter<{
     return guild;
   }
 
-  addMember(guildId: string, userId: string): APIGuildMember {
+  addMember(
+    guildId: string,
+    userId: string,
+    input: { nick?: string } = {},
+  ): APIGuildMember {
     const guild = this.requireGuild(guildId);
     const member: APIGuildMember = {
       user: this.requireUser(userId),
       roles: [],
       joined_at: new Date().toISOString(),
-      nick: null,
+      nick: input.nick ?? null,
       avatar: null,
       banner: null,
       pending: false,
@@ -155,7 +159,26 @@ export class DiscordState extends EventEmitter<{
     return channel;
   }
 
-  createTextChannel(guildId: string, input: { name: string }): APIChannel {
+  createCategoryChannel(guildId: string, input: { name: string }): APIChannel {
+    const guild = this.requireGuild(guildId);
+    const channel = {
+      id: snowflake(),
+      type: ChannelType.GuildCategory,
+      guild_id: guild.id,
+      name: input.name,
+      position: guild.channelIds.length,
+      permission_overwrites: [],
+      flags: 0 as ChannelFlags,
+    } satisfies APIChannel;
+    this.channels.set(channel.id, channel);
+    guild.channelIds.push(channel.id);
+    return channel;
+  }
+
+  createTextChannel(
+    guildId: string,
+    input: { name: string; parentId?: string },
+  ): APIChannel {
     const guild = this.requireGuild(guildId);
     const channel = {
       id: snowflake(),
@@ -164,7 +187,7 @@ export class DiscordState extends EventEmitter<{
       name: input.name,
       position: guild.channelIds.length,
       permission_overwrites: [],
-      parent_id: null,
+      parent_id: input.parentId ?? null,
       nsfw: false,
       topic: null,
       last_message_id: null,

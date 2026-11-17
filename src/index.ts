@@ -192,12 +192,24 @@ export class DiscordMock {
     return this.state.createGuild({ name, ownerId: opts.ownerId });
   }
 
-  createTextChannel(guild: GuildRecord, name: string) {
-    return this.state.createTextChannel(guild.id, { name });
+  /** A category; pass it as `parent` to `createTextChannel`. */
+  createCategory(guild: GuildRecord, name: string) {
+    return this.state.createCategoryChannel(guild.id, { name });
   }
 
-  addMember(guild: GuildRecord, user: APIUser) {
-    return this.state.addMember(guild.id, user.id);
+  createTextChannel(
+    guild: GuildRecord,
+    name: string,
+    opts: { parent?: APIChannel } = {},
+  ) {
+    return this.state.createTextChannel(guild.id, {
+      name,
+      parentId: opts.parent?.id,
+    });
+  }
+
+  addMember(guild: GuildRecord, user: APIUser, opts: { nick?: string } = {}) {
+    return this.state.addMember(guild.id, user.id, opts);
   }
 
   /** A guild role with these permissions, given to `members`. */
