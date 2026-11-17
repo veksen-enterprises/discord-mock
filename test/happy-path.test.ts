@@ -90,6 +90,59 @@ describe("a stock discord.js Client against the mock", () => {
     ).toBe("count 1");
   });
 
+  it("a followUp right after a defer edits the loading message, like Discord", async () => {
+    const { general, alice } = await start();
+    const run = mock.as(alice).slashCommand(general, "thinking");
+    const reply = await run.reply();
+    expect(reply.content).toBe("thought");
+    expect(run.followups).toHaveLength(0);
+    expect(mock.messagesIn(general)).toHaveLength(1);
+  });
+
+  it("credits the reply to the user who ran the command", async () => {
+    const { guild, general, alice } = await start();
+    const reply = await mock
+      .as(alice)
+      .slashCommand(general, "echo", { text: "hi" })
+      .reply();
+    expect(reply.interaction_metadata).toMatchObject({
+      type: 2,
+      user: { id: alice.id },
+      authorizing_integration_owners: { 0: guild.id },
+    });
+  });
+
+  it("resolves a user option to its guild member", async () => {
+    const { general, alice } = await start();
+    const run = mock
+      .as(alice)
+      .slashCommand(general, "whois", { user: alice.id });
+    expect((await run.reply()).content).toBe("member alice");
+  });
+
+  it("refuses a slash command registered without a description", async () => {
+    const { guild } = await start();
+    const { REST, Routes } = await import("discord.js");
+    const rest = new REST({ api: mock.apiUrl }).setToken(mock.token);
+    await expect(
+      rest.put(
+        Routes.applicationGuildCommands(mock.state.applicationId, guild.id),
+        { body: [{ name: "bare" }] },
+      ),
+    ).rejects.toMatchObject({ code: 50035, status: 400 });
+  });
+
+  it("reports a gateway op the mock doesn't answer as a Gap", async () => {
+    const { guild } = await start([
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+    ]);
+    await expect(
+      client.guilds.cache.get(guild.id)!.members.fetch({ time: 100 }),
+    ).rejects.toThrow();
+    expect(() => mock.assertNoUnhandledRequests()).toThrow(/gateway op 8/);
+  });
+
   it("rejects commands the bot never registered, and bad options", async () => {
     const { general, alice } = await start();
     expect(() => mock.as(alice).slashCommand(general, "nope")).toThrow(
@@ -117,6 +170,23 @@ describe("intents behave like Discord", () => {
     await expect(
       mock.waitForMessage((m) => m.author.bot === true, { timeoutMs: 200 }),
     ).rejects.toThrow();
+  });
+
+  it("without GUILD_PRESENCES, GUILD_CREATE carries only the bot's own member", async () => {
+    const { guild, alice } = await start([GatewayIntentBits.Guilds]);
+    const cached = client.guilds.cache.get(guild.id)!.members.cache;
+    expect(cached.has(mock.state.bot.id)).toBe(true);
+    expect(cached.has(alice.id)).toBe(false);
+  });
+
+  it("with GUILD_PRESENCES, a small guild's GUILD_CREATE carries every member", async () => {
+    const { guild, alice } = await start([
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildPresences,
+    ]);
+    expect(client.guilds.cache.get(guild.id)!.members.cache.has(alice.id)).toBe(
+      true,
+    );
   });
 
   it("login fails with 4014 when a privileged intent isn't enabled in the portal", async () => {

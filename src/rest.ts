@@ -53,6 +53,9 @@ export const respond = {
     status,
     body: { message, code },
   }),
+  // Codes from Discord's JSON error code table (discord-api-docs, topics/opcodes-and-status-codes;
+  // docs.discord.food/topics/errors loads its table client-side). The message strings and the
+  // HTTP statuses of 10062/40060/10015 are inferred, not checked: the contract test can't trigger them.
   missingPermissions: () => respond.error(403, 50013, "Missing Permissions"),
   missingAccess: () => respond.error(403, 50001, "Missing Access"),
   unknownChannel: () => respond.error(404, 10003, "Unknown Channel"),
@@ -62,6 +65,8 @@ export const respond = {
   alreadyAcknowledged: () =>
     respond.error(400, 40060, "Interaction has already been acknowledged."),
   unauthorized: () => respond.error(401, 0, "401: Unauthorized"),
+  /** 50035; Discord also sends a per-field `errors` tree, which the Mock leaves out. */
+  invalidFormBody: () => respond.error(400, 50035, "Invalid Form Body"),
   /** 429 with the headers @discordjs/rest reads (Retry-After, X-RateLimit-Global/-Scope). */
   rateLimited: (opts: {
     retryAfter: number;
@@ -75,7 +80,11 @@ export const respond = {
       ...(opts.global ? { "x-ratelimit-global": "true" } : {}),
     },
     body: {
-      message: "You are being rate limited.",
+      // docs.discord.food/topics/rate-limits: the shared-resource example says "The resource is being rate limited."
+      message:
+        opts.scope === "shared"
+          ? "The resource is being rate limited."
+          : "You are being rate limited.",
       retry_after: opts.retryAfter,
       global: !!opts.global,
     },
@@ -100,8 +109,14 @@ export class RestRouter {
     status: number;
     body: unknown;
   }[] = [];
-  /** Requests no route matched. A non-empty list fails `assertNoUnhandled()`. */
+  /** Gaps: requests the Mock can't answer truthfully. A non-empty list fails `assertNoUnhandledRequests()`. */
   readonly unhandled: string[] = [];
+
+  /** Record a Gap and answer 404 with code 0, which no real Discord error uses. */
+  gap(what: string): RestResponse {
+    this.unhandled.push(what);
+    return respond.error(404, 0, `discord-mock: no handler for ${what}`);
+  }
 
   route(method: string, pattern: string, handler: RestHandler) {
     this.builtins.push({
@@ -169,14 +184,7 @@ export class RestRouter {
       if (result) break;
     }
 
-    if (!result) {
-      this.unhandled.push(`${method} ${path}`);
-      result = respond.error(
-        404,
-        0,
-        `discord-mock: no handler for ${method} ${path}`,
-      );
-    }
+    result ??= this.gap(`${method} ${path}`);
     entry.status = result.status;
 
     if (result.dropConnection === "rst")

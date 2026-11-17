@@ -1,4 +1,5 @@
 import {
+  GatewayIntentBits,
   OverwriteType,
   type APIChannel,
   type APIGuildMember,
@@ -16,7 +17,8 @@ export const Permission = {
   ManageRoles: 1n << 28n,
 } as const;
 
-const ALL = (1n << 53n) - 1n;
+// Highest documented bit is MANAGE_OFFICIAL_MESSAGES (1 << 53): docs.discord.food/topics/permissions.
+const ALL = (1n << 54n) - 1n;
 
 /** Discord's permission algorithm: base from roles, then @everyone/role/member overwrites. */
 export function computePermissions(
@@ -56,7 +58,18 @@ export function computePermissions(
   return base;
 }
 
-export function guildCreatePayload(state: DiscordState, guild: GuildRecord) {
+export function guildCreatePayload(
+  state: DiscordState,
+  guild: GuildRecord,
+  intents: number,
+) {
+  // docs.discord.food/gateway/gateway-events#gateway-guild-object, footnote 1: bots without
+  // GUILD_PRESENCES get only their own member (and users in voice, which the Model has none of).
+  // With it, a guild under large_threshold (50 by default) sends every member.
+  const members =
+    intents & GatewayIntentBits.GuildPresences
+      ? [...guild.members.values()]
+      : [guild.members.get(state.bot.id)!];
   return {
     id: guild.id,
     name: guild.name,
@@ -91,7 +104,7 @@ export function guildCreatePayload(state: DiscordState, guild: GuildRecord) {
     large: false,
     unavailable: false,
     member_count: guild.members.size,
-    members: [...guild.members.values()],
+    members,
     // Channels inside GUILD_CREATE carry no guild_id; the guild is implied.
     channels: guild.channelIds.map((id) => {
       const { guild_id: _, ...channel } = state.channels.get(

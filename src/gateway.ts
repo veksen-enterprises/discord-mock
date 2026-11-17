@@ -29,6 +29,8 @@ export interface GatewayOptions {
   token: string;
   /** Privileged intents "enabled in the developer portal". Identify asking for others closes with 4014. */
   privilegedIntents: number;
+  /** Records something the bot asked for that the Mock doesn't model, so the test fails on it. */
+  recordGap: (what: string) => void;
 }
 
 export class Gateway {
@@ -51,8 +53,10 @@ export class Gateway {
 
   private onConnection(socket: WebSocket, req: IncomingMessage) {
     const params = new URL(req.url!, "http://localhost").searchParams;
-    // Fail loudly rather than speak a protocol we don't: zlib-stream kicks in when zlib-sync is installed.
+    // zlib-stream kicks in when zlib-sync is installed. No close code says "unsupported": @discordjs/ws
+    // resumes on 4000 (WebSocketShard.onClose), so the bot reconnects in a loop. The Gap is what fails the test.
     if (params.get("compress") || params.get("encoding") === "etf") {
+      this.options.recordGap(`gateway ${req.url}`);
       socket.close(
         4000,
         `discord-mock: unsupported ${params.get("compress") ? "compress" : "encoding"} (${req.url})`,
@@ -69,10 +73,19 @@ export class Gateway {
 
     let session: Session | undefined;
     socket.on("message", (raw) => {
-      const { op, d } = JSON.parse(raw.toString());
+      let payload: { op: number; d: any };
+      try {
+        payload = JSON.parse(raw.toString());
+      } catch {
+        // docs.discord.food/gateway/opcodes-and-close-codes: 4002 "You sent an invalid payload".
+        socket.close(4002, "Error while decoding payload.");
+        return;
+      }
+      const { op, d } = payload;
       switch (op) {
         case GatewayOpcodes.Heartbeat:
-          send({ op: GatewayOpcodes.HeartbeatAck });
+          // docs.discord.food/gateway/gateway-events#heartbeat-ack: d is null.
+          send({ op: GatewayOpcodes.HeartbeatAck, d: null });
           return;
         case GatewayOpcodes.Identify: {
           if (
@@ -118,11 +131,16 @@ export class Gateway {
             this.send(
               session,
               GatewayDispatchEvents.GuildCreate,
-              guildCreatePayload(this.state, guild),
+              guildCreatePayload(this.state, guild, session.intents),
             );
           return;
         }
         case GatewayOpcodes.Resume: {
+          // docs.discord.food/gateway/gateway-events#resume carries the token like identify does.
+          if (d.token !== this.options.token) {
+            socket.close(4004, "Authentication failed.");
+            return;
+          }
           const existing = this.sessions.get(d.session_id);
           if (!existing) {
             send({ op: GatewayOpcodes.InvalidSession, d: false });
@@ -135,6 +153,9 @@ export class Gateway {
           this.send(session, GatewayDispatchEvents.Resumed, null);
           return;
         }
+        default:
+          // e.g. op 8 Request Guild Members: real Discord answers it, the Mock can't yet.
+          this.options.recordGap(`gateway op ${op}`);
       }
     });
     socket.on("close", () => {
@@ -157,9 +178,10 @@ export class Gateway {
   }
 
   /**
-   * MESSAGE_CREATE with Discord's intent rules: guild messages need GUILD_MESSAGES, DMs need
-   * DIRECT_MESSAGES, and without MESSAGE_CONTENT the content fields arrive empty unless the
-   * bot wrote the message, is mentioned, or it's a DM.
+   * MESSAGE_CREATE/UPDATE with Discord's intent rules (docs.discord.food/gateway/using-gateway#message-content-intent):
+   * guild messages need GUILD_MESSAGES, DMs need DIRECT_MESSAGES, and without MESSAGE_CONTENT the
+   * content, embeds, attachments, components and poll arrive empty unless the bot wrote the
+   * message, is mentioned, or it's a DM. Extra fields per gateway-events#message-object-extra-fields.
    */
   dispatchMessage(t: "MESSAGE_CREATE" | "MESSAGE_UPDATE", message: APIMessage) {
     const channel = this.state.requireChannel(message.channel_id);
@@ -178,14 +200,26 @@ export class Gateway {
       const member = inGuild
         ? this.state.guilds.get(guildId!)?.members.get(message.author.id)
         : undefined;
+      const guild = guildId ? this.state.guilds.get(guildId) : undefined;
       const d = {
         ...message,
         ...(guildId ? { guild_id: guildId } : {}),
         channel_type: channel.type,
         ...(member ? { member: { ...member, user: undefined } } : {}),
+        // In guilds each mentioned user carries its member, without `user`.
+        mentions: message.mentions.map((u) => {
+          const m = guild?.members.get(u.id);
+          return m ? { ...u, member: { ...m, user: undefined } } : u;
+        }),
         ...(exempt
           ? {}
-          : { content: "", embeds: [], attachments: [], components: [] }),
+          : {
+              content: "",
+              embeds: [],
+              attachments: [],
+              components: [],
+              poll: undefined,
+            }),
       };
       this.send(session, t, d);
     }

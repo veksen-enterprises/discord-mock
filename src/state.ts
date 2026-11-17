@@ -36,7 +36,7 @@ export class DiscordState extends EventEmitter<{
   readonly guilds = new Map<string, GuildRecord>();
   readonly channels = new Map<string, APIChannel>();
   readonly messages = new Map<string, APIMessage[]>();
-  /** Keyed by guild id, or "global". */
+  /** Keyed by guild id or "global", then by `${type}:${name}`: names are unique per type and scope. */
   readonly commands = new Map<string, Map<string, APIApplicationCommand>>();
 
   readonly applicationId: string;
@@ -184,7 +184,17 @@ export class DiscordState extends EventEmitter<{
     embeds?: APIMessage["embeds"];
     components?: APIMessage["components"];
     flags?: number;
-    interaction?: { id: string; name: string; userId: string };
+    /** docs.discord.food/resources/message#message-interaction-metadata-structure */
+    interaction?: {
+      id: string;
+      type: number;
+      userId: string;
+      guildId?: string;
+      /** Component interactions only. */
+      interactedMessageId?: string;
+      /** Followups only. */
+      originalResponseMessageId?: string;
+    };
     webhookId?: string;
   }): APIMessage {
     const channel = this.requireChannel(input.channelId);
@@ -204,6 +214,8 @@ export class DiscordState extends EventEmitter<{
       embeds: input.embeds ?? [],
       components: input.components ?? [],
       pinned: false,
+      // 20 CHAT_INPUT_COMMAND for any interaction response, followups and component replies
+      // included: inferred, not checked (the docs only describe 20 as the slash command reply).
       type: input.interaction ? 20 : 0,
       flags: input.flags ?? 0,
       ...(input.webhookId ? { webhook_id: input.webhookId } : {}),
@@ -211,10 +223,24 @@ export class DiscordState extends EventEmitter<{
         ? {
             interaction_metadata: {
               id: input.interaction.id,
-              type: 2,
+              type: input.interaction.type,
               user: this.requireUser(input.interaction.userId),
-              authorizing_integration_owners: {},
-            },
+              authorizing_integration_owners: {
+                0: input.interaction.guildId ?? "0",
+              },
+              ...(input.interaction.interactedMessageId
+                ? {
+                    interacted_message_id:
+                      input.interaction.interactedMessageId,
+                  }
+                : {}),
+              ...(input.interaction.originalResponseMessageId
+                ? {
+                    original_response_message_id:
+                      input.interaction.originalResponseMessageId,
+                  }
+                : {}),
+            } as APIMessage["interaction_metadata"],
           }
         : {}),
     };
@@ -242,9 +268,12 @@ export class DiscordState extends EventEmitter<{
   ): APIApplicationCommand[] {
     const existing = this.commands.get(scope);
     const next = new Map<string, APIApplicationCommand>();
+    // docs.discord.food/interactions/application-commands: bulk overwrite replaces the scope;
+    // a command whose name (and type) already exists keeps its id.
     for (const body of bodies) {
+      const key = `${body.type ?? 1}:${body.name}`;
       const command = {
-        id: existing?.get(body.name)?.id ?? snowflake(),
+        id: existing?.get(key)?.id ?? snowflake(),
         application_id: this.applicationId,
         version: snowflake(),
         default_member_permissions: null,
@@ -253,7 +282,7 @@ export class DiscordState extends EventEmitter<{
         ...(scope === "global" ? {} : { guild_id: scope }),
         ...body,
       } as APIApplicationCommand;
-      next.set(command.name, command);
+      next.set(key, command);
     }
     this.commands.set(scope, next);
     return [...next.values()];
@@ -264,8 +293,8 @@ export class DiscordState extends EventEmitter<{
     name: string,
   ): APIApplicationCommand | undefined {
     return (
-      (guildId && this.commands.get(guildId)?.get(name)) ||
-      this.commands.get("global")?.get(name)
+      (guildId && this.commands.get(guildId)?.get(`1:${name}`)) ||
+      this.commands.get("global")?.get(`1:${name}`)
     );
   }
 

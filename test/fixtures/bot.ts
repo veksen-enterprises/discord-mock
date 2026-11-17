@@ -42,6 +42,15 @@ export const commands = [
     .addStringOption((o) =>
       o.setName("channel").setDescription("channel id").setRequired(true),
     ),
+  new SlashCommandBuilder()
+    .setName("whois")
+    .setDescription("Names a member by nickname or username")
+    .addUserOption((o) =>
+      o.setName("user").setDescription("who").setRequired(true),
+    ),
+  new SlashCommandBuilder()
+    .setName("thinking")
+    .setDescription("Defers, then answers with followUp"),
 ].map((c) => c.toJSON());
 
 export async function deployCommands(opts: {
@@ -94,6 +103,19 @@ export function createBot(
           await interaction.deferReply();
           await new Promise((r) => setTimeout(r, 50));
           await interaction.editReply("done thinking");
+          return;
+        case "whois": {
+          const member = interaction.options.getMember("user");
+          await interaction.reply(
+            member && "displayName" in member
+              ? `member ${member.displayName}`
+              : "not a member",
+          );
+          return;
+        }
+        case "thinking":
+          await interaction.deferReply();
+          await interaction.followUp("thought");
           return;
         case "lazy":
           await new Promise((r) => setTimeout(r, 100));

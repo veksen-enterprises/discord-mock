@@ -4,6 +4,7 @@ import {
   RateLimitError,
   type Client,
   type ClientOptions,
+  type TextChannel,
 } from "discord.js";
 /**
  * What a bot sees when Discord misbehaves, and whether the mock makes discord.js react the way it
@@ -75,6 +76,22 @@ describe("not allowed", () => {
       name: "DiscordAPIError[50013]",
       status: 403,
     });
+  });
+
+  it("without READ_MESSAGE_HISTORY, fetching messages returns none instead of failing", async () => {
+    const { news } = await start();
+    mock.state.createMessage({
+      channelId: news.id,
+      authorId: mock.state.bot.id,
+      content: "old",
+    });
+    mock.setOverwrite(
+      news,
+      { id: mock.state.bot.id, type: 1 },
+      { deny: Permission.ReadMessageHistory },
+    );
+    const channel = (await client.channels.fetch(news.id)) as TextChannel;
+    expect((await channel.messages.fetch()).size).toBe(0);
   });
 
   it("losing VIEW_CHANNEL yields 50001 Missing Access instead", async () => {

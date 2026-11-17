@@ -53,7 +53,11 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     private mock: DiscordMock,
     readonly id: string,
     readonly token: string,
+    readonly type: InteractionType,
+    /** The user who triggered it. */
+    readonly userId: string,
     readonly channelId: string,
+    readonly guildId?: string,
     readonly sourceMessageId?: string,
   ) {
     super();
@@ -125,6 +129,7 @@ export class DiscordMock {
         GatewayIntentBits.GuildMembers |
           GatewayIntentBits.GuildPresences |
           GatewayIntentBits.MessageContent,
+      recordGap: (what) => void this.rest.gap(what),
     });
     this.server = createServer((req, res) => {
       this.rest.handle(req, res, /^\/api(\/v\d+)?/).catch((error) => {
@@ -327,7 +332,12 @@ export class DiscordMock {
         name: command.name,
         type: command.type,
         options,
-        resolved: resolvedFor(this.state, command.options ?? [], input),
+        resolved: resolvedFor(
+          this.state,
+          command.options ?? [],
+          input,
+          guildId,
+        ),
       },
     );
   }
@@ -378,7 +388,10 @@ export class DiscordMock {
       this,
       snowflake(),
       `itoken-${snowflake()}`,
+      type,
+      user.id,
       channel.id,
+      guild?.id,
       message?.id,
     );
     if (message) run.originalMessageId = message.id;
@@ -454,6 +467,10 @@ export class DiscordMock {
       authed((req) => {
         if (req.params.appId !== state.applicationId)
           return respond.error(403, 50001, "Missing Access");
+        // docs.discord.food/interactions/application-commands: a CHAT_INPUT command needs a description.
+        const bodies = req.body as { type?: number; description?: string }[];
+        if (bodies.some((c) => (c.type ?? 1) === 1 && !c.description))
+          return respond.invalidFormBody();
         return respond.json(state.setCommands(scope(req.params), req.body));
       });
     rest.route(
@@ -479,7 +496,9 @@ export class DiscordMock {
       "/channels/:channelId",
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
-        return channel ? respond.json(channel) : respond.unknownChannel();
+        if (!channel) return respond.unknownChannel();
+        // docs.discord.food/resources/channel: requires VIEW_CHANNEL. 50001 is inferred, not checked.
+        return this.checkBotPerms(channel, 0n) ?? respond.json(channel);
       }),
     );
 
@@ -579,11 +598,12 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const denied = this.checkBotPerms(
-          channel,
-          Permission.ReadMessageHistory,
-        );
+        // docs.discord.food/resources/message#list-messages: needs VIEW_CHANNEL; without
+        // READ_MESSAGE_HISTORY "this will return no messages".
+        const denied = this.checkBotPerms(channel, 0n);
         if (denied) return denied;
+        if (this.checkBotPerms(channel, Permission.ReadMessageHistory))
+          return respond.json([]);
         const limit = Number(req.query.get("limit") ?? 50);
         const before = req.query.get("before");
         const after = req.query.get("after");
@@ -649,7 +669,7 @@ export class DiscordMock {
             authorId: state.bot.id,
             ...(deferred ? {} : pickMessageFields(data)),
             flags: (data?.flags ?? 0) | (deferred ? MessageFlags.Loading : 0),
-            interaction: { id: run.id, name: "", userId: state.bot.id },
+            interaction: interactionMetadata(run),
             webhookId: state.applicationId,
           });
           run.originalMessageId = message.id;
@@ -658,16 +678,16 @@ export class DiscordMock {
             this.gateway.dispatchMessage("MESSAGE_CREATE", message);
           break;
         }
+        // docs.discord.food/interactions/receiving-and-responding: types 6 and 7 are for
+        // MESSAGE_COMPONENT and MODAL_SUBMIT only. What Discord answers otherwise is unchecked: a Gap.
         case InteractionResponseType.DeferredMessageUpdate:
+          if (!run.sourceMessageId)
+            return rest.gap(`callback type 6 on a ${run.type} interaction`);
           run.state = "deferred";
           break;
         case InteractionResponseType.UpdateMessage: {
           if (!run.sourceMessageId)
-            return respond.error(
-              400,
-              40004,
-              "Interaction is not for a message",
-            );
+            return rest.gap(`callback type 7 on a ${run.type} interaction`);
           const updated = state.updateMessage(
             run.channelId,
             run.sourceMessageId,
@@ -678,27 +698,26 @@ export class DiscordMock {
           break;
         }
         default:
-          return respond.error(
-            400,
-            50035,
-            `discord-mock: callback type ${type} not implemented`,
-          );
+          return rest.gap(`interaction callback type ${type}`);
       }
       run.emit("change");
       if (req.query.get("with_response") !== "true") return respond.noContent();
       const original = run.original;
+      // resource.message: "only if type is CHANNEL_MESSAGE_WITH_SOURCE or UPDATE_MESSAGE".
+      const withMessage =
+        type === InteractionResponseType.ChannelMessageWithSource ||
+        type === InteractionResponseType.UpdateMessage;
       return respond.json({
         interaction: {
           id: run.id,
-          type: run.sourceMessageId
-            ? InteractionType.MessageComponent
-            : InteractionType.ApplicationCommand,
+          type: run.type,
           activity_instance_id: null,
           response_message_id: original?.id ?? null,
           response_message_loading: run.state === "deferred",
           response_message_ephemeral: run.ephemeral,
         },
-        resource: original ? { type, message: original } : { type },
+        resource:
+          withMessage && original ? { type, message: original } : { type },
       });
     });
 
@@ -735,22 +754,37 @@ export class DiscordMock {
     rest.route("POST", "/webhooks/:appId/:token", (req) => {
       const run = runFor(req);
       if (!run || run.state === "pending") return respond.unknownWebhook();
+      // Discord's docs (discord-api-docs, Create Followup Message): right after a
+      // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, a followup edits the loading message instead of
+      // creating one, and the ephemeral flag is ignored.
+      const original = run.original;
+      if (
+        run.state === "deferred" &&
+        run.responseType ===
+          InteractionResponseType.DeferredChannelMessageWithSource &&
+        original
+      ) {
+        const updated = state.updateMessage(run.channelId, original.id, {
+          ...pickMessageFields(req.body),
+          flags: (original.flags ?? 0) & ~MessageFlags.Loading,
+        });
+        if (!run.ephemeral)
+          this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+        run.state = "replied";
+        run.emit("change");
+        return respond.json(updated);
+      }
       const message = state.createMessage({
         channelId: run.channelId,
         authorId: state.bot.id,
         ...pickMessageFields(req.body),
         flags: req.body?.flags ?? 0,
+        interaction: {
+          ...interactionMetadata(run),
+          originalResponseMessageId: run.originalMessageId,
+        },
         webhookId: state.applicationId,
       });
-      // The first followup after a defer becomes the original response.
-      if (
-        run.state === "deferred" &&
-        run.responseType ===
-          InteractionResponseType.DeferredChannelMessageWithSource
-      ) {
-        run.originalMessageId = message.id;
-        run.state = "replied";
-      }
       run.followups.push(message);
       if (!((message.flags ?? 0) & MessageFlags.Ephemeral))
         this.gateway.dispatchMessage("MESSAGE_CREATE", message);
@@ -759,6 +793,7 @@ export class DiscordMock {
     });
   }
 
+  /** VIEW_CHANNEL first: without it "other channel permissions are effectively ignored" (docs.discord.food/topics/permissions). */
   private checkBotPerms(channel: APIChannel, needed: bigint) {
     if (!("guild_id" in channel) || !channel.guild_id) return undefined;
     const guild = this.state.requireGuild(channel.guild_id);
@@ -778,6 +813,16 @@ export async function createDiscordMock(
   options?: DiscordMockOptions,
 ): Promise<DiscordMock> {
   return new DiscordMock(options).listen();
+}
+
+function interactionMetadata(run: InteractionRun) {
+  return {
+    id: run.id,
+    type: run.type,
+    userId: run.userId,
+    guildId: run.guildId,
+    interactedMessageId: run.sourceMessageId,
+  };
 }
 
 function pickMessageFields(body: any) {
@@ -838,10 +883,12 @@ function buildOptions(
   });
 }
 
+/** docs.discord.food/interactions/receiving-and-responding#resolved-data-object */
 function resolvedFor(
   state: DiscordState,
   schema: APIApplicationCommandOption[],
   input: Record<string, unknown>,
+  guildId: string | undefined,
 ) {
   const users = schema
     .filter(
@@ -850,7 +897,17 @@ function resolvedFor(
         typeof input[o.name] === "string",
     )
     .map((o) => state.requireUser(input[o.name] as string));
-  return users.length
-    ? { users: Object.fromEntries(users.map((u) => [u.id, u])) }
-    : undefined;
+  if (!users.length) return undefined;
+  const guild = guildId ? state.requireGuild(guildId) : undefined;
+  // Resolved members carry no user, deaf or mute; the user is in `users`.
+  const members = users.flatMap((u) => {
+    const m = guild?.members.get(u.id);
+    if (!m) return [];
+    const { user: _, deaf: _d, mute: _m, ...partial } = m;
+    return [[u.id, partial] as const];
+  });
+  return {
+    users: Object.fromEntries(users.map((u) => [u.id, u])),
+    ...(members.length ? { members: Object.fromEntries(members) } : {}),
+  };
 }
