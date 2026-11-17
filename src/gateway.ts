@@ -99,7 +99,15 @@ export class Gateway {
           const guilds = [...this.state.guilds.values()];
           this.send(session, GatewayDispatchEvents.Ready, {
             v: 10,
-            user: this.state.bot,
+            // READY's user is the full bot user: flags and account fields, no public_flags.
+            user: {
+              ...this.state.bot,
+              public_flags: undefined,
+              flags: 0,
+              verified: true,
+              mfa_enabled: false,
+              email: null,
+            },
             guilds: guilds.map((g) => ({ id: g.id, unavailable: true })),
             session_id: session.id,
             resume_gateway_url: this.url,
