@@ -154,9 +154,10 @@ export class RestRouter {
     const url = new URL(req.url!, "http://localhost");
     const path = decodeURIComponent(url.pathname.replace(prefix, ""));
     const method = req.method!;
-    const raw = Buffer.concat(
-      await Array.fromAsync(req as AsyncIterable<Buffer>),
-    );
+    // Not Array.fromAsync: consumers typecheck this source with their own `lib`, often < ES2024.
+    const chunks: Buffer[] = [];
+    for await (const chunk of req as AsyncIterable<Buffer>) chunks.push(chunk);
+    const raw = Buffer.concat(chunks);
     const { body, files } = await parseBody(raw, req.headers["content-type"]);
 
     const entry = { method, path, status: 0, body };
