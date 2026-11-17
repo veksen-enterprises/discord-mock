@@ -117,11 +117,10 @@ describe.skipIf(!TOKEN)("mock against real Discord", () => {
           2,
         ),
       );
-      expect(statusDifferences).toEqual([]);
-      if (process.env.UPDATE_BASELINE) {
+      if (process.env.UPDATE_BASELINE)
         writeFileSync(BASELINE, JSON.stringify(differences, null, 2) + "\n");
-        return;
-      }
+      expect(statusDifferences).toEqual([]);
+      if (process.env.UPDATE_BASELINE) return;
       const baseline: string[] = existsSync(BASELINE)
         ? JSON.parse(readFileSync(BASELINE, "utf8"))
         : [];
