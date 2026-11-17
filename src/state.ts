@@ -113,6 +113,39 @@ export class DiscordState extends EventEmitter<{
     return member;
   }
 
+  createRole(
+    guildId: string,
+    input: { name: string; permissions: bigint },
+  ): APIRole {
+    const guild = this.requireGuild(guildId);
+    const role: APIRole = {
+      ...guild.roles.get(guild.id)!,
+      id: snowflake(),
+      name: input.name,
+      position: guild.roles.size,
+      permissions: String(input.permissions),
+    };
+    guild.roles.set(role.id, role);
+    return role;
+  }
+
+  assignRole(guildId: string, userId: string, roleId: string) {
+    const member = this.requireGuild(guildId).members.get(userId);
+    if (!member) throw new Error(`discord-mock: ${userId} isn't a member`);
+    if (!member.roles.includes(roleId)) member.roles.push(roleId);
+  }
+
+  deleteChannel(id: string): APIChannel {
+    const channel = this.requireChannel(id);
+    this.channels.delete(id);
+    this.messages.delete(id);
+    if ("guild_id" in channel && channel.guild_id) {
+      const guild = this.requireGuild(channel.guild_id);
+      guild.channelIds = guild.channelIds.filter((c) => c !== id);
+    }
+    return channel;
+  }
+
   createTextChannel(guildId: string, input: { name: string }): APIChannel {
     const guild = this.requireGuild(guildId);
     const channel = {

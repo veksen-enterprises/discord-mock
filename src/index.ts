@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   ApplicationCommandOptionType,
+  ChannelType,
   ComponentType,
   GatewayDispatchEvents,
   GatewayIntentBits,
@@ -192,6 +193,19 @@ export class DiscordMock {
 
   addMember(guild: GuildRecord, user: APIUser) {
     return this.state.addMember(guild.id, user.id);
+  }
+
+  /** A guild role with these permissions, given to `members`. */
+  createRole(
+    guild: GuildRecord,
+    name: string,
+    permissions: bigint,
+    members: APIUser[] = [],
+  ) {
+    const role = this.state.createRole(guild.id, { name, permissions });
+    for (const user of members)
+      this.state.assignRole(guild.id, user.id, role.id);
+    return role;
   }
 
   /** Deny (or allow) permissions for a role/member in a channel, as a channel overwrite. */
@@ -466,6 +480,75 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         return channel ? respond.json(channel) : respond.unknownChannel();
+      }),
+    );
+
+    // MANAGE_CHANNELS at guild level. Only text channels so far: another type is a 400, not a guess.
+    rest.route(
+      "POST",
+      "/guilds/:guildId/channels",
+      authed((req) => {
+        const guild = state.guilds.get(req.params.guildId!);
+        if (!guild) return respond.error(404, 10004, "Unknown Guild");
+        const perms = computePermissions(state, guild, state.bot.id);
+        if (!(perms & Permission.ManageChannels))
+          return respond.missingPermissions();
+        if ((req.body?.type ?? 0) !== ChannelType.GuildText)
+          return respond.error(
+            400,
+            50035,
+            `discord-mock: channel type ${req.body?.type} not implemented`,
+          );
+        const channel = state.createTextChannel(guild.id, {
+          name: req.body.name,
+        });
+        this.gateway.dispatch(
+          GatewayDispatchEvents.ChannelCreate,
+          channel,
+          GatewayIntentBits.Guilds,
+        );
+        // 201 is inferred, not checked; the contract test settles it.
+        return respond.json(channel, 201);
+      }),
+    );
+
+    rest.route(
+      "DELETE",
+      "/channels/:channelId",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const denied = this.checkBotPerms(channel, Permission.ManageChannels);
+        if (denied) return denied;
+        state.deleteChannel(channel.id);
+        this.gateway.dispatch(
+          GatewayDispatchEvents.ChannelDelete,
+          channel,
+          GatewayIntentBits.Guilds,
+        );
+        return respond.json(channel);
+      }),
+    );
+
+    // Needs MANAGE_ROLES on the channel. Inferred, not checked: Discord also refuses to
+    // allow a permission the bot doesn't have itself; the mock doesn't enforce that yet.
+    rest.route(
+      "PUT",
+      "/channels/:channelId/permissions/:overwriteId",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const denied = this.checkBotPerms(channel, Permission.ManageRoles);
+        if (denied) return denied;
+        this.setOverwrite(
+          channel,
+          { id: req.params.overwriteId!, type: req.body?.type ?? 0 },
+          {
+            allow: BigInt(req.body?.allow ?? 0),
+            deny: BigInt(req.body?.deny ?? 0),
+          },
+        );
+        return respond.noContent();
       }),
     );
 
