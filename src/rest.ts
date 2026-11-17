@@ -16,6 +16,8 @@ export interface RestResponse {
   status: number;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Raw bytes instead of a JSON body, e.g. an attachment on the CDN. */
+  file?: { data: Uint8Array; contentType: string };
   /** Kill the connection instead of answering: "fin" closes it cleanly, "rst" resets it (ECONNRESET). */
   dropConnection?: "fin" | "rst";
 }
@@ -191,6 +193,13 @@ export class RestRouter {
       return void req.socket.resetAndDestroy();
     if (result.dropConnection === "fin") return void req.socket.destroy();
     const headers: Record<string, string> = { ...result.headers };
+    if (result.file) {
+      res.writeHead(result.status, {
+        ...headers,
+        "content-type": result.file.contentType,
+      });
+      return void res.end(result.file.data);
+    }
     if (result.body !== undefined) headers["content-type"] = "application/json";
     res.writeHead(result.status, headers);
     res.end(

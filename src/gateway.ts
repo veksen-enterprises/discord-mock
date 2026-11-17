@@ -9,7 +9,7 @@ import {
 } from "discord-api-types/v10";
 import { WebSocketServer, type WebSocket } from "ws";
 import { guildCreatePayload } from "./payloads.js";
-import type { DiscordState } from "./state.js";
+import type { DiscordState, GuildRecord } from "./state.js";
 
 const PRIVILEGED =
   GatewayIntentBits.GuildMembers |
@@ -167,6 +167,16 @@ export class Gateway {
     const payload = { op: GatewayOpcodes.Dispatch, t, s: ++session.seq, d };
     if (session.socket) session.socket.send(JSON.stringify(payload));
     else session.missed.push(payload);
+  }
+
+  /** GUILD_CREATE for a guild created after the bot connected (docs: scenario 3, "joins a new guild"). */
+  announceGuild(guild: GuildRecord) {
+    for (const session of this.sessions.values())
+      this.send(
+        session,
+        GatewayDispatchEvents.GuildCreate,
+        guildCreatePayload(this.state, guild, session.intents),
+      );
   }
 
   /** Dispatch to every session whose intents allow it. */

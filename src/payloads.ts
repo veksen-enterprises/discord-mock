@@ -8,6 +8,7 @@ import type { DiscordState, GuildRecord } from "./state.js";
 
 export const Permission = {
   ManageChannels: 1n << 4n,
+  AddReactions: 1n << 6n,
   Administrator: 1n << 3n,
   ViewChannel: 1n << 10n,
   SendMessages: 1n << 11n,
@@ -34,6 +35,8 @@ export function computePermissions(
   for (const roleId of member.roles)
     base |= BigInt(guild.roles.get(roleId)?.permissions ?? "0");
   if (base & Permission.Administrator) return ALL;
+  // A thread takes its parent's overwrites (docs.discord.food/topics/threads).
+  if (channel) channel = state.permissionChannel(channel);
   if (!channel || !("permission_overwrites" in channel)) return base;
 
   const overwrites = channel.permission_overwrites ?? [];
@@ -114,7 +117,13 @@ export function guildCreatePayload(
       };
       return channel;
     }),
-    threads: [],
+    // Active threads the bot can view (docs.discord.food/topics/threads#gateway-events).
+    threads: [...state.channels.values()].filter(
+      (c) =>
+        "thread_metadata" in c &&
+        c.guild_id === guild.id &&
+        !c.thread_metadata?.archived,
+    ),
     presences: [],
     voice_states: [],
     stage_instances: [],

@@ -36,6 +36,10 @@ export class DiscordState extends EventEmitter<{
   readonly guilds = new Map<string, GuildRecord>();
   readonly channels = new Map<string, APIChannel>();
   readonly messages = new Map<string, APIMessage[]>();
+  /** Bytes behind each attachment url, keyed by attachment id. */
+  readonly files = new Map<string, { data: Uint8Array; contentType: string }>();
+  /** Base for attachment urls; set when the server listens. */
+  cdnUrl = "";
   /** Keyed by guild id or "global", then by `${type}:${name}`: names are unique per type and scope. */
   readonly commands = new Map<string, Map<string, APIApplicationCommand>>();
 
@@ -200,10 +204,163 @@ export class DiscordState extends EventEmitter<{
     return channel;
   }
 
+  /**
+   * A forum (thread-only) channel. Its posts are threads; see `createThread`.
+   * docs.discord.food/topics/threads#thread-only-channels
+   */
+  createForumChannel(guildId: string, input: { name: string }): APIChannel {
+    const guild = this.requireGuild(guildId);
+    const channel = {
+      id: snowflake(),
+      type: ChannelType.GuildForum,
+      guild_id: guild.id,
+      name: input.name,
+      position: guild.channelIds.length,
+      permission_overwrites: [],
+      parent_id: null,
+      nsfw: false,
+      topic: null,
+      last_message_id: null,
+      rate_limit_per_user: 0,
+      flags: 0 as ChannelFlags,
+      available_tags: [],
+      default_reaction_emoji: null,
+      default_sort_order: null,
+      default_forum_layout: 0,
+    } as unknown as APIChannel;
+    this.channels.set(channel.id, channel);
+    guild.channelIds.push(channel.id);
+    return channel;
+  }
+
+  /**
+   * A public thread under `parentId`. In a forum, the starter message shares the thread's id
+   * (docs.discord.food/topics/threads#thread-only-channels); `archived` files it under the
+   * archived list instead of the active one.
+   */
+  createThread(input: {
+    parentId: string;
+    name: string;
+    ownerId: string;
+    archived?: boolean;
+  }): APIChannel {
+    const parent = this.requireChannel(input.parentId);
+    if (!("guild_id" in parent) || !parent.guild_id)
+      throw new Error("discord-mock: threads live in guild channels");
+    const now = new Date().toISOString();
+    const thread = {
+      id: snowflake(),
+      type: ChannelType.PublicThread,
+      guild_id: parent.guild_id,
+      parent_id: parent.id,
+      owner_id: input.ownerId,
+      name: input.name,
+      last_message_id: null,
+      rate_limit_per_user: 0,
+      message_count: 0,
+      member_count: 1,
+      total_message_sent: 0,
+      flags: 0 as ChannelFlags,
+      thread_metadata: {
+        archived: !!input.archived,
+        auto_archive_duration: 4320,
+        archive_timestamp: now,
+        locked: false,
+        create_timestamp: now,
+      },
+    } as unknown as APIChannel;
+    this.channels.set(thread.id, thread);
+    this.messages.set(thread.id, []);
+    return thread;
+  }
+
+  /** The DM channel between the bot and `userId`, created on first use. */
+  dmChannel(userId: string): APIChannel {
+    const existing = [...this.channels.values()].find(
+      (c) =>
+        c.type === ChannelType.DM && c.recipients?.some((u) => u.id === userId),
+    );
+    if (existing) return existing;
+    const channel = {
+      id: snowflake(),
+      type: ChannelType.DM,
+      last_message_id: null,
+      recipients: [this.requireUser(userId)],
+      flags: 0 as ChannelFlags,
+    } as unknown as APIChannel;
+    this.channels.set(channel.id, channel);
+    this.messages.set(channel.id, []);
+    return channel;
+  }
+
+  /** The channel a thread's permissions come from: its parent. Any other channel is its own. */
+  permissionChannel(channel: APIChannel): APIChannel {
+    return "thread_metadata" in channel && channel.parent_id
+      ? this.requireChannel(channel.parent_id)
+      : channel;
+  }
+
+  addReaction(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+    userId: string,
+  ) {
+    const message = this.requireMessage(channelId, messageId);
+    const reactions = (message.reactions ??= []);
+    let reaction = reactions.find((r) => r.emoji.name === emoji);
+    if (!reaction) {
+      reaction = {
+        count: 0,
+        count_details: { burst: 0, normal: 0 },
+        me: false,
+        me_burst: false,
+        burst_colors: [],
+        emoji: { id: null, name: emoji },
+      };
+      reactions.push(reaction);
+    }
+    const by = this.reactors.get(`${messageId}:${emoji}`) ?? new Set<string>();
+    if (by.has(userId)) return false;
+    by.add(userId);
+    this.reactors.set(`${messageId}:${emoji}`, by);
+    reaction.count++;
+    reaction.count_details.normal++;
+    if (userId === this.bot.id) reaction.me = true;
+    return true;
+  }
+
+  removeReaction(
+    channelId: string,
+    messageId: string,
+    emoji: string,
+    userId: string,
+  ) {
+    const message = this.requireMessage(channelId, messageId);
+    const by = this.reactors.get(`${messageId}:${emoji}`);
+    if (!by?.delete(userId)) return false;
+    const reaction = message.reactions!.find((r) => r.emoji.name === emoji)!;
+    reaction.count--;
+    reaction.count_details.normal--;
+    if (userId === this.bot.id) reaction.me = false;
+    if (!reaction.count)
+      message.reactions = message.reactions!.filter((r) => r !== reaction);
+    return true;
+  }
+
+  /** Who reacted with what, keyed by `${messageId}:${emoji}`. */
+  readonly reactors = new Map<string, Set<string>>();
+
   createMessage(input: {
     channelId: string;
     authorId: string;
     content?: string;
+    /** Files the author uploaded; served at `cdnUrl`. */
+    files?: { name: string; data: Uint8Array; contentType: string }[];
+    /** The message this one replies to. */
+    replyTo?: string;
+    /** Use this id, e.g. a forum post's starter message shares the thread's id. */
+    id?: string;
     embeds?: APIMessage["embeds"];
     components?: APIMessage["components"];
     flags?: number;
@@ -222,8 +379,26 @@ export class DiscordState extends EventEmitter<{
   }): APIMessage {
     const channel = this.requireChannel(input.channelId);
     // No guild_id: Discord sends it on gateway dispatches only, not in REST message objects.
+    const id = input.id ?? snowflake();
+    const attachments = (input.files ?? []).map((file) => {
+      const attachmentId = snowflake();
+      this.files.set(attachmentId, {
+        data: file.data,
+        contentType: file.contentType,
+      });
+      // Real urls point at cdn.discordapp.com and carry signed ex/is/hm params; inferred shape.
+      const url = `${this.cdnUrl}/attachments/${channel.id}/${attachmentId}/${encodeURIComponent(file.name)}`;
+      return {
+        id: attachmentId,
+        filename: file.name,
+        size: file.data.byteLength,
+        url,
+        proxy_url: url,
+        content_type: file.contentType,
+      };
+    });
     const message: APIMessage = {
-      id: snowflake(),
+      id,
       channel_id: channel.id,
       author: this.requireUser(input.authorId),
       content: input.content ?? "",
@@ -233,13 +408,25 @@ export class DiscordState extends EventEmitter<{
       mention_everyone: false,
       mentions: [],
       mention_roles: [],
-      attachments: [],
+      attachments,
       embeds: input.embeds ?? [],
       components: input.components ?? [],
       pinned: false,
       // 20 CHAT_INPUT_COMMAND for any interaction response, followups and component replies
       // included: inferred, not checked (the docs only describe 20 as the slash command reply).
-      type: input.interaction ? 20 : 0,
+      type: input.interaction ? 20 : input.replyTo ? 19 : 0,
+      ...(input.replyTo
+        ? {
+            message_reference: {
+              type: 0,
+              message_id: input.replyTo,
+              channel_id: channel.id,
+              ...("guild_id" in channel && channel.guild_id
+                ? { guild_id: channel.guild_id }
+                : {}),
+            },
+          }
+        : {}),
       flags: input.flags ?? 0,
       ...(input.webhookId ? { webhook_id: input.webhookId } : {}),
       ...(input.interaction
@@ -268,6 +455,17 @@ export class DiscordState extends EventEmitter<{
         : {}),
     };
     this.messages.get(channel.id)!.push(message);
+    // docs.discord.food/topics/threads: message_count and total_message_sent count MESSAGE_CREATEs.
+    if ("thread_metadata" in channel) {
+      const counts = channel as {
+        message_count?: number;
+        total_message_sent?: number;
+      };
+      counts.message_count = (counts.message_count ?? 0) + 1;
+      counts.total_message_sent = (counts.total_message_sent ?? 0) + 1;
+    }
+    (channel as { last_message_id?: string | null }).last_message_id =
+      message.id;
     this.emit("messageCreate", message);
     return message;
   }

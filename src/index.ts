@@ -29,6 +29,13 @@ export { respond } from "./rest.js";
 export type { RestHandler, RestRequest, RestResponse } from "./rest.js";
 export { Permission } from "./payloads.js";
 
+/** What a user posts: text, files, and the message it replies to. */
+export interface UserMessage {
+  content?: string;
+  files?: { name: string; data: Uint8Array; contentType: string }[];
+  replyTo?: APIMessage;
+}
+
 export interface DiscordMockOptions {
   /** Privileged intents enabled "in the developer portal". Default: all three. */
   privilegedIntents?: number;
@@ -148,6 +155,7 @@ export class DiscordMock {
     );
     const { port } = this.server.address() as AddressInfo;
     this.apiUrl = `http://127.0.0.1:${port}/api`;
+    this.state.cdnUrl = `http://127.0.0.1:${port}`;
     this.gateway.url = `ws://127.0.0.1:${port}/gateway`;
     return this;
   }
@@ -188,13 +196,21 @@ export class DiscordMock {
     return this.state.createUser({ username });
   }
 
+  // World changes after the bot connected are announced like Discord announces them, so
+  // the bot's cache follows: GUILD_CREATE, CHANNEL_CREATE, GUILD_MEMBER_ADD (the last needs
+  // GUILD_MEMBERS, docs.discord.food/gateway/gateway-events#guild-member-add).
+
   createGuild(name: string, opts: { ownerId?: string } = {}) {
-    return this.state.createGuild({ name, ownerId: opts.ownerId });
+    const guild = this.state.createGuild({ name, ownerId: opts.ownerId });
+    this.gateway.announceGuild(guild);
+    return guild;
   }
 
   /** A category; pass it as `parent` to `createTextChannel`. */
   createCategory(guild: GuildRecord, name: string) {
-    return this.state.createCategoryChannel(guild.id, { name });
+    return this.announceChannel(
+      this.state.createCategoryChannel(guild.id, { name }),
+    );
   }
 
   createTextChannel(
@@ -202,14 +218,38 @@ export class DiscordMock {
     name: string,
     opts: { parent?: APIChannel } = {},
   ) {
-    return this.state.createTextChannel(guild.id, {
-      name,
-      parentId: opts.parent?.id,
-    });
+    return this.announceChannel(
+      this.state.createTextChannel(guild.id, {
+        name,
+        parentId: opts.parent?.id,
+      }),
+    );
+  }
+
+  /** A forum: users post in it with `as(user).forumPost()`. */
+  createForum(guild: GuildRecord, name: string) {
+    return this.announceChannel(
+      this.state.createForumChannel(guild.id, { name }),
+    );
   }
 
   addMember(guild: GuildRecord, user: APIUser, opts: { nick?: string } = {}) {
-    return this.state.addMember(guild.id, user.id, opts);
+    const member = this.state.addMember(guild.id, user.id, opts);
+    this.gateway.dispatch(
+      GatewayDispatchEvents.GuildMemberAdd,
+      { ...member, guild_id: guild.id },
+      GatewayIntentBits.GuildMembers,
+    );
+    return member;
+  }
+
+  private announceChannel(channel: APIChannel) {
+    this.gateway.dispatch(
+      GatewayDispatchEvents.ChannelCreate,
+      channel,
+      GatewayIntentBits.Guilds,
+    );
+    return channel;
   }
 
   /** A guild role with these permissions, given to `members`. */
@@ -291,8 +331,18 @@ export class DiscordMock {
 
   as(user: APIUser) {
     return {
-      sendMessage: (channel: APIChannel, content: string) =>
-        this.userSendsMessage(user, channel, content),
+      sendMessage: (channel: APIChannel, message: string | UserMessage) =>
+        this.userSendsMessage(
+          user,
+          channel,
+          typeof message === "string" ? { content: message } : message,
+        ),
+      /** Adds a unicode emoji reaction, dispatched as MESSAGE_REACTION_ADD. */
+      react: (message: APIMessage, emoji: string) =>
+        this.userReacts(user, message, emoji),
+      /** A new forum post: a thread plus its starter message, which shares the thread's id. */
+      forumPost: (forum: APIChannel, post: UserMessage & { title: string }) =>
+        this.userPostsInForum(user, forum, post),
       slashCommand: (
         channel: APIChannel,
         name: string,
@@ -306,8 +356,10 @@ export class DiscordMock {
   private userSendsMessage(
     user: APIUser,
     channel: APIChannel,
-    content: string,
+    input: UserMessage,
+    id?: string,
   ): APIMessage {
+    const content = input.content ?? "";
     const mentions = [...content.matchAll(/<@!?(\d+)>/g)].flatMap(
       ([, id]) => this.state.users.get(id!) ?? [],
     );
@@ -315,10 +367,64 @@ export class DiscordMock {
       channelId: channel.id,
       authorId: user.id,
       content,
+      files: input.files,
+      replyTo: input.replyTo?.id,
+      id,
     });
     message.mentions = mentions;
     this.gateway.dispatchMessage("MESSAGE_CREATE", message);
     return message;
+  }
+
+  private userReacts(user: APIUser, message: APIMessage, emoji: string) {
+    if (!this.state.addReaction(message.channel_id, message.id, emoji, user.id))
+      return;
+    const channel = this.state.requireChannel(message.channel_id);
+    const guildId = "guild_id" in channel ? channel.guild_id : undefined;
+    const member = guildId
+      ? this.state.guilds.get(guildId)?.members.get(user.id)
+      : undefined;
+    // docs.discord.food/gateway/gateway-events#message-reaction-add; GUILD_MESSAGE_REACTIONS
+    // in guilds, DIRECT_MESSAGE_REACTIONS in DMs.
+    this.gateway.dispatch(
+      GatewayDispatchEvents.MessageReactionAdd,
+      {
+        user_id: user.id,
+        channel_id: channel.id,
+        message_id: message.id,
+        message_author_id: message.author.id,
+        ...(guildId ? { guild_id: guildId } : {}),
+        ...(member ? { member } : {}),
+        emoji: { id: null, name: emoji },
+        type: 0,
+        burst: false,
+      },
+      guildId
+        ? GatewayIntentBits.GuildMessageReactions
+        : GatewayIntentBits.DirectMessageReactions,
+    );
+  }
+
+  private userPostsInForum(
+    user: APIUser,
+    forum: APIChannel,
+    post: UserMessage & { title: string },
+  ) {
+    if (forum.type !== ChannelType.GuildForum)
+      throw new Error(`discord-mock: ${forum.id} isn't a forum`);
+    const thread = this.state.createThread({
+      parentId: forum.id,
+      name: post.title,
+      ownerId: user.id,
+    });
+    // docs.discord.food/gateway/gateway-events#thread-create: newly_created on creation.
+    this.gateway.dispatch(
+      GatewayDispatchEvents.ThreadCreate,
+      { ...thread, newly_created: true },
+      GatewayIntentBits.Guilds,
+    );
+    const message = this.userSendsMessage(user, thread, post, thread.id);
+    return { thread, message };
   }
 
   private userRunsCommand(
@@ -590,14 +696,24 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const denied = this.checkBotPerms(channel, Permission.SendMessages);
+        const replyTo: string | undefined =
+          req.body?.message_reference?.message_id;
+        // docs.discord.food/resources/message#create-message: a reply also needs READ_MESSAGE_HISTORY.
+        const denied = this.checkBotPerms(
+          channel,
+          Permission.SendMessages |
+            (replyTo ? Permission.ReadMessageHistory : 0n),
+        );
         if (denied) return denied;
+        if (replyTo && !this.messagesIn(channel).some((m) => m.id === replyTo))
+          return rest.gap(`reply to unknown message ${replyTo}`);
         const message = state.createMessage({
           channelId: channel.id,
           authorId: state.bot.id,
           content: req.body?.content,
           embeds: req.body?.embeds,
           components: req.body?.components,
+          replyTo,
         });
         this.gateway.dispatchMessage("MESSAGE_CREATE", message);
         return respond.json(message);
@@ -654,6 +770,175 @@ export class DiscordMock {
         return respond.json(updated);
       }),
     );
+
+    // docs.discord.food/resources/message#get-message: READ_MESSAGE_HISTORY in guild channels.
+    rest.route(
+      "GET",
+      "/channels/:channelId/messages/:messageId",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const denied = this.checkBotPerms(
+          channel,
+          Permission.ReadMessageHistory,
+        );
+        if (denied) return denied;
+        const message = this.messagesIn(channel).find(
+          (m) => m.id === req.params.messageId,
+        );
+        return message ? respond.json(message) : respond.unknownMessage();
+      }),
+    );
+
+    // docs.discord.food/resources/message#create-reaction: READ_MESSAGE_HISTORY, plus
+    // ADD_REACTIONS when nobody has reacted with this emoji yet. 204, fires MESSAGE_REACTION_ADD.
+    rest.route(
+      "PUT",
+      "/channels/:channelId/messages/:messageId/reactions/:emoji/@me",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const message = this.messagesIn(channel).find(
+          (m) => m.id === req.params.messageId,
+        );
+        if (!message) return respond.unknownMessage();
+        const emoji = req.params.emoji!;
+        const first = !message.reactions?.some((r) => r.emoji.name === emoji);
+        const denied = this.checkBotPerms(
+          channel,
+          Permission.ReadMessageHistory |
+            (first ? Permission.AddReactions : 0n),
+        );
+        if (denied) return denied;
+        this.userReacts(state.bot, message, emoji);
+        return respond.noContent();
+      }),
+    );
+
+    // docs.discord.food/resources/message#delete-own-reaction: 204, fires MESSAGE_REACTION_REMOVE.
+    rest.route(
+      "DELETE",
+      "/channels/:channelId/messages/:messageId/reactions/:emoji/@me",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const message = this.messagesIn(channel).find(
+          (m) => m.id === req.params.messageId,
+        );
+        if (!message) return respond.unknownMessage();
+        const emoji = req.params.emoji!;
+        if (state.removeReaction(channel.id, message.id, emoji, state.bot.id)) {
+          const guildId = "guild_id" in channel ? channel.guild_id : undefined;
+          this.gateway.dispatch(
+            GatewayDispatchEvents.MessageReactionRemove,
+            {
+              user_id: state.bot.id,
+              channel_id: channel.id,
+              message_id: message.id,
+              ...(guildId ? { guild_id: guildId } : {}),
+              emoji: { id: null, name: emoji },
+              type: 0,
+              burst: false,
+            },
+            guildId
+              ? GatewayIntentBits.GuildMessageReactions
+              : GatewayIntentBits.DirectMessageReactions,
+          );
+        }
+        return respond.noContent();
+      }),
+    );
+
+    // docs.discord.food/resources/channel#list-guild-active-threads. Thread members aren't modelled.
+    rest.route(
+      "GET",
+      "/guilds/:guildId/threads/active",
+      authed((req) => {
+        if (!state.guilds.has(req.params.guildId!))
+          return respond.error(404, 10004, "Unknown Guild");
+        const threads = [...state.channels.values()]
+          .filter(
+            (c) =>
+              "thread_metadata" in c &&
+              c.guild_id === req.params.guildId &&
+              !c.thread_metadata?.archived,
+          )
+          .sort((a, b) => (BigInt(b.id) > BigInt(a.id) ? 1 : -1));
+        return respond.json({ threads, members: [] });
+      }),
+    );
+
+    // docs.discord.food/resources/channel#list-public-archived-threads: READ_MESSAGE_HISTORY,
+    // newest archive_timestamp first, `before` an ISO timestamp, `limit` 2-100 (default 50).
+    rest.route(
+      "GET",
+      "/channels/:channelId/threads/archived/public",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const denied = this.checkBotPerms(
+          channel,
+          Permission.ReadMessageHistory,
+        );
+        if (denied) return denied;
+        const before = req.query.get("before");
+        const limit = Number(req.query.get("limit") ?? 50);
+        const archived = [...state.channels.values()]
+          .filter(
+            (c) =>
+              "thread_metadata" in c &&
+              c.parent_id === channel.id &&
+              !!c.thread_metadata?.archived &&
+              (!before ||
+                c.thread_metadata.archive_timestamp <
+                  new Date(before).toISOString()),
+          )
+          .sort((a, b) =>
+            (
+              b as { thread_metadata: { archive_timestamp: string } }
+            ).thread_metadata.archive_timestamp.localeCompare(
+              (a as { thread_metadata: { archive_timestamp: string } })
+                .thread_metadata.archive_timestamp,
+            ),
+          );
+        return respond.json({
+          threads: archived.slice(0, limit),
+          members: [],
+          has_more: archived.length > limit,
+        });
+      }),
+    );
+
+    // docs.discord.food/resources/user#get-user. 10013 Unknown User is from Discord's code table.
+    rest.route(
+      "GET",
+      "/users/:userId",
+      authed((req) => {
+        const user = state.users.get(req.params.userId!);
+        return user
+          ? respond.json(user)
+          : respond.error(404, 10013, "Unknown User");
+      }),
+    );
+
+    // docs.discord.food/resources/channel#create-private-channel: one recipient returns the DM.
+    rest.route(
+      "POST",
+      "/users/@me/channels",
+      authed((req) => {
+        const user = state.users.get(req.body?.recipient_id);
+        if (!user) return respond.error(404, 10013, "Unknown User");
+        return respond.json(state.dmChannel(user.id));
+      }),
+    );
+
+    // The CDN: attachment bytes, unauthenticated like cdn.discordapp.com.
+    rest.route("GET", "/attachments/:channelId/:attachmentId/:name", (req) => {
+      const file = state.files.get(req.params.attachmentId!);
+      return file
+        ? { status: 200, file }
+        : respond.error(404, 0, "404: Not Found");
+    });
 
     // ---- interactions ----
     rest.route("POST", "/interactions/:id/:token/callback", (req) => {
