@@ -371,7 +371,9 @@ export class DiscordMock {
       replyTo: input.replyTo?.id,
       id,
     });
-    message.mentions = mentions;
+    for (const user of mentions)
+      if (!message.mentions.some((u) => u.id === user.id))
+        message.mentions.push(user);
     this.gateway.dispatchMessage("MESSAGE_CREATE", message);
     return message;
   }
@@ -713,7 +715,9 @@ export class DiscordMock {
           content: req.body?.content,
           embeds: req.body?.embeds,
           components: req.body?.components,
+          flags: req.body?.flags,
           replyTo,
+          pingReplied: req.body?.allowed_mentions?.replied_user ?? true,
         });
         this.gateway.dispatchMessage("MESSAGE_CREATE", message);
         return respond.json(message);

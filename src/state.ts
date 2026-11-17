@@ -359,6 +359,8 @@ export class DiscordState extends EventEmitter<{
     files?: { name: string; data: Uint8Array; contentType: string }[];
     /** The message this one replies to. */
     replyTo?: string;
+    /** Whether the reply pings the replied-to author (Discord's default; allowed_mentions.replied_user). */
+    pingReplied?: boolean;
     /** Use this id, e.g. a forum post's starter message shares the thread's id. */
     id?: string;
     embeds?: APIMessage["embeds"];
@@ -415,6 +417,17 @@ export class DiscordState extends EventEmitter<{
       // 20 CHAT_INPUT_COMMAND for any interaction response, followups and component replies
       // included: inferred, not checked (the docs only describe 20 as the slash command reply).
       type: input.interaction ? 20 : input.replyTo ? 19 : 0,
+      // docs.discord.food/resources/message: referenced_message accompanies a REPLY. discord.js
+      // reads mentions.repliedUser from its author (Message#_patch).
+      ...(input.replyTo
+        ? {
+            referenced_message: (() => {
+              const { referenced_message: _, ...referenced } =
+                this.requireMessage(channel.id, input.replyTo);
+              return referenced;
+            })(),
+          }
+        : {}),
       ...(input.replyTo
         ? {
             message_reference: {
@@ -454,6 +467,11 @@ export class DiscordState extends EventEmitter<{
           }
         : {}),
     };
+    if (input.replyTo && (input.pingReplied ?? true)) {
+      const author = message.referenced_message!.author;
+      if (!message.mentions.some((u) => u.id === author.id))
+        message.mentions.push(author);
+    }
     this.messages.get(channel.id)!.push(message);
     // docs.discord.food/topics/threads: message_count and total_message_sent count MESSAGE_CREATEs.
     if ("thread_metadata" in channel) {
