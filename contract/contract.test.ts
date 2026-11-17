@@ -117,6 +117,23 @@ describe.skipIf(!TOKEN)("mock against real Discord", () => {
           2,
         ),
       );
+      // The report artifact holds everything; the log gets the summary so it's readable
+      // without downloading.
+      console.log(
+        JSON.stringify(
+          {
+            statuses: {
+              discord: statusOf(discord.responses),
+              mock: statusOf(mock.responses),
+            },
+            discordDispatches: Object.keys(discord.dispatches),
+            statusDifferences,
+            differences,
+          },
+          null,
+          2,
+        ),
+      );
       if (process.env.UPDATE_BASELINE)
         writeFileSync(BASELINE, JSON.stringify(differences, null, 2) + "\n");
       expect(statusDifferences).toEqual([]);
