@@ -1,7 +1,17 @@
 {
   "name": "discord-mock",
   "version": "0.0.0",
+  "private": true,
   "description": "A fake Discord (REST + Gateway) that discord.js bots connect to in tests",
+  "homepage": "https://github.com/veksen-enterprises/discord-mock#readme",
+  "bugs": {
+    "url": "https://github.com/veksen-enterprises/discord-mock/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/veksen-enterprises/discord-mock.git"
+  },
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "test": "vitest run",
@@ -11,14 +21,6 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/veksen-enterprises/discord-mock.git"
-  },
-  "bugs": {
-    "url": "https://github.com/veksen-enterprises/discord-mock/issues"
-  },
-  "homepage": "https://github.com/veksen-enterprises/discord-mock#readme",
   "dependencies": {
     "discord-api-types": "^0.38.59",
     "ws": "^8.23.0"
@@ -32,12 +34,10 @@
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=22"
-  },
   "peerDependencies": {
     "discord.js": "^14.20.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

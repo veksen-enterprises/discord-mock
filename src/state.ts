@@ -43,7 +43,11 @@ export class DiscordState extends EventEmitter<{
   constructor() {
     super();
     this.applicationId = snowflake();
-    this.bot = this.createUser({ username: "bot", bot: true, id: this.applicationId });
+    this.bot = this.createUser({
+      username: "bot",
+      bot: true,
+      id: this.applicationId,
+    });
   }
 
   createUser(input: { username: string; bot?: boolean; id?: string }): APIUser {
@@ -71,7 +75,9 @@ export class DiscordState extends EventEmitter<{
       unicode_emoji: null,
       position: 0,
       // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS
-      permissions: String((1n << 10n) | (1n << 11n) | (1n << 16n) | (1n << 31n)),
+      permissions: String(
+        (1n << 10n) | (1n << 11n) | (1n << 16n) | (1n << 31n),
+      ),
       managed: false,
       mentionable: false,
       flags: 0 as RoleFlags,
@@ -80,7 +86,9 @@ export class DiscordState extends EventEmitter<{
       id,
       name: input.name,
       // Never the bot by default: owners bypass every permission check, which would hide permission bugs.
-      ownerId: input.ownerId ?? this.createUser({ username: `${input.name}-owner` }).id,
+      ownerId:
+        input.ownerId ??
+        this.createUser({ username: `${input.name}-owner` }).id,
       roles: new Map([[id, everyone]]),
       members: new Map(),
       channelIds: [],
@@ -173,14 +181,23 @@ export class DiscordState extends EventEmitter<{
     return message;
   }
 
-  updateMessage(channelId: string, messageId: string, patch: Partial<APIMessage>): APIMessage {
+  updateMessage(
+    channelId: string,
+    messageId: string,
+    patch: Partial<APIMessage>,
+  ): APIMessage {
     const message = this.requireMessage(channelId, messageId);
-    Object.assign(message, patch, { edited_timestamp: new Date().toISOString() });
+    Object.assign(message, patch, {
+      edited_timestamp: new Date().toISOString(),
+    });
     this.emit("messageUpdate", message);
     return message;
   }
 
-  setCommands(scope: string, bodies: RESTPostAPIApplicationCommandsJSONBody[]): APIApplicationCommand[] {
+  setCommands(
+    scope: string,
+    bodies: RESTPostAPIApplicationCommandsJSONBody[],
+  ): APIApplicationCommand[] {
     const existing = this.commands.get(scope);
     const next = new Map<string, APIApplicationCommand>();
     for (const body of bodies) {
@@ -200,8 +217,14 @@ export class DiscordState extends EventEmitter<{
     return [...next.values()];
   }
 
-  findCommand(guildId: string | undefined, name: string): APIApplicationCommand | undefined {
-    return (guildId && this.commands.get(guildId)?.get(name)) || this.commands.get("global")?.get(name);
+  findCommand(
+    guildId: string | undefined,
+    name: string,
+  ): APIApplicationCommand | undefined {
+    return (
+      (guildId && this.commands.get(guildId)?.get(name)) ||
+      this.commands.get("global")?.get(name)
+    );
   }
 
   requireUser(id: string): APIUser {
@@ -221,7 +244,8 @@ export class DiscordState extends EventEmitter<{
   }
   requireMessage(channelId: string, id: string): APIMessage {
     const message = this.messages.get(channelId)?.find((m) => m.id === id);
-    if (!message) throw new Error(`discord-mock: unknown message ${id} in ${channelId}`);
+    if (!message)
+      throw new Error(`discord-mock: unknown message ${id} in ${channelId}`);
     return message;
   }
 }

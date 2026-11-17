@@ -17,7 +17,12 @@ await client.login(mock.token);
 const run = mock.as(alice).slashCommand(general, "echo", { text: "hello" });
 expect((await run.reply()).content).toBe("hello");
 
-mock.use("POST", "/channels/:id/messages", () => respond.rateLimited({ retryAfter: 0.3 }), { once: true });
+mock.use(
+  "POST",
+  "/channels/:id/messages",
+  () => respond.rateLimited({ retryAfter: 0.3 }),
+  { once: true },
+);
 ```
 
 ## How it hooks in
@@ -34,29 +39,29 @@ Why not msw: neither discord.js transport goes through what msw intercepts. See 
 
 Why it's strict: [ADR 0003](docs/adr/0003-strict-by-default.md). The other decisions are in [`docs/adr/`](docs/adr), the product direction in [VISION.md](VISION.md), the vocabulary in [GLOSSARY.md](GLOSSARY.md).
 
-| Rule | Mock behaviour |
-| --- | --- |
-| Permissions | Computed from @everyone, roles and channel overwrites. Missing VIEW_CHANNEL gives 50001, missing SEND_MESSAGES gives 50013. Guilds get a human owner by default, because owners bypass every check. |
-| Intents | No GUILD_MESSAGES, no MESSAGE_CREATE. No MESSAGE_CONTENT, empty content/embeds/attachments unless DM, mention or own message. Privileged intent not "enabled in the portal": close 4014. |
-| Commands | `slashCommand()` only works for commands the bot actually registered via `PUT /applications/.../commands`. Options are typed and validated against the registered schema (required, unknown, wrong type, choices). |
-| Interactions | Unacknowledged after 3s: 10062. Acknowledged twice: 40060. Ephemeral replies don't reach the gateway. Deferred replies show as loading until edited. |
-| Buttons | `clickButton()` fails if the message has no such button or it's disabled. |
-| Gateway | Bad token: 4004. Dropped connection: discord.js resumes and missed events are replayed. |
+| Rule         | Mock behaviour                                                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Permissions  | Computed from @everyone, roles and channel overwrites. Missing VIEW_CHANNEL gives 50001, missing SEND_MESSAGES gives 50013. Guilds get a human owner by default, because owners bypass every check.                |
+| Intents      | No GUILD_MESSAGES, no MESSAGE_CREATE. No MESSAGE_CONTENT, empty content/embeds/attachments unless DM, mention or own message. Privileged intent not "enabled in the portal": close 4014.                           |
+| Commands     | `slashCommand()` only works for commands the bot actually registered via `PUT /applications/.../commands`. Options are typed and validated against the registered schema (required, unknown, wrong type, choices). |
+| Interactions | Unacknowledged after 3s: 10062. Acknowledged twice: 40060. Ephemeral replies don't reach the gateway. Deferred replies show as loading until edited.                                                               |
+| Buttons      | `clickButton()` fails if the message has no such button or it's disabled.                                                                                                                                          |
+| Gateway      | Bad token: 4004. Dropped connection: discord.js resumes and missed events are replayed.                                                                                                                            |
 
 **Types.** Payloads are typed with `discord-api-types` (what discord.js itself uses). docs.discord.food is the reference for behaviour that the types don't capture: error codes, intent rules, interaction timing.
 
 ## What discord.js does under failure (verified by the tests)
 
-| Discord does | discord.js does | Bot sees |
-| --- | --- | --- |
-| One 5xx | Retries immediately (`retries: 3`) | Nothing |
-| Persistent 5xx | 1 try + 3 retries, then throws | `HTTPError` with `status` |
-| Closes the connection mid-request | No retry (`shouldRetry` only covers ECONNRESET/abort) | `other side closed`, code `UND_ERR_SOCKET` |
-| Resets the connection | Retries | Nothing |
-| Route 429 | Waits `Retry-After` (+50ms offset), retries, forever | Latency only |
-| Global 429 | Stalls every authenticated route; interaction callbacks are exempt | Latency only |
-| 429 with `rejectOnRateLimit` set | Throws | `RateLimitError` |
-| 403 / 404 / 400 | Throws, no retry | `DiscordAPIError` with Discord's `code` |
+| Discord does                      | discord.js does                                                    | Bot sees                                   |
+| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
+| One 5xx                           | Retries immediately (`retries: 3`)                                 | Nothing                                    |
+| Persistent 5xx                    | 1 try + 3 retries, then throws                                     | `HTTPError` with `status`                  |
+| Closes the connection mid-request | No retry (`shouldRetry` only covers ECONNRESET/abort)              | `other side closed`, code `UND_ERR_SOCKET` |
+| Resets the connection             | Retries                                                            | Nothing                                    |
+| Route 429                         | Waits `Retry-After` (+50ms offset), retries, forever               | Latency only                               |
+| Global 429                        | Stalls every authenticated route; interaction callbacks are exempt | Latency only                               |
+| 429 with `rejectOnRateLimit` set  | Throws                                                             | `RateLimitError`                           |
+| 403 / 404 / 400                   | Throws, no retry                                                   | `DiscordAPIError` with Discord's `code`    |
 
 The "closed vs reset" split is a real asymmetry in `@discordjs/rest`. Which one a real Discord outage produces is unchecked.
 

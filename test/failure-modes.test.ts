@@ -1,31 +1,59 @@
+import { once } from "node:events";
+import {
+  Events,
+  RateLimitError,
+  type Client,
+  type ClientOptions,
+} from "discord.js";
 /**
  * What a bot sees when Discord misbehaves, and whether the mock makes discord.js react the way it
  * does in production. Each expectation is about @discordjs/rest's real behaviour, not the mock's.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { Events, RateLimitError, type Client, type ClientOptions } from "discord.js";
-import { once } from "node:events";
-import { createDiscordMock, Permission, respond, type DiscordMock, type DiscordMockOptions } from "../src/index.js";
+import {
+  createDiscordMock,
+  Permission,
+  respond,
+  type DiscordMock,
+  type DiscordMockOptions,
+} from "../src/index.js";
 import { createBot, deployCommands } from "./fixtures/bot.js";
 
 let mock: DiscordMock;
 let client: Client;
 
-async function start(opts: { mock?: DiscordMockOptions; client?: Partial<ClientOptions> } = {}) {
+async function start(
+  opts: { mock?: DiscordMockOptions; client?: Partial<ClientOptions> } = {},
+) {
   mock = await createDiscordMock(opts.mock);
   const guild = mock.createGuild("g");
   const general = mock.createTextChannel(guild, "general");
   const news = mock.createTextChannel(guild, "news");
   const alice = mock.createUser("alice");
   mock.addMember(guild, alice);
-  await deployCommands({ token: mock.token, applicationId: mock.state.applicationId, guildId: guild.id, api: mock.apiUrl });
-  const bot = createBot({ ...opts.client, rest: { ...mock.clientOptions.rest, ...opts.client?.rest } });
+  await deployCommands({
+    token: mock.token,
+    applicationId: mock.state.applicationId,
+    guildId: guild.id,
+    api: mock.apiUrl,
+  });
+  const bot = createBot({
+    ...opts.client,
+    rest: { ...mock.clientOptions.rest, ...opts.client?.rest },
+  });
   client = bot.client;
   const ready = once(client, Events.ClientReady);
   await client.login(mock.token);
   await ready;
-  const announce = () => mock.as(alice).slashCommand(general, "announce", { channel: news.id }).reply();
-  const postsToNews = () => mock.rest.log.filter((r) => r.method === "POST" && r.path === `/channels/${news.id}/messages`);
+  const announce = () =>
+    mock
+      .as(alice)
+      .slashCommand(general, "announce", { channel: news.id })
+      .reply();
+  const postsToNews = () =>
+    mock.rest.log.filter(
+      (r) => r.method === "POST" && r.path === `/channels/${news.id}/messages`,
+    );
   return { guild, general, news, alice, bot, announce, postsToNews };
 }
 
@@ -37,20 +65,36 @@ afterEach(async () => {
 describe("not allowed", () => {
   it("a channel overwrite denying SEND_MESSAGES yields 50013 from the stateful fake, no stubbing", async () => {
     const { news, announce, bot } = await start();
-    mock.setOverwrite(news, { id: mock.state.bot.id, type: 1 }, { deny: Permission.SendMessages });
+    mock.setOverwrite(
+      news,
+      { id: mock.state.bot.id, type: 1 },
+      { deny: Permission.SendMessages },
+    );
     expect((await announce()).content).toBe("failed: 50013");
-    expect(bot.errors[0]).toMatchObject({ name: "DiscordAPIError[50013]", status: 403 });
+    expect(bot.errors[0]).toMatchObject({
+      name: "DiscordAPIError[50013]",
+      status: 403,
+    });
   });
 
   it("losing VIEW_CHANNEL yields 50001 Missing Access instead", async () => {
     const { guild, news, announce } = await start();
-    mock.setOverwrite(news, { id: guild.id, type: 0 }, { deny: Permission.ViewChannel });
+    mock.setOverwrite(
+      news,
+      { id: guild.id, type: 0 },
+      { deny: Permission.ViewChannel },
+    );
     expect((await announce()).content).toBe("failed: 50001");
   });
 
   it("an override can force the same error on any route", async () => {
     const { announce } = await start();
-    mock.use("POST", "/channels/:id/messages", () => respond.missingPermissions(), { once: true });
+    mock.use(
+      "POST",
+      "/channels/:id/messages",
+      () => respond.missingPermissions(),
+      { once: true },
+    );
     expect((await announce()).content).toBe("failed: 50013");
   });
 });
@@ -58,7 +102,9 @@ describe("not allowed", () => {
 describe("discord down", () => {
   it("one 5xx is invisible: @discordjs/rest retries it", async () => {
     const { announce, postsToNews } = await start();
-    mock.use("POST", "/channels/:id/messages", () => respond.serverError(502), { once: true });
+    mock.use("POST", "/channels/:id/messages", () => respond.serverError(502), {
+      once: true,
+    });
     expect((await announce()).content).toBe("posted");
     expect(postsToNews().map((r) => r.status)).toEqual([502, 200]);
   });
@@ -72,7 +118,9 @@ describe("discord down", () => {
 
   it("a connection closed mid-request is NOT retried: the bot gets the socket error at once", async () => {
     const { announce, postsToNews, bot } = await start();
-    mock.use("POST", "/channels/:id/messages", () => respond.connectionClosed());
+    mock.use("POST", "/channels/:id/messages", () =>
+      respond.connectionClosed(),
+    );
     expect((await announce()).content).toBe("failed: UND_ERR_SOCKET");
     expect(postsToNews()).toHaveLength(1);
     expect((bot.errors[0] as Error).message).toBe("other side closed");
@@ -80,7 +128,12 @@ describe("discord down", () => {
 
   it("a connection reset (ECONNRESET) IS retried, like a 5xx", async () => {
     const { announce, postsToNews } = await start();
-    mock.use("POST", "/channels/:id/messages", () => respond.connectionReset(), { once: true });
+    mock.use(
+      "POST",
+      "/channels/:id/messages",
+      () => respond.connectionReset(),
+      { once: true },
+    );
     expect((await announce()).content).toBe("posted");
     expect(postsToNews()).toHaveLength(2);
   });
@@ -91,7 +144,10 @@ describe("discord down", () => {
     mock.gateway.dropConnections();
     mock.as(alice).sendMessage(general, "!ping"); // sent while the bot is disconnected
     await resumed;
-    const reply = await mock.waitForMessage((m) => m.author.id === mock.state.bot.id, { timeoutMs: 5_000 });
+    const reply = await mock.waitForMessage(
+      (m) => m.author.id === mock.state.bot.id,
+      { timeoutMs: 5_000 },
+    );
     expect(reply.content).toBe("pong");
   });
 });
@@ -99,7 +155,12 @@ describe("discord down", () => {
 describe("rate limited", () => {
   it("a route 429 is waited out and retried; the bot just sees latency", async () => {
     const { announce, postsToNews } = await start();
-    mock.use("POST", "/channels/:id/messages", () => respond.rateLimited({ retryAfter: 0.3 }), { once: true });
+    mock.use(
+      "POST",
+      "/channels/:id/messages",
+      () => respond.rateLimited({ retryAfter: 0.3 }),
+      { once: true },
+    );
     const t0 = Date.now();
     expect((await announce()).content).toBe("posted");
     expect(Date.now() - t0).toBeGreaterThanOrEqual(300);
@@ -108,7 +169,12 @@ describe("rate limited", () => {
 
   it("a global 429 stalls other buckets too, but not interaction callbacks", async () => {
     const { general, alice, announce } = await start();
-    mock.use("POST", "/channels/:id/messages", () => respond.rateLimited({ retryAfter: 0.3, global: true }), { once: true });
+    mock.use(
+      "POST",
+      "/channels/:id/messages",
+      () => respond.rateLimited({ retryAfter: 0.3, global: true }),
+      { once: true },
+    );
     const t0 = Date.now();
     const announced = announce();
     await new Promise((r) => setTimeout(r, 50)); // let the 429 land first
@@ -123,8 +189,15 @@ describe("rate limited", () => {
   });
 
   it("with rejectOnRateLimit the bot gets a RateLimitError instead of waiting", async () => {
-    const { announce, bot } = await start({ client: { rest: { rejectOnRateLimit: ["/channels"] } } });
-    mock.use("POST", "/channels/:id/messages", () => respond.rateLimited({ retryAfter: 5 }), { once: true });
+    const { announce, bot } = await start({
+      client: { rest: { rejectOnRateLimit: ["/channels"] } },
+    });
+    mock.use(
+      "POST",
+      "/channels/:id/messages",
+      () => respond.rateLimited({ retryAfter: 5 }),
+      { once: true },
+    );
     expect((await announce()).content).toMatch(/^failed: /);
     const error = bot.errors[0] as RateLimitError;
     expect(error).toBeInstanceOf(RateLimitError);
@@ -134,7 +207,9 @@ describe("rate limited", () => {
 
 describe("interaction rules", () => {
   it("replying after the 3s window fails with 10062, as in production", async () => {
-    const { general, alice, bot } = await start({ mock: { interactionDeadlineMs: 50 } });
+    const { general, alice, bot } = await start({
+      mock: { interactionDeadlineMs: 50 },
+    });
     const run = mock.as(alice).slashCommand(general, "lazy");
     await new Promise((r) => setTimeout(r, 250));
     expect(run.state).toBe("pending");

@@ -1,4 +1,8 @@
-import { OverwriteType, type APIChannel, type APIGuildMember } from "discord-api-types/v10";
+import {
+  OverwriteType,
+  type APIChannel,
+  type APIGuildMember,
+} from "discord-api-types/v10";
 import type { DiscordState, GuildRecord } from "./state.js";
 
 export const Permission = {
@@ -13,12 +17,18 @@ export const Permission = {
 const ALL = (1n << 53n) - 1n;
 
 /** Discord's permission algorithm: base from roles, then @everyone/role/member overwrites. */
-export function computePermissions(state: DiscordState, guild: GuildRecord, userId: string, channel?: APIChannel): bigint {
+export function computePermissions(
+  state: DiscordState,
+  guild: GuildRecord,
+  userId: string,
+  channel?: APIChannel,
+): bigint {
   if (guild.ownerId === userId) return ALL;
   const member = guild.members.get(userId);
   if (!member) return 0n;
   let base = BigInt(guild.roles.get(guild.id)!.permissions);
-  for (const roleId of member.roles) base |= BigInt(guild.roles.get(roleId)?.permissions ?? "0");
+  for (const roleId of member.roles)
+    base |= BigInt(guild.roles.get(roleId)?.permissions ?? "0");
   if (base & Permission.Administrator) return ALL;
   if (!channel || !("permission_overwrites" in channel)) return base;
 
@@ -38,7 +48,9 @@ export function computePermissions(state: DiscordState, guild: GuildRecord, user
     }
   }
   apply({ allow: String(allow), deny: String(deny) });
-  apply(overwrites.find((o) => o.type === OverwriteType.Member && o.id === userId));
+  apply(
+    overwrites.find((o) => o.type === OverwriteType.Member && o.id === userId),
+  );
   return base;
 }
 
@@ -88,6 +100,16 @@ export function guildCreatePayload(state: DiscordState, guild: GuildRecord) {
   };
 }
 
-export function interactionMember(state: DiscordState, guild: GuildRecord, member: APIGuildMember, channel: APIChannel) {
-  return { ...member, permissions: String(computePermissions(state, guild, member.user.id, channel)) };
+export function interactionMember(
+  state: DiscordState,
+  guild: GuildRecord,
+  member: APIGuildMember,
+  channel: APIChannel,
+) {
+  return {
+    ...member,
+    permissions: String(
+      computePermissions(state, guild, member.user.id, channel),
+    ),
+  };
 }

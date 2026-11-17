@@ -7,6 +7,7 @@ Checked by reading both repos at their current main.
 Current tests call `execute(interaction)` directly with duck-typed fakes (`src/test/fake-guild.ts`, `discord-mocks.ts`). That skips `interaction-create` routing, discord.js payload parsing and REST serialization: the fake's `send()` accepts whatever the command passes.
 
 Bot changes needed:
+
 - `src/index.ts` builds the `Client` at module top level with side effects (cron, DB). Extract `createClient(options)`.
 - `src/setup-commands.ts` creates a module-level `new REST()` with the default API. Pass `api` through, or build the REST from the client.
 

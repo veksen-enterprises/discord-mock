@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Events, GatewayIntentBits, type Client } from "discord.js";
 import { once } from "node:events";
+import { Events, GatewayIntentBits, type Client } from "discord.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDiscordMock, type DiscordMock } from "../src/index.js";
 import { createBot, deployCommands } from "./fixtures/bot.js";
 
@@ -12,7 +12,12 @@ async function start(intents?: GatewayIntentBits[]) {
   const general = mock.createTextChannel(guild, "general");
   const alice = mock.createUser("alice");
   mock.addMember(guild, alice);
-  await deployCommands({ token: mock.token, applicationId: mock.state.applicationId, guildId: guild.id, api: mock.apiUrl });
+  await deployCommands({
+    token: mock.token,
+    applicationId: mock.state.applicationId,
+    guildId: guild.id,
+    api: mock.apiUrl,
+  });
   const bot = createBot(mock.clientOptions, intents);
   client = bot.client;
   const ready = once(client, Events.ClientReady);
@@ -42,10 +47,14 @@ describe("a stock discord.js Client against the mock", () => {
   it("replies to a message", async () => {
     const { general, alice } = await start();
     const sent = mock.as(alice).sendMessage(general, "!ping");
-    const reply = await mock.waitForMessage((m) => m.author.id === mock.state.bot.id);
+    const reply = await mock.waitForMessage(
+      (m) => m.author.id === mock.state.bot.id,
+    );
     expect(reply.content).toBe("pong");
     expect(reply.channel_id).toBe(general.id);
-    expect(mock.rest.log.at(-1)?.body).toMatchObject({ message_reference: { message_id: sent.id } });
+    expect(mock.rest.log.at(-1)?.body).toMatchObject({
+      message_reference: { message_id: sent.id },
+    });
   });
 
   it("answers a slash command", async () => {
@@ -57,7 +66,9 @@ describe("a stock discord.js Client against the mock", () => {
 
   it("answers ephemerally when asked", async () => {
     const { general, alice } = await start();
-    const run = mock.as(alice).slashCommand(general, "echo", { text: "psst", secret: true });
+    const run = mock
+      .as(alice)
+      .slashCommand(general, "echo", { text: "psst", secret: true });
     await run.reply();
     expect(run.ephemeral).toBe(true);
   });
@@ -74,25 +85,38 @@ describe("a stock discord.js Client against the mock", () => {
     const panel = await mock.as(alice).slashCommand(general, "panel").reply();
     const click = mock.as(alice).clickButton(panel, "count");
     await click.waitUntil((r) => r.state === "replied");
-    expect(mock.messagesIn(general).find((m) => m.id === panel.id)?.content).toBe("count 1");
+    expect(
+      mock.messagesIn(general).find((m) => m.id === panel.id)?.content,
+    ).toBe("count 1");
   });
 
   it("rejects commands the bot never registered, and bad options", async () => {
     const { general, alice } = await start();
-    expect(() => mock.as(alice).slashCommand(general, "nope")).toThrow(/isn't registered/);
-    expect(() => mock.as(alice).slashCommand(general, "echo", {})).toThrow(/requires option "text"/);
-    expect(() => mock.as(alice).slashCommand(general, "echo", { text: 1 })).toThrow(/wrong type/);
+    expect(() => mock.as(alice).slashCommand(general, "nope")).toThrow(
+      /isn't registered/,
+    );
+    expect(() => mock.as(alice).slashCommand(general, "echo", {})).toThrow(
+      /requires option "text"/,
+    );
+    expect(() =>
+      mock.as(alice).slashCommand(general, "echo", { text: 1 }),
+    ).toThrow(/wrong type/);
   });
 });
 
 describe("intents behave like Discord", () => {
   it("without MESSAGE_CONTENT the bot sees empty content and stays silent", async () => {
-    const { general, alice } = await start([GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]);
+    const { general, alice } = await start([
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+    ]);
     const seen = once(client, Events.MessageCreate);
     mock.as(alice).sendMessage(general, "!ping");
     const [message] = await seen;
     expect(message.content).toBe("");
-    await expect(mock.waitForMessage((m) => m.author.bot === true, { timeoutMs: 200 })).rejects.toThrow();
+    await expect(
+      mock.waitForMessage((m) => m.author.bot === true, { timeoutMs: 200 }),
+    ).rejects.toThrow();
   });
 
   it("login fails with 4014 when a privileged intent isn't enabled in the portal", async () => {
