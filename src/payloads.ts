@@ -92,7 +92,15 @@ export function guildCreatePayload(state: DiscordState, guild: GuildRecord) {
     unavailable: false,
     member_count: guild.members.size,
     members: [...guild.members.values()],
-    channels: guild.channelIds.map((id) => state.channels.get(id)!),
+    // Channels inside GUILD_CREATE carry no guild_id; the guild is implied.
+    channels: guild.channelIds.map((id) => {
+      const { guild_id: _, ...channel } = state.channels.get(
+        id,
+      )! as APIChannel & {
+        guild_id?: string;
+      };
+      return channel;
+    }),
     threads: [],
     presences: [],
     voice_states: [],

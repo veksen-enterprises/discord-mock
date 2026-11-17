@@ -2,7 +2,9 @@ import { EventEmitter } from "node:events";
 import {
   ChannelType,
   type APIApplicationCommand,
+  type ChannelFlags,
   type GuildMemberFlags,
+  type UserFlags,
   type RoleFlags,
   type APIChannel,
   type APIGuildMember,
@@ -57,6 +59,7 @@ export class DiscordState extends EventEmitter<{
       discriminator: "0",
       global_name: null,
       avatar: null,
+      public_flags: 0 as UserFlags,
       ...(input.bot ? { bot: true } : {}),
     };
     this.users.set(user.id, user);
@@ -105,6 +108,12 @@ export class DiscordState extends EventEmitter<{
       user: this.requireUser(userId),
       roles: [],
       joined_at: new Date().toISOString(),
+      nick: null,
+      avatar: null,
+      banner: null,
+      pending: false,
+      premium_since: null,
+      communication_disabled_until: null,
       deaf: false,
       mute: false,
       flags: 0 as GuildMemberFlags,
@@ -160,6 +169,7 @@ export class DiscordState extends EventEmitter<{
       topic: null,
       last_message_id: null,
       rate_limit_per_user: 0,
+      flags: 0 as ChannelFlags,
     } satisfies APIChannel;
     this.channels.set(channel.id, channel);
     this.messages.set(channel.id, []);
@@ -178,11 +188,10 @@ export class DiscordState extends EventEmitter<{
     webhookId?: string;
   }): APIMessage {
     const channel = this.requireChannel(input.channelId);
-    const guildId = "guild_id" in channel ? channel.guild_id : undefined;
-    const message: APIMessage & { guild_id?: string } = {
+    // No guild_id: Discord sends it on gateway dispatches only, not in REST message objects.
+    const message: APIMessage = {
       id: snowflake(),
       channel_id: channel.id,
-      ...(guildId ? { guild_id: guildId } : {}),
       author: this.requireUser(input.authorId),
       content: input.content ?? "",
       timestamp: new Date().toISOString(),

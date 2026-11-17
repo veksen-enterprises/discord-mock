@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import {
@@ -8,7 +9,6 @@ import {
 } from "discord-api-types/v10";
 import { WebSocketServer, type WebSocket } from "ws";
 import { guildCreatePayload } from "./payloads.js";
-import { snowflake } from "./snowflake.js";
 import type { DiscordState } from "./state.js";
 
 const PRIVILEGED =
@@ -89,7 +89,7 @@ export class Gateway {
             return;
           }
           session = {
-            id: snowflake(),
+            id: randomBytes(16).toString("hex"),
             intents: d.intents,
             seq: 0,
             socket,
@@ -153,11 +153,10 @@ export class Gateway {
    * DIRECT_MESSAGES, and without MESSAGE_CONTENT the content fields arrive empty unless the
    * bot wrote the message, is mentioned, or it's a DM.
    */
-  dispatchMessage(
-    t: "MESSAGE_CREATE" | "MESSAGE_UPDATE",
-    message: APIMessage & { guild_id?: string },
-  ) {
-    const inGuild = !!message.guild_id;
+  dispatchMessage(t: "MESSAGE_CREATE" | "MESSAGE_UPDATE", message: APIMessage) {
+    const channel = this.state.requireChannel(message.channel_id);
+    const guildId = "guild_id" in channel ? channel.guild_id : undefined;
+    const inGuild = !!guildId;
     const required = inGuild
       ? GatewayIntentBits.GuildMessages
       : GatewayIntentBits.DirectMessages;
@@ -169,12 +168,12 @@ export class Gateway {
         message.mentions.some((u) => u.id === this.state.bot.id) ||
         session.intents & GatewayIntentBits.MessageContent;
       const member = inGuild
-        ? this.state.guilds
-            .get(message.guild_id!)
-            ?.members.get(message.author.id)
+        ? this.state.guilds.get(guildId!)?.members.get(message.author.id)
         : undefined;
       const d = {
         ...message,
+        ...(guildId ? { guild_id: guildId } : {}),
+        channel_type: channel.type,
         ...(member ? { member: { ...member, user: undefined } } : {}),
         ...(exempt
           ? {}
