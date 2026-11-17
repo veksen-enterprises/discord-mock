@@ -70,6 +70,6 @@ The "closed vs reset" split is a real asymmetry in `@discordjs/rest`. Which one 
 - Most of the API surface. Unimplemented routes return 404 and are recorded; `assertNoUnhandledRequests()` turns that into a test failure so a gap is never mistaken for a pass.
 - Gateway `zlib-stream` and ETF. discord.js asks for zlib-stream when `zlib-sync` is installed; the mock closes the socket with a clear reason instead of misbehaving.
 - Reactions, threads, forums, DMs, members fetch, autocomplete, modals, select menus, attachments upload, partials.
-- A contract check against real Discord (VISION.md, open questions). Until then, fidelity is modelled from the docs, not checked.
+- The contract check against real Discord (`contract/`, nightly in Actions) covers only what a bot can trigger itself. User actions (slash commands, button presses, the 3s deadline, 40060) stay modelled from the docs, not checked.
 
 What each consumer needs next: [docs/adoption.md](docs/adoption.md).

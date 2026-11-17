@@ -25,7 +25,8 @@ contradicts one, say so explicitly rather than silently overriding it.
 ## Commands
 
 ```
-npm run test          # vitest run
+npm run test          # vitest run (contract scenarios run against the mock only)
+npm run test:contract # mock vs the real test guild; needs DISCORD_CONTRACT_TOKEN
 npm run typecheck     # tsc --noEmit
 npm run lint          # oxlint
 npm run lint:fix      # oxlint --fix
@@ -41,6 +42,9 @@ npm run format:check  # oxfmt (check only)
 - `src/gateway.ts` — Sessions, identify/resume, intent-filtered Dispatches
 - `src/payloads.ts` — permission computation, Gateway payload builders
 - `test/fixtures/bot.ts` — a small stock bot the tests drive
+- `contract/` — the same bot-triggered scenarios against the mock and the test guild,
+  compared by status and shape; accepted differences in `baseline.json`. Runs nightly
+  in Actions (`.github/workflows/contract.yml`); this container can't reach discord.com
 - `docs/adoption.md` — what each consumer needs, checked against their repos
 
 ## Modelling Discord

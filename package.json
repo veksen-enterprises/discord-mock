@@ -19,7 +19,8 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "test:contract": "vitest run contract"
   },
   "dependencies": {
     "discord-api-types": "^0.38.59",
