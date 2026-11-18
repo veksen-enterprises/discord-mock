@@ -135,3 +135,50 @@ it("refuses a role above the bot's, and adds and removes one below it", async ()
   await member.roles.remove(helpers.id);
   expect(record.members.get(alice.id)!.roles).not.toContain(helpers.id);
 });
+
+it("creates a role just above @everyone, edits and deletes it, and refuses to grant what the bot lacks", async () => {
+  const { guild, record, alice } = await start(Permission.ManageRoles);
+  const created = once(client, Events.GuildRoleCreate);
+
+  const role = await guild.roles.create({ name: "helpers" });
+  await (await guild.members.fetch(alice.id)).roles.add(role);
+  const renamed = await role.edit({ name: "helpers+" });
+
+  expect((await created)[0].id).toBe(role.id);
+  expect(role.position).toBe(1);
+  expect(renamed.name).toBe("helpers+");
+  expect(
+    (await refusal(guild.roles.create({ permissions: Permission.BanMembers })))
+      .code,
+  ).toBe(50013);
+  const deleted = once(client, Events.GuildRoleDelete);
+  await role.delete();
+  expect((await deleted)[0].id).toBe(role.id);
+  expect(record.members.get(alice.id)!.roles).not.toContain(role.id);
+});
+
+it("deletes a channel overwrite, and the bot hears the channel update", async () => {
+  const { guild, record, alice } = await start(Permission.ManageRoles);
+  const channel = await guild.channels.fetch(
+    mock.createTextChannel(record, "general").id,
+  );
+  if (!channel?.isTextBased() || channel.isThread()) throw new Error("text");
+  const member = await guild.members.fetch(alice.id);
+  await channel.permissionOverwrites.create(member, { SendMessages: false });
+  const cleared = new Promise((resolve) =>
+    client.on(Events.ChannelUpdate, (_, after) => {
+      if (
+        "permissionOverwrites" in after &&
+        !after.permissionOverwrites.cache.has(alice.id)
+      )
+        resolve(after.id);
+    }),
+  );
+
+  await channel.permissionOverwrites.delete(member);
+
+  expect(await cleared).toBe(channel.id);
+  expect(
+    (await refusal(channel.permissionOverwrites.delete(member))).code,
+  ).toBe(10009);
+});

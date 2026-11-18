@@ -3,14 +3,17 @@ import {
   GatewayIntentBits,
   type APIBan,
   type APIGuildMember,
+  type APIRole,
 } from "discord-api-types/v10";
 import type { DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
+import { snowflake } from "./snowflake.js";
 import type { GuildRecord } from "./state.js";
 
-// Guild member and ban Routes. Sources: discord-api-docs resources/guild (Get/Modify Guild Member,
-// Add/Remove Guild Member Role, Remove Guild Member, Create/Remove/Get Guild Ban, Get Guild Bans),
+// Guild member, ban and role Routes. Sources: discord-api-docs resources/guild (Get/Modify Guild
+// Member, Add/Remove Guild Member Role, Remove Guild Member, Create/Remove/Get Guild Ban, Get Guild
+// Bans, Create/Modify/Delete Guild Role),
 // topics/permissions#permission-hierarchy, and docs.discord.food/resources/guild. Which JSON code
 // each refusal carries isn't documented per route: the pairings below come from Discord's code
 // table and are inferred, not checked.
@@ -270,6 +273,114 @@ export function registerMemberRoutes(
         .filter((id) => !after || BigInt(id) > BigInt(after));
       const page = before ? ids.slice(-limit) : ids.slice(0, limit);
       return respond.json(page.map((id) => guild.bans.get(id)!));
+    }),
+  );
+
+  // topics/permissions#permission-hierarchy: "A bot can edit roles of a lower position than its
+  // highest role, but it can only grant permissions it has to those roles." The 50013 for either
+  // is inferred, not checked.
+  const grantable = (guild: GuildRecord, permissions: unknown) =>
+    permissions == null ||
+    botHas(guild, BigInt(permissions as string | number));
+  const announceRole = (
+    guild: GuildRecord,
+    t: string,
+    payload: { role: APIRole } | { role_id: string },
+  ) =>
+    gateway.dispatch(
+      t,
+      { guild_id: guild.id, ...payload },
+      GatewayIntentBits.Guilds,
+    );
+  const ROLE_FIELDS = ["name", "permissions", "colors", "hoist", "mentionable"];
+
+  // Create Guild Role: "All JSON params are optional"; name defaults to "new role", permissions to
+  // @everyone's. Fires GUILD_ROLE_CREATE. Where the new role sits isn't documented: the mock puts
+  // it at position 1, just above @everyone, as Discord's app shows new roles (inferred, not checked).
+  rest.route(
+    "POST",
+    "/guilds/:guildId/roles",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const other = Object.keys(body).find((key) => !ROLE_FIELDS.includes(key));
+      if (other) return rest.gap(`create role with ${other}`);
+      if (
+        !botHas(guild, Permission.ManageRoles) ||
+        !grantable(guild, body.permissions)
+      )
+        return respond.missingPermissions();
+      for (const role of guild.roles.values())
+        if (role.position >= 1) role.position++;
+      const everyone = guild.roles.get(guild.id)!;
+      const role: APIRole = {
+        ...everyone,
+        ...body,
+        id: snowflake(),
+        name: (body.name as string | undefined) ?? "new role",
+        permissions: String(body.permissions ?? everyone.permissions),
+        position: 1,
+      };
+      guild.roles.set(role.id, role);
+      announceRole(guild, GatewayDispatchEvents.GuildRoleCreate, { role });
+      return respond.json(role);
+    }),
+  );
+
+  // Modify Guild Role: "All parameters to this endpoint are optional and nullable." Fires
+  // GUILD_ROLE_UPDATE.
+  rest.route(
+    "PATCH",
+    "/guilds/:guildId/roles/:roleId",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const role = guild.roles.get(req.params.roleId!);
+      if (!role) return unknownRole();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const other = Object.keys(body).find((key) => !ROLE_FIELDS.includes(key));
+      if (other) return rest.gap(`modify role ${other}`);
+      if (
+        !botHas(guild, Permission.ManageRoles) ||
+        (guild.ownerId !== bot && role.position >= highest(guild, bot)) ||
+        !grantable(guild, body.permissions)
+      )
+        return respond.missingPermissions();
+      Object.assign(role, body, {
+        ...(body.permissions == null
+          ? {}
+          : { permissions: String(body.permissions) }),
+      });
+      announceRole(guild, GatewayDispatchEvents.GuildRoleUpdate, { role });
+      return respond.json(role);
+    }),
+  );
+
+  // Delete Guild Role: 204, fires GUILD_ROLE_DELETE. @everyone can't be deleted; 50028 Invalid
+  // Role is the code table's closest entry, so the pairing is inferred.
+  rest.route(
+    "DELETE",
+    "/guilds/:guildId/roles/:roleId",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const role = guild.roles.get(req.params.roleId!);
+      if (!role) return unknownRole();
+      if (role.id === guild.id)
+        return respond.error(400, 50028, "Invalid Role");
+      if (
+        !botHas(guild, Permission.ManageRoles) ||
+        (guild.ownerId !== bot && role.position >= highest(guild, bot))
+      )
+        return respond.missingPermissions();
+      guild.roles.delete(role.id);
+      for (const member of guild.members.values())
+        member.roles = member.roles.filter((id) => id !== role.id);
+      announceRole(guild, GatewayDispatchEvents.GuildRoleDelete, {
+        role_id: role.id,
+      });
+      return respond.noContent();
     }),
   );
 }

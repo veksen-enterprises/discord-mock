@@ -82,6 +82,25 @@ export async function runScenarios(
       `/channels/${channelId}/messages`,
       { content: "should be refused" },
     );
+    out.deleteOverwrite = await call(
+      "DELETE",
+      `/channels/${channelId}/permissions/${target.botId}`,
+    );
+    out.createRole = await call("POST", `/guilds/${target.guildId}/roles`, {
+      name: "contract role",
+    });
+    const roleId = (out.createRole.body as { id?: string })?.id;
+    if (roleId) {
+      out.editRole = await call(
+        "PATCH",
+        `/guilds/${target.guildId}/roles/${roleId}`,
+        { name: "contract role, edited" },
+      );
+      out.deleteRole = await call(
+        "DELETE",
+        `/guilds/${target.guildId}/roles/${roleId}`,
+      );
+    }
   } finally {
     out.deleteChannel = await call("DELETE", `/channels/${channelId}`);
   }

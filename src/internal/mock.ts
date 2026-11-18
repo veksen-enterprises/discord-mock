@@ -1239,6 +1239,34 @@ export class DiscordMock {
       }),
     );
 
+    // resources/channel#delete-channel-permission: needs MANAGE_ROLES, "Returns a 204 empty response
+    // on success. Fires a Channel Update Gateway event." 10009 for an overwrite that isn't there is
+    // inferred from the code table.
+    rest.route(
+      "DELETE",
+      "/channels/:channelId/permissions/:overwriteId",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const denied = this.checkBotPerms(channel, Permission.ManageRoles);
+        if (denied) return denied;
+        const overwrites =
+          "permission_overwrites" in channel
+            ? channel.permission_overwrites
+            : undefined;
+        const i =
+          overwrites?.findIndex((o) => o.id === req.params.overwriteId) ?? -1;
+        if (i === -1) return respond.error(404, 10009, "Unknown Overwrite");
+        overwrites!.splice(i, 1);
+        this.gateway.dispatch(
+          GatewayDispatchEvents.ChannelUpdate,
+          channel,
+          GatewayIntentBits.Guilds,
+        );
+        return respond.noContent();
+      }),
+    );
+
     // Permission-checked like Discord: VIEW_CHANNEL then SEND_MESSAGES, 50001 vs 50013.
     rest.route(
       "POST",

@@ -50,6 +50,10 @@ describe("scenarios against the mock", () => {
       editMessage: 200,
       denySendMessages: 204,
       sendWithoutPermission: 403,
+      deleteOverwrite: 204,
+      createRole: 200,
+      editRole: 200,
+      deleteRole: 204,
       deleteChannel: 200,
     });
     expect(responses.sendWithoutPermission!.body).toMatchObject({
