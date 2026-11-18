@@ -1329,13 +1329,15 @@ export class DiscordMock {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
         // resources/channel#delete-channel: MANAGE_CHANNELS, "or MANAGE_THREADS if the channel is a
-        // thread". Fires Thread Delete for a thread, whose payload is "just the id, guild_id,
-        // parent_id, and type" (gateway-events#thread-delete).
+        // thread". Contract run 11: Discord let a bot with Manage Channels but not Manage Threads
+        // delete its own thread, so either permission is taken; whether being the creator is
+        // enough on its own is what the deleteThreadWithoutManageChannels scenario checks. Fires
+        // Thread Delete, "just the id, guild_id, parent_id, and type" (gateway-events#thread-delete).
         const thread = "thread_metadata" in channel ? channel : undefined;
-        const denied = this.checkBotPerms(
-          channel,
-          thread ? Permission.ManageThreads : Permission.ManageChannels,
-        );
+        const denied = thread
+          ? this.checkBotPerms(channel, Permission.ManageThreads) &&
+            this.checkBotPerms(channel, Permission.ManageChannels)
+          : this.checkBotPerms(channel, Permission.ManageChannels);
         if (denied) return denied;
         state.deleteChannel(channel.id);
         if (thread)

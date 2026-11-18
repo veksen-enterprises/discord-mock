@@ -255,3 +255,17 @@ it("deletes a thread with Manage Threads, and the bot hears threadDelete", async
   expect(gone.parentId).toBe(general.id);
   expect(mock.state.channels.has(thread.id)).toBe(false);
 });
+
+it("deletes a thread with Manage Channels alone, as Discord allowed in contract run 11", async () => {
+  const { general, channel, alice } = await startInText(
+    SEND | Permission.CreatePublicThreads | Permission.ManageChannels,
+  );
+  const posted = mock.as(alice).sendMessage(general, "help me");
+  const thread = await (
+    await channel.messages.fetch(posted.id)
+  ).startThread({ name: "to delete" });
+
+  await thread.delete();
+
+  expect(mock.state.channels.has(thread.id)).toBe(false);
+});

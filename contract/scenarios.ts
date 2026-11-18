@@ -6,6 +6,7 @@ export interface Observation {
 }
 
 const SEND_MESSAGES = 1n << 11n;
+const MANAGE_CHANNELS = 1n << 4n;
 
 /**
  * Bot-triggerable requests, run in order against one Target. Each step is something a bot
@@ -69,8 +70,33 @@ export async function runScenarios(
         `/channels/${channelId}/messages/${messageId}`,
         { content: "contract test, edited" },
       );
-      // The invite has no Manage Threads or Pin Messages: both answers are refusals to compare.
+      // The invite has no Manage Threads or Pin Messages.
       out.deleteThread = await call("DELETE", `/channels/${messageId}`);
+      // Is creating a thread enough to delete it? Deny Manage Channels on the parent and try.
+      const second = await call("POST", `/channels/${channelId}/messages`, {
+        content: "second thread",
+      });
+      const secondId = (second.body as { id: string }).id;
+      await call(
+        "POST",
+        `/channels/${channelId}/messages/${secondId}/threads`,
+        {
+          name: "contract thread 2",
+        },
+      );
+      await call("PUT", `/channels/${channelId}/permissions/${target.botId}`, {
+        type: 1,
+        allow: "0",
+        deny: String(MANAGE_CHANNELS),
+      });
+      out.deleteThreadWithoutManageChannels = await call(
+        "DELETE",
+        `/channels/${secondId}`,
+      );
+      await call(
+        "DELETE",
+        `/channels/${channelId}/permissions/${target.botId}`,
+      );
       out.pinMessage = await call(
         "PUT",
         `/channels/${channelId}/messages/pins/${messageId}`,
