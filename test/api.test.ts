@@ -1,0 +1,62 @@
+import { expect, it } from "vitest";
+import { createDiscord } from "../src/index.js";
+import { commands, createBot } from "./fixtures/bot.js";
+
+async function startBot() {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const generalChannel = discord.channel(server, "general");
+  const alice = discord.member(server, "alice");
+  const bob = discord.member(server, "bob", "Bobby");
+  await discord.start(createBot(discord.clientOptions).client, { commands });
+  return { discord, generalChannel, alice, bob };
+}
+
+it("shows the bot's in-place update on the message the test already holds", async () => {
+  const { generalChannel, alice } = await startBot();
+  const panel = await alice.run(generalChannel, "panel");
+
+  const after = await alice.click(panel, "+1");
+
+  expect(after).toBe(panel);
+  expect(panel.content).toBe("count 1");
+});
+
+it("finds a message the bot posts after the action returns", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+
+  alice.post(generalChannel, { content: "!ping" });
+
+  expect((await discord.find(generalChannel, "pong")).content).toBe("pong");
+});
+
+it("names the channel and its last messages when find gives up", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+  alice.post(generalChannel, { content: "hello" });
+
+  await expect(discord.find(generalChannel, /goodbye/)).rejects.toThrow(
+    'no message in #general matched /goodbye/ within 2s. Last 1: "hello"',
+  );
+});
+
+it("passes a member handle as a user option, under their server nickname", async () => {
+  const { generalChannel, alice, bob } = await startBot();
+
+  const reply = await alice.run(generalChannel, "whois", { user: bob });
+
+  expect(reply.content).toBe("member Bobby");
+});
+
+it("applies a nickname change and a leave to the member", async () => {
+  const { generalChannel, alice, bob } = await startBot();
+
+  bob.nickname("Robert");
+  expect(
+    (await alice.run(generalChannel, "whois", { user: bob })).content,
+  ).toBe("member Robert");
+  bob.leave();
+
+  await expect(bob.run(generalChannel, "echo", { text: "hi" })).rejects.toThrow(
+    "bob isn't a member of SIN",
+  );
+});

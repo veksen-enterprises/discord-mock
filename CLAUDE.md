@@ -36,7 +36,8 @@ npm run format:check  # oxfmt (check only)
 
 ## Layout
 
-- `src/index.ts` — the public API (re-exports the core for now)
+- `src/index.ts` — the public API: `createDiscord`, Members, `find`. The only export
+- `test/api.types.ts` — type probes: misuses that must not compile
 - `src/internal/mock.ts` — `createDiscordMock`, world building, Actors, built-in Routes
 - `src/internal/state.ts` — the Model
 - `src/internal/rest.ts` — Route matching, Overrides, the Request log, `respond.*`
