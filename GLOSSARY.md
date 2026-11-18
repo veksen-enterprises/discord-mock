@@ -55,10 +55,16 @@ users, members, roles, overwrites.
 _Avoid_: seed, fixture data
 
 **Actor**:
-A user the test acts as, via `mock.as(user)`: sending a message, running a
-slash command, pressing a button. An Actor's action becomes a Gateway dispatch
-to the bot, as on Discord.
+A user the test acts as. In the public API it's a Member handle
+(`alice.run`, `alice.click`, `alice.post`); inside the Mock it's `mock.as(user)`.
+An Actor's action becomes a Gateway dispatch to the bot, as on Discord.
 _Avoid_: fake user, test user, sender
+
+**Handle**:
+What the public API gives a test for each entity it creates: its id and name,
+with its kind and guild in the type, so a channel can't go where a member goes,
+or into another guild.
+_Avoid_: ref, entity (alone)
 
 ### REST
 
@@ -93,7 +99,8 @@ replays what it missed.
 
 **Interaction run**:
 One interaction an Actor triggered, followed through its life: pending, then
-deferred or replied. Tests await its reply with `run.reply()`.
+deferred or replied. `alice.run`, `click` and `select` resolve with its visible
+reply.
 _Avoid_: interaction (alone, it's ambiguous with discord.js's object), command
 call
 
