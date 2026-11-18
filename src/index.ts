@@ -157,6 +157,13 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   closeDMs(): void;
   /** Sets their server nickname; null goes back to their name. */
   nickname(nick: string | null): void;
+  /**
+   * Changes their display name, shown in every server where they have no nickname; null goes back
+   * to their username. The bot hears it as a member update in each server they share, which
+   * discord.js also emits as `userUpdate`.
+   * @example alice.displayName("Alicia"); // a bot that stores display names should update
+   */
+  displayName(name: string | null): void;
   /** Leaves the guild. */
   leave(): void;
 }
@@ -536,6 +543,11 @@ class MemberActor {
   nickname(nick: string | null): void {
     this.markAction();
     this.mock.setNickname(this.guild(), this.user(), nick);
+  }
+
+  displayName(name: string | null): void {
+    this.markAction();
+    this.mock.setDisplayName(this.user(), name);
   }
 
   leave(): void {

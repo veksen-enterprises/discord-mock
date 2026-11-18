@@ -138,6 +138,16 @@ it("applies a nickname change and a leave to the member", async () => {
   );
 });
 
+it("shows a member's new display name where they have no nickname", async () => {
+  const { generalChannel, alice } = await startBot();
+
+  alice.displayName("Alicia");
+
+  expect(
+    (await alice.run(generalChannel, "whois", { user: alice })).content,
+  ).toBe("member Alicia");
+});
+
 it("ignores a matching message the bot wrote before the latest action", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "!ping" });

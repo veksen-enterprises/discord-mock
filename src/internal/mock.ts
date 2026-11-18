@@ -347,6 +347,25 @@ export class DiscordMock {
   }
 
   /**
+   * `user` changes their display name (global_name). docs.discord.food/gateway/gateway-events#guild-member-update:
+   * GUILD_MEMBER_UPDATE "will also fire when the user object of a guild member changes", so each
+   * guild they share with the bot announces it, with GUILD_MEMBERS. discord.js turns the changed
+   * user into `userUpdate` (actions/GuildMemberUpdate.js).
+   */
+  setDisplayName(user: APIUser, name: string | null) {
+    user.global_name = name;
+    for (const guild of this.state.guilds.values()) {
+      const member = guild.members.get(user.id);
+      if (member)
+        this.gateway.dispatch(
+          GatewayDispatchEvents.GuildMemberUpdate,
+          { ...member, guild_id: guild.id },
+          GatewayIntentBits.GuildMembers,
+        );
+    }
+  }
+
+  /**
    * `user` leaves `guild` (or is kicked or banned). Discord's docs, gateway-events#guild-member-remove:
    * GUILD_MEMBER_REMOVE { guild_id, user }, sent only with GUILD_MEMBERS.
    */

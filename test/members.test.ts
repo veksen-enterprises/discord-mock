@@ -102,3 +102,22 @@ it("announces a nickname change to a bot with GUILD_MEMBERS", async () => {
   expect(before.displayName).toBe("carol");
   expect(after.displayName).toBe("Caz");
 });
+
+it("emits userUpdate in discord.js when a member changes their display name", async () => {
+  const guild = await start([
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+  ]);
+  const record = mock.state.requireGuild(guild.id);
+  const carol = mock.createUser("carol");
+  mock.addMember(record, carol);
+  await vi.waitFor(() => expect(guild.members.cache.has(carol.id)).toBe(true));
+  const updated = once(client, Events.UserUpdate);
+
+  mock.setDisplayName(carol, "Caroline");
+
+  const [before, after] = await updated;
+  expect(before.displayName).toBe("carol");
+  expect(after.displayName).toBe("Caroline");
+  expect(guild.members.cache.get(carol.id)!.displayName).toBe("Caroline");
+});
