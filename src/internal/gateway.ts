@@ -5,6 +5,7 @@ import {
   GatewayDispatchEvents,
   GatewayIntentBits,
   GatewayOpcodes,
+  MessageFlags,
   type APIMessage,
 } from "discord-api-types/v10";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -257,6 +258,9 @@ export class Gateway {
    * message, is mentioned, or it's a DM. Extra fields per gateway-events#message-object-extra-fields.
    */
   dispatchMessage(t: "MESSAGE_CREATE" | "MESSAGE_UPDATE", message: APIMessage) {
+    // An ephemeral message lives only in the invoking user's client, so no bot's Gateway session
+    // hears it, whichever route created or edited it. Inferred, not checked against Discord.
+    if ((message.flags ?? 0) & MessageFlags.Ephemeral) return;
     const channel = this.state.requireChannel(message.channel_id);
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
     const inGuild = !!guildId;

@@ -1191,8 +1191,7 @@ export class DiscordMock {
           });
           run.originalMessageId = message.id;
           run.state = deferred ? "deferred" : "replied";
-          if (!ephemeral)
-            this.gateway.dispatchMessage("MESSAGE_CREATE", message);
+          this.gateway.dispatchMessage("MESSAGE_CREATE", message);
           break;
         }
         // docs.discord.food/interactions/receiving-and-responding: types 6 and 7 are for
@@ -1254,8 +1253,7 @@ export class DiscordMock {
         ...pickMessageFields(req.body),
         flags: (original.flags ?? 0) & ~MessageFlags.Loading,
       });
-      if (!run.ephemeral)
-        this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+      this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
       run.state = "replied";
       run.emit("change");
       return respond.json(updated);
@@ -1285,8 +1283,7 @@ export class DiscordMock {
           ...pickMessageFields(req.body),
           flags: (original.flags ?? 0) & ~MessageFlags.Loading,
         });
-        if (!run.ephemeral)
-          this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+        this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
         run.state = "replied";
         run.emit("change");
         return respond.json(updated);
@@ -1303,8 +1300,7 @@ export class DiscordMock {
         webhookId: state.applicationId,
       });
       run.followups.push(message);
-      if (!((message.flags ?? 0) & MessageFlags.Ephemeral))
-        this.gateway.dispatchMessage("MESSAGE_CREATE", message);
+      this.gateway.dispatchMessage("MESSAGE_CREATE", message);
       run.emit("change");
       return respond.json(message);
     });

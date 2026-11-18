@@ -25,14 +25,18 @@ afterEach(async () => {
   await mock.close();
 });
 
-it("delivers a string select pick and shows the bot's update", async () => {
+it("delivers a pick on an ephemeral menu and shows the bot's update to that user only", async () => {
   const guild = mock.createGuild("ladder");
   const general = mock.createTextChannel(guild, "general");
   const alice = mock.createUser("alice");
   mock.addMember(guild, alice);
   client = new Client({
-    intents: [GatewayIntentBits.Guilds],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
     ...mock.clientOptions,
+  });
+  const heard: string[] = [];
+  client.on(Events.Raw, (packet: { t: string | null }) => {
+    if (packet.t?.startsWith("MESSAGE_")) heard.push(packet.t);
   });
   client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand())
@@ -67,6 +71,11 @@ it("delivers a string select pick and shows the bot's update", async () => {
 
   expect(picked.content).toBe("opponent=333");
   expect(picked.flags! & MessageFlags.Ephemeral).toBe(MessageFlags.Ephemeral);
+  // Frames arrive in order on one socket, so once alice's post is heard, a leaked update would be too.
+  const barrier = once(client, Events.MessageCreate);
+  mock.as(alice).sendMessage(general, "after");
+  await barrier;
+  expect(heard).toEqual(["MESSAGE_CREATE"]);
   mock.assertNoUnhandledRequests();
 });
 
