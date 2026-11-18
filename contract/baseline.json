@@ -32,6 +32,8 @@
   "rest.sendMessage.author.flags: missing in mock (Discord: number)",
   "rest.sendMessage.author.primary_guild: missing in mock (Discord: null)",
   "rest.startThread.bitrate: missing in mock (Discord: number)",
+  "rest.startThread.member.mute_config: missing in mock (Discord: null)",
+  "rest.startThread.member.muted: missing in mock (Discord: boolean)",
   "rest.startThread.rtc_region: missing in mock (Discord: null)",
   "rest.startThread.user_limit: missing in mock (Discord: number)",
   "rest.usersMe.accent_color: missing in mock (Discord: null)",
