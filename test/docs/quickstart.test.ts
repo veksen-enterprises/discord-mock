@@ -11,7 +11,9 @@ it("echoes what a member types in /echo", async () => {
   await discord.start(createBot(discord.clientOptions).client, { commands });
 
   // Act
-  const reply = await alice.run(generalChannel, "echo", { text: "hello" });
+  const reply = await alice.runCommand(generalChannel, "echo", {
+    text: "hello",
+  });
 
   // Assert
   expect(reply.content).toBe("hello");

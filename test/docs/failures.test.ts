@@ -22,7 +22,7 @@ it("tells the member when the bot can't post in the channel", async () => {
   );
 
   // Act
-  const reply = await alice.run(generalChannel, "announce", {
+  const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
   });
 
@@ -36,7 +36,7 @@ it("tells the member when Discord keeps answering 503", async () => {
   discord.fail("POST", "/channels/:id/messages", respond.serverError(503));
 
   // Act
-  const reply = await alice.run(generalChannel, "announce", {
+  const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
   });
 
@@ -50,7 +50,7 @@ it("tells the member when Discord drops the connection", async () => {
   discord.fail("POST", "/channels/:id/messages", respond.connectionClosed());
 
   // Act
-  const reply = await alice.run(generalChannel, "announce", {
+  const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
   });
 

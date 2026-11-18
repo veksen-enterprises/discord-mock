@@ -27,7 +27,7 @@ If the bot builds its `Client` when its module loads, extract a factory like thi
 
 - `createDiscord()` gives each test its own fake Discord. It shuts down when the test ends.
 - `discord.start(client, { commands })` logs the bot in, waits for `ready`, and registers the commands the way the bot's deploy script would. Pass the same command JSON.
-- `alice.run(...)` runs the slash command as Alice and resolves with the reply she would see.
+- `alice.runCommand(...)` runs the slash command as Alice and resolves with the reply she would see.
 
 ## 3. Run it
 

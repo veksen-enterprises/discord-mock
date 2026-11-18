@@ -33,7 +33,9 @@ it("hands out its token, so a deploy script can register commands before the bot
 
   await discord.start(createBot(discord.clientOptions).client);
 
-  expect((await alice.run(general, "echo", { text: "hi" })).content).toBe("hi");
+  expect(
+    (await alice.runCommand(general, "echo", { text: "hi" })).content,
+  ).toBe("hi");
 });
 
 it("makes a member that is another bot", async () => {
@@ -63,9 +65,13 @@ it("denies the bot a permission in one channel, and allows it back", async () =>
   });
 
   discord.deny(news, "bot", Permission.SendMessages);
-  const refused = await alice.run(general, "announce", { channel: news.id });
+  const refused = await alice.runCommand(general, "announce", {
+    channel: news.id,
+  });
   discord.allow(news, "bot", Permission.SendMessages);
-  const posted = await alice.run(general, "announce", { channel: news.id });
+  const posted = await alice.runCommand(general, "announce", {
+    channel: news.id,
+  });
 
   expect(refused.content).toBe("failed: 50013");
   expect(posted.content).toBe("posted");
@@ -133,8 +139,10 @@ it("names the application's owner", async () => {
     ],
   });
 
-  expect((await alice.run(general, "whoami")).content).toBe("owner alice");
-  expect((await bob.run(general, "whoami")).content).toBe("someone");
+  expect((await alice.runCommand(general, "whoami")).content).toBe(
+    "owner alice",
+  );
+  expect((await bob.runCommand(general, "whoami")).content).toBe("someone");
 });
 
 async function watcher() {
@@ -160,7 +168,7 @@ it("announces a member's edit with the new text and an edit time", async () => {
   const post = alice.post(general, { content: "helo" });
   const updated = once(client, Events.MessageUpdate);
 
-  alice.edit(post, "hello");
+  alice.editMessage(post, "hello");
 
   const [, after] = await updated;
   expect(after.content).toBe("hello");
@@ -172,7 +180,7 @@ it("announces a member deleting their own message", async () => {
   const post = alice.post(general, { content: "oops" });
   const deleted = once(client, Events.MessageDelete);
 
-  alice.delete(post);
+  alice.deleteMessage(post);
 
   expect((await deleted)[0].id).toBe(post.id);
   expect(discord.messages(general)).toEqual([]);
@@ -182,14 +190,17 @@ it("refuses to let a member edit or delete someone else's message", async () => 
   const { general, alice, bob } = await watcher();
   const post = alice.post(general, { content: "mine" });
 
-  expect(() => bob.edit(post, "x")).toThrow("it's not theirs");
-  expect(() => bob.delete(post)).toThrow("only its author can");
+  expect(() => bob.editMessage(post, "x")).toThrow("it's not theirs");
+  expect(() => bob.deleteMessage(post)).toThrow("only its author can");
 });
 
 it("locks a thread without archiving it", async () => {
   const { discord, server, alice, client } = await watcher();
   const listings = discord.forum(server, "listings");
-  const { thread } = alice.forumPost(listings, { title: "wts", content: "x" });
+  const { thread } = alice.postInForum(listings, {
+    title: "wts",
+    content: "x",
+  });
   const updated = once(client, Events.ThreadUpdate);
 
   discord.lock(thread);
@@ -275,7 +286,12 @@ it("submits what the bot pre-filled in a form field the member leaves alone", as
     ],
   });
 
-  const reply = await alice.run(general, "title", {}, { Title: "new title" });
+  const reply = await alice.runCommand(
+    general,
+    "title",
+    {},
+    { Title: "new title" },
+  );
 
   expect(reply.content).toBe("new title / keep me");
 });

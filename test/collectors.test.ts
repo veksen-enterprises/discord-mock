@@ -62,7 +62,7 @@ it("clicks a dashboard button once the bot is listening, and sees the edit it ma
   const general = discord.channel(server, "general");
   const owner = discord.owner(server);
   await discord.start(createBot(discord.clientOptions), { commands });
-  const dashboard = await owner.run(general, "dashboard");
+  const dashboard = await owner.runCommand(general, "dashboard");
 
   // Act
   const after = await owner.click(dashboard, "Toggle");

@@ -82,7 +82,7 @@ it("gives the bot the role picked in a role option", async () => {
   await discord.start(createBot(discord.clientOptions), { commands });
 
   // Act
-  const reply = await owner.run(general, "autorole", { role: members });
+  const reply = await owner.runCommand(general, "autorole", { role: members });
 
   // Assert
   expect(reply.content).toBe("Autorole set to Members.");
@@ -98,7 +98,7 @@ it("resolves a mentionable option to a role or a member", async () => {
   await discord.start(createBot(discord.clientOptions), { commands });
 
   // Act
-  const reply = await owner.run(general, "notify", { who: mods });
+  const reply = await owner.runCommand(general, "notify", { who: mods });
 
   // Assert
   expect(reply.content).toBe("Notifying a role.");
@@ -114,7 +114,7 @@ it("resolves a mentionable option given a member to a user", async () => {
   await discord.start(createBot(discord.clientOptions), { commands });
 
   // Act
-  const reply = await owner.run(general, "notify", { who: bob });
+  const reply = await owner.runCommand(general, "notify", { who: bob });
 
   // Assert
   expect(reply.content).toBe("Notifying a user.");
@@ -134,7 +134,7 @@ it("uploads the file given as an attachment option, so the bot can download it",
   };
 
   // Act
-  const reply = await alice.run(general, "upload", { file });
+  const reply = await alice.runCommand(general, "upload", { file });
 
   // Assert
   expect(reply.content).toBe("notes.txt (5 bytes): hello");
@@ -150,7 +150,7 @@ it("takes a voice channel where the option offers only voice channels", async ()
   await discord.start(createBot(discord.clientOptions), { commands });
 
   // Act
-  const reply = await owner.run(general, "jointocreate", { hub: lobby });
+  const reply = await owner.runCommand(general, "jointocreate", { hub: lobby });
 
   // Assert
   expect(reply.content).toBe("Hub is Lobby.");

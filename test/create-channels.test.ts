@@ -83,7 +83,7 @@ it("creates a category and a locked voice channel in it", async () => {
   });
 
   // Act
-  const reply = await owner.run(general, "serverstats");
+  const reply = await owner.runCommand(general, "serverstats");
 
   // Assert
   expect(reply.content).toBe("Stats / Members: 2, locked: true");
@@ -101,7 +101,7 @@ it("refuses an overwrite granting Manage Roles from a bot that isn't an administ
   });
 
   // Act
-  const reply = await owner.run(general, "lockdown-role");
+  const reply = await owner.runCommand(general, "lockdown-role");
 
   // Assert
   expect(reply.content).toBe("Failed: Missing Permissions");

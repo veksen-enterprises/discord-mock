@@ -16,7 +16,7 @@ it("DMs the player you challenge", async () => {
   await discord.start(createBot(discord.clientOptions), { commands });
 
   // Act
-  const reply = await alice.run(channel, "challenge", { opponent: bob });
+  const reply = await alice.runCommand(channel, "challenge", { opponent: bob });
 
   // Assert
   expect(reply.content).toBe("Challenge sent to Bob.");

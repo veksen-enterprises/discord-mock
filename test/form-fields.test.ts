@@ -117,7 +117,7 @@ it("submits selects, a radio group, checkboxes and a file in a form", async () =
   const owner = discord.owner(server);
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions), { commands });
-  const dashboard = await owner.run(general, "economy");
+  const dashboard = await owner.runCommand(general, "economy");
   const receipt = {
     name: "receipt.png",
     data: new Uint8Array([1, 2, 3]),
@@ -145,7 +145,7 @@ it("refuses to submit a form whose required radio group is left empty", async ()
   const owner = discord.owner(server);
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions), { commands });
-  const dashboard = await owner.run(general, "economy");
+  const dashboard = await owner.runCommand(general, "economy");
 
   // Act
   const submitting = owner.click(dashboard, "Add Currency", {

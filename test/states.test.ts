@@ -21,7 +21,7 @@ it("answers 50013 once the bot is denied Send Messages in a channel", async () =
 
   discord.deny(newsChannel, Permission.SendMessages);
 
-  const reply = await alice.run(generalChannel, "announce", {
+  const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
   });
   expect(reply.content).toBe("failed: 50013");
@@ -33,7 +33,7 @@ it("answers 50001 Missing Access once the bot is denied View Channel, whatever e
   discord.deny(newsChannel, Permission.ViewChannel);
   discord.deny(newsChannel, Permission.SendMessages);
 
-  const reply = await alice.run(generalChannel, "announce", {
+  const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
   });
   expect(reply.content).toBe("failed: 50001");
@@ -47,15 +47,15 @@ it("serves the Model again once a failure is recovered", async () => {
     respond.serverError(503),
   );
   const options = { channel: newsChannel.id };
-  expect((await alice.run(generalChannel, "announce", options)).content).toBe(
-    "failed: 503",
-  );
+  expect(
+    (await alice.runCommand(generalChannel, "announce", options)).content,
+  ).toBe("failed: 503");
 
   recover();
 
-  expect((await alice.run(generalChannel, "announce", options)).content).toBe(
-    "posted",
-  );
+  expect(
+    (await alice.runCommand(generalChannel, "announce", options)).content,
+  ).toBe("posted");
 });
 
 // reconnect waits out discord.js's identify throttle: 5s since the last identify, plus up to 1.5s.

@@ -58,7 +58,7 @@ it("hears a music bot play in the member's voice channel", async () => {
   });
 
   alice.joinVoice(lobby);
-  await alice.run(general, "play");
+  await alice.runCommand(general, "play");
   await discord.waitForSound(lobby);
 
   expect(discord.botVoiceChannel(server)?.id).toBe(lobby.id);

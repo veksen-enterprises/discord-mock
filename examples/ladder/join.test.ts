@@ -38,7 +38,7 @@ describe("/join", () => {
     const { challengesChannel, alice, store } = await ladderServer();
 
     // Act
-    const reply = await alice.run(challengesChannel, "join");
+    const reply = await alice.runCommand(challengesChannel, "join");
 
     // Assert
     expect(reply.flags! & MessageFlags.Ephemeral).toBe(MessageFlags.Ephemeral);
@@ -52,10 +52,10 @@ describe("/join", () => {
   it("refuses a second join", async () => {
     // Arrange
     const { challengesChannel, alice } = await ladderServer();
-    await alice.run(challengesChannel, "join");
+    await alice.runCommand(challengesChannel, "join");
 
     // Act
-    const again = await alice.run(challengesChannel, "join");
+    const again = await alice.runCommand(challengesChannel, "join");
 
     // Assert
     expect(again.embeds[0]?.title).toBe("Already Joined");
@@ -66,7 +66,7 @@ describe("/join", () => {
     const { generalChannel, alice, store } = await ladderServer();
 
     // Act
-    const reply = await alice.run(generalChannel, "join");
+    const reply = await alice.runCommand(generalChannel, "join");
 
     // Assert
     expect(reply.embeds[0]?.title).toBe("No Ladder");
@@ -84,7 +84,7 @@ describe("/join", () => {
     );
 
     // Act
-    const joining = alice.run(challengesChannel, "join");
+    const joining = alice.runCommand(challengesChannel, "join");
 
     // Assert: discord.js retried the edit 3 times and gave up, so the member is left on "thinking…"
     await expect(joining).rejects.toThrow(/the bot deferred, then went quiet/);
@@ -105,7 +105,7 @@ describe("/join", () => {
     const bob = discord.member(lateServer, "bob");
 
     // Act
-    const reply = await bob.run(lateChannel, "join");
+    const reply = await bob.runCommand(lateChannel, "join");
 
     // Assert
     expect(reply.embeds[0]?.title).toBe("Joined the Ladder!");

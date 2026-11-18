@@ -1275,7 +1275,7 @@ export class DiscordMock {
         .commandsVisibleIn(guildId, type)
         .map((c) => `"${c.name}"`);
       throw new Error(
-        `discordjs-test-kit: the ${kind} app "${name}" isn't registered. ${registered.length ? `Registered ${kind} apps: ${registered.join(", ")}` : `The bot registered no ${kind} apps (commands of type ${type})`}`,
+        `discordjs-test-kit: the ${kind} command "${name}" isn't registered. ${registered.length ? `Registered ${kind} commands: ${registered.join(", ")}` : `The bot registered no ${kind} commands (type ${type})`}`,
       );
     }
     const guild = guildId ? this.state.requireGuild(guildId) : undefined;

@@ -54,7 +54,7 @@ it("purges the member's message, not the bot's ephemeral reply", async () => {
   owner.post(general, { content: "spam" });
 
   // Act
-  const reply = await owner.run(general, "purge", { amount: 1 });
+  const reply = await owner.runCommand(general, "purge", { amount: 1 });
 
   // Assert
   expect(reply.content).toBe("Deleted 1 message(s).");

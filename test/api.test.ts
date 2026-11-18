@@ -27,7 +27,7 @@ async function startBot() {
 
 it("shows the bot's in-place update on the message the test already holds", async () => {
   const { generalChannel, alice } = await startBot();
-  const panel = await alice.run(generalChannel, "panel");
+  const panel = await alice.runCommand(generalChannel, "panel");
 
   const after = await alice.click(panel, "+1");
 
@@ -80,10 +80,10 @@ it("lets a member who holds Manage Server run an admin command, and refuses one 
   });
   const regular = discord.member(server, "regular");
 
-  expect((await mod.run(modsChannel, "settings")).content).toBe(
+  expect((await mod.runCommand(modsChannel, "settings")).content).toBe(
     "settings saved",
   );
-  await expect(regular.run(modsChannel, "settings")).rejects.toThrow(
+  await expect(regular.runCommand(modsChannel, "settings")).rejects.toThrow(
     "can't use /settings",
   );
 });
@@ -99,12 +99,12 @@ it("lets a member DM the bot and finds the answer in their DMs", async () => {
 it("lets the bot DM a member, and refuses with 50007 once they close their DMs", async () => {
   const { discord, generalChannel, alice } = await startBot();
 
-  expect((await alice.run(generalChannel, "remind")).content).toBe(
+  expect((await alice.runCommand(generalChannel, "remind")).content).toBe(
     "check your DMs",
   );
   expect(discord.dms(alice).map((m) => m.content)).toEqual(["reminder set"]);
   alice.closeDMs();
-  expect((await alice.run(generalChannel, "remind")).content).toBe(
+  expect((await alice.runCommand(generalChannel, "remind")).content).toBe(
     "I can't DM you",
   );
 });
@@ -132,7 +132,7 @@ it("quotes a message's first non-empty line when find gives up", async () => {
 it("passes a member handle as a user option, under their server nickname", async () => {
   const { generalChannel, alice, bob } = await startBot();
 
-  const reply = await alice.run(generalChannel, "whois", { user: bob });
+  const reply = await alice.runCommand(generalChannel, "whois", { user: bob });
 
   expect(reply.content).toBe("member Bobby");
 });
@@ -140,24 +140,24 @@ it("passes a member handle as a user option, under their server nickname", async
 it("applies a nickname change and a leave to the member", async () => {
   const { generalChannel, alice, bob } = await startBot();
 
-  bob.nickname("Robert");
+  bob.setNickname("Robert");
   expect(
-    (await alice.run(generalChannel, "whois", { user: bob })).content,
+    (await alice.runCommand(generalChannel, "whois", { user: bob })).content,
   ).toBe("member Robert");
-  bob.leave();
+  bob.leaveGuild();
 
-  await expect(bob.run(generalChannel, "echo", { text: "hi" })).rejects.toThrow(
-    "bob isn't a member of SIN",
-  );
+  await expect(
+    bob.runCommand(generalChannel, "echo", { text: "hi" }),
+  ).rejects.toThrow("bob isn't a member of SIN");
 });
 
 it("shows a member's new display name where they have no nickname", async () => {
   const { generalChannel, alice } = await startBot();
 
-  alice.displayName("Alicia");
+  alice.setDisplayName("Alicia");
 
   expect(
-    (await alice.run(generalChannel, "whois", { user: alice })).content,
+    (await alice.runCommand(generalChannel, "whois", { user: alice })).content,
   ).toBe("member Alicia");
 });
 
@@ -201,34 +201,40 @@ it("refuses to let a member act in a server they aren't in, even when the types 
     "alice isn't a member of elsewhere",
   );
   expect(() =>
-    outsider.forumPost(forum, { title: "wts", content: "x" }),
+    outsider.postInForum(forum, { title: "wts", content: "x" }),
   ).toThrow("alice isn't a member of elsewhere");
   expect(message.reactions ?? []).toEqual([]);
 });
 
-it("runs a user app on a member and a message app on a message, from the Apps menu", async () => {
+it("runs a user command on a member and a message command on a message, from the Apps menu", async () => {
   const { generalChannel, alice, bob } = await startBot();
   const said = alice.post(generalChannel, { content: "gg" });
 
-  const nickname = await alice.runApp(generalChannel, bob, "View Nickname");
-  const quote = await bob.runApp(generalChannel, said, "Quote");
+  const nickname = await alice.runUserCommand(
+    generalChannel,
+    "View Nickname",
+    bob,
+  );
+  const quote = await bob.runMessageCommand(generalChannel, "Quote", said);
 
   expect(nickname.content).toBe("nickname Bobby");
   expect(quote.content).toBe("> gg");
 });
 
-it("names the registered apps of that kind when the app isn't one", async () => {
+it("names the registered commands of that kind when the command isn't one", async () => {
   const { generalChannel, alice, bob } = await startBot();
 
-  await expect(alice.runApp(generalChannel, bob, "Quote")).rejects.toThrow(
-    'the user app "Quote" isn\'t registered. Registered user apps: "View Nickname"',
+  await expect(
+    alice.runUserCommand(generalChannel, "Quote", bob),
+  ).rejects.toThrow(
+    'the user command "Quote" isn\'t registered. Registered user commands: "View Nickname"',
   );
 });
 
 it("fills the form a command opens, and gets the bot's answer to it", async () => {
   const { generalChannel, alice } = await startBot();
 
-  const thanks = await alice.run(
+  const thanks = await alice.runCommand(
     generalChannel,
     "feedback",
     {},
@@ -240,7 +246,7 @@ it("fills the form a command opens, and gets the bot's answer to it", async () =
 
 it("fills the form a button opens, and sees the message the bot updated", async () => {
   const { generalChannel, alice } = await startBot();
-  const sign = await alice.run(generalChannel, "sign");
+  const sign = await alice.runCommand(generalChannel, "sign");
 
   const after = await alice.click(sign, "Rename", { "New text": "Closed" });
 
@@ -251,17 +257,17 @@ it("fills the form a button opens, and sees the message the bot updated", async 
 it("refuses a form the Discord app wouldn't submit, and says when the bot opened one", async () => {
   const { generalChannel, alice } = await startBot();
 
-  await expect(alice.run(generalChannel, "feedback")).rejects.toThrow(
+  await expect(alice.runCommand(generalChannel, "feedback")).rejects.toThrow(
     'the bot opened the form "Feedback" (fields "Topic", "Details") instead of replying',
   );
   await expect(
-    alice.run(generalChannel, "feedback", {}, { Details: "no topic" }),
+    alice.runCommand(generalChannel, "feedback", {}, { Details: "no topic" }),
   ).rejects.toThrow('field "Topic" of "Feedback"');
   await expect(
-    alice.run(generalChannel, "feedback", {}, { Topic: "x".repeat(21) }),
+    alice.runCommand(generalChannel, "feedback", {}, { Topic: "x".repeat(21) }),
   ).rejects.toThrow("takes at most 20 characters");
   await expect(
-    alice.run(generalChannel, "feedback", {}, { Title: "x" }),
+    alice.runCommand(generalChannel, "feedback", {}, { Title: "x" }),
   ).rejects.toThrow('has no field "Title"');
 });
 
@@ -276,10 +282,10 @@ it("fails one channel by its literal path, and leaves the others working", async
     respond.missingPermissions(),
   );
 
-  const failed = await alice.run(generalChannel, "announce", {
+  const failed = await alice.runCommand(generalChannel, "announce", {
     channel: board.id,
   });
-  const posted = await alice.run(generalChannel, "announce", {
+  const posted = await alice.runCommand(generalChannel, "announce", {
     channel: news.id,
   });
 
@@ -290,13 +296,13 @@ it("fails one channel by its literal path, and leaves the others working", async
 it("shows the bot's suggestions while a member types, then runs the command with one", async () => {
   const { generalChannel, alice } = await startBot();
 
-  const choices = await alice.autocomplete(
+  const choices = await alice.typeInOption(
     generalChannel,
     "docs",
     "query",
     "Promise.al",
   );
-  const reply = await alice.run(generalChannel, "docs", {
+  const reply = await alice.runCommand(generalChannel, "docs", {
     query: choices[1]!.value,
   });
 
@@ -306,7 +312,7 @@ it("shows the bot's suggestions while a member types, then runs the command with
   ]);
   expect(reply.content).toBe("docs for Promise.allSettled");
   await expect(
-    alice.autocomplete(generalChannel, "echo", "text", "hi"),
+    alice.typeInOption(generalChannel, "echo", "text", "hi"),
   ).rejects.toThrow('option "text" doesn\'t have autocomplete');
 });
 
@@ -316,7 +322,7 @@ it("stops members using the bot's commands once it's kicked", async () => {
   discord.kickBot(server);
 
   await expect(
-    alice.run(generalChannel, "echo", { text: "hi" }),
+    alice.runCommand(generalChannel, "echo", { text: "hi" }),
   ).rejects.toThrow("the bot isn't in SIN any more");
 });
 
@@ -345,13 +351,13 @@ it("counts a join through a member's invite, and refuses a used-up one", async (
     commands,
     permissions: Permission.ManageGuild,
   });
-  const code = alice.invite(general, { maxUses: 2 });
+  const code = alice.createInvite(general, { maxUses: 2 });
 
   discord.member(server, "carol", { invite: code });
 
   const invites = await client.guilds.cache.get(server.id)!.invites.fetch();
   expect(invites.get(code)?.uses).toBe(1);
-  const once = alice.invite(general, { maxUses: 1 });
+  const once = alice.createInvite(general, { maxUses: 1 });
   discord.member(server, "dave", { invite: once });
   expect(() => discord.member(server, "erin", { invite: once })).toThrow(
     "used up",
@@ -382,7 +388,7 @@ it("tells the bot a member joined and left voice", async () => {
 
 it("lets an admin open an admin-only command to one member", async () => {
   const { discord, server, generalChannel, alice, bob } = await startBot();
-  await expect(alice.run(generalChannel, "settings")).rejects.toThrow(
+  await expect(alice.runCommand(generalChannel, "settings")).rejects.toThrow(
     "needs permissions",
   );
 
@@ -391,8 +397,10 @@ it("lets an admin open an admin-only command to one member", async () => {
     { target: bob, allow: false },
   ]);
 
-  await expect(alice.run(generalChannel, "settings")).resolves.toBeTruthy();
-  await expect(bob.run(generalChannel, "settings")).rejects.toThrow(
+  await expect(
+    alice.runCommand(generalChannel, "settings"),
+  ).resolves.toBeTruthy();
+  await expect(bob.runCommand(generalChannel, "settings")).rejects.toThrow(
     "an override denies them",
   );
 });
@@ -446,7 +454,7 @@ it("picks roles in a role select by handle, and refuses a member there", async (
   await discord.start(client, {
     commands: [{ name: "roles", description: "Pick your roles" }],
   });
-  const menu = await alice.run(general, "roles");
+  const menu = await alice.runCommand(general, "roles");
 
   await expect(alice.select(menu, alice)).rejects.toThrow(
     "no select menu that offers them",

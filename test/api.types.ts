@@ -66,9 +66,11 @@ alice.startStage(discord.stageChannel(otherServer, "hall"), "Q&A");
 // @ts-expect-error
 alice.startStage(discord.voiceChannel(server, "lobby"), "Q&A");
 // Denying the bot in a thread, which has no overwrites of its own
-const post = alice.forumPost(discord.forum(server, "listings"), { title: "t" });
+const post = alice.postInForum(discord.forum(server, "listings"), {
+  title: "t",
+});
 // @ts-expect-error
 discord.deny(post.thread, Permission.SendMessages);
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
-void alice.run(challengesChannel, "jion");
+void alice.runCommand(challengesChannel, "jion");

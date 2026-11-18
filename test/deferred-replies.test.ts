@@ -64,7 +64,7 @@ it("waits through a deferred reply for as long as the bot keeps working", async 
   });
 
   // Act
-  const reply = await alice.run(general, "poll");
+  const reply = await alice.runCommand(general, "poll");
 
   // Assert
   expect(reply.content).toBe("Poll posted.");
@@ -79,7 +79,7 @@ it("fails a deferred reply once the bot goes quiet without answering", async () 
   await discord.start(createBot(discord.clientOptions), { commands });
 
   // Act
-  const reply = alice.run(general, "forget");
+  const reply = alice.runCommand(general, "forget");
 
   // Assert
   await expect(reply).rejects.toThrow(
@@ -99,7 +99,7 @@ it("fails a deferred reply when the bot keeps working without ever answering, na
   });
 
   // Act
-  const reply = alice.run(general, "spin");
+  const reply = alice.runCommand(general, "spin");
 
   // Assert
   await expect(reply).rejects.toThrow(

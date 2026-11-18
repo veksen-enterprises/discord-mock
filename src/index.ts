@@ -62,7 +62,7 @@ export type TextChannel<G extends string = string> = Handle<"text", G>;
 export type VoiceChannel<G extends string = string> = Handle<"voice", G>;
 /** A stage channel, made with `discord.stageChannel`. */
 export type StageChannel<G extends string = string> = Handle<"stage", G>;
-/** A forum: members open posts in it with `member.forumPost`. */
+/** A forum: members open posts in it with `member.postInForum`. */
 export type Forum<G extends string = string> = Handle<"forum", G>;
 /** A thread, such as a forum post. */
 export type Thread<G extends string = string> = Handle<"thread", G>;
@@ -114,7 +114,7 @@ export interface Choice {
 /**
  * What a slash command option can be given: a value; a handle where the option is a user, role or
  * channel (a member or a role for a mentionable); or a file where it's an attachment.
- * @example await alice.run(general, "upload", { file: { name: "a.txt", data: new TextEncoder().encode("hi"), contentType: "text/plain" } });
+ * @example await alice.runCommand(general, "upload", { file: { name: "a.txt", data: new TextEncoder().encode("hi"), contentType: "text/plain" } });
  */
 export type OptionValue<G extends string = string> =
   | string
@@ -135,9 +135,9 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /**
    * Runs `/command` in `channel`, typed as a user would: `"report"`, or `"admin-config set"` for a
    * subcommand. Resolves with the reply once it's visible, after any defer.
-   * @example const reportMenu = await bob.run(challengesChannel, "report");
+   * @example const reportMenu = await bob.runCommand(challengesChannel, "report");
    */
-  run(
+  runCommand(
     channel: TextChannel<G> | Thread<G>,
     command: string,
     options?: Record<string, OptionValue<G>>,
@@ -146,9 +146,9 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /**
    * Types `typed` into `option` of `/command`, with `filled` already entered, and resolves with the
    * choices the bot suggests (its autocomplete answer). Run the command with a choice's value after.
-   * @example const choices = await alice.autocomplete(general, "docs", "query", "Promise.al");
+   * @example const choices = await alice.typeInOption(general, "docs", "query", "Promise.al");
    */
-  autocomplete(
+  typeInOption(
     channel: TextChannel<G> | Thread<G>,
     command: string,
     option: string,
@@ -156,14 +156,25 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     filled?: Record<string, OptionValue<G>>,
   ): Promise<Choice[]>;
   /**
-   * Picks the app `command` from the Apps menu of `target` (a member or a message) while in
-   * `channel`: a context-menu command, registered with type User or Message. Resolves with the reply.
-   * @example const card = await alice.runApp(general, bob, "View Profile");
+   * Right-clicks `member` while in `channel` and picks `command` from the Apps menu: a user
+   * command (registered with type User). Resolves with the reply once it's visible.
+   * @example const card = await alice.runUserCommand(general, "View Profile", bob);
    */
-  runApp(
+  runUserCommand(
     channel: TextChannel<G> | Thread<G>,
-    target: Member<G> | Message,
     command: string,
+    member: Member<G>,
+    form?: Form<G>,
+  ): Promise<Message>;
+  /**
+   * Right-clicks `message` while in `channel` and picks `command` from the Apps menu: a message
+   * command (registered with type Message). Resolves with the reply once it's visible.
+   * @example const saved = await alice.runMessageCommand(general, "Bookmark", announcement);
+   */
+  runMessageCommand(
+    channel: TextChannel<G> | Thread<G>,
+    command: string,
+    message: Message,
     form?: Form<G>,
   ): Promise<Message>;
   /**
@@ -210,7 +221,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    */
   dm(message: UserMessage): Message;
   /** Opens a post in `forum`: a thread whose first message is `post`, with the forum's tags named in `tags`. */
-  forumPost(
+  postInForum(
     forum: Forum<G>,
     post: UserMessage & { title: string; tags?: string[] },
   ): { thread: Thread<G>; message: Message };
@@ -240,24 +251,24 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   startTyping(channel: TextChannel<G> | Thread<G>): void;
   /**
    * Turns off DMs from server members, as a privacy setting: the bot's DMs to them fail with 50007.
-   * @example alice.closeDMs(); await alice.run(general, "remind-me"); // the bot should say it can't DM
+   * @example alice.closeDMs(); await alice.runCommand(general, "remind-me"); // the bot should say it can't DM
    */
   closeDMs(): void;
   /** Sets their server nickname; null goes back to their name. */
-  nickname(nick: string | null): void;
+  setNickname(nick: string | null): void;
   /**
    * Changes their display name, shown in every server where they have no nickname; null goes back
    * to their username. The bot hears it as a member update in each server they share, which
    * discord.js also emits as `userUpdate`.
-   * @example alice.displayName("Alicia"); // a bot that stores display names should update
+   * @example alice.setDisplayName("Alicia"); // a bot that stores display names should update
    */
-  displayName(name: string | null): void;
+  setDisplayName(name: string | null): void;
   /** Leaves the guild. */
-  leave(): void;
+  leaveGuild(): void;
   /** Edits their own `message`'s text, announced to the bot as MESSAGE_UPDATE. */
-  edit(message: Message, content: string): void;
+  editMessage(message: Message, content: string): void;
   /** Deletes their own `message`, announced to the bot as MESSAGE_DELETE. */
-  delete(message: Message): void;
+  deleteMessage(message: Message): void;
   /**
    * Kicks `member` from the Discord app: needs Kick Members and a higher role. The bot sees them
    * leave and, with View Audit Log, the audit log entry naming who did it.
@@ -282,9 +293,9 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /**
    * Creates an invite to `channel` and returns its code; the bot hears `inviteCreate` when it has
    * Manage Channels there. Pass the code to `discord.member(…, { invite })` for someone to join.
-   * @example const code = alice.invite(general, { maxUses: 1 });
+   * @example const code = alice.createInvite(general, { maxUses: 1 });
    */
-  invite(channel: TextChannel<G>, options?: { maxUses?: number }): string;
+  createInvite(channel: TextChannel<G>, options?: { maxUses?: number }): string;
   /**
    * Creates a scheduled event starting at `start`, in voice channel `where` or at a place outside
    * Discord named by the string. Needs Create Events (and View Channel and Connect in the channel).
@@ -414,12 +425,12 @@ class Discord {
   /**
    * A new user who has joined `guild`. `nickname` is their server nickname. `permissions` gives them
    * a role holding those permissions, for a moderator or admin who isn't the owner. `invite` is the
-   * code they join through, from `Member.invite`: its uses go up, as invite trackers expect.
+   * code they join through, from `member.createInvite`: its uses go up, as invite trackers expect.
    * `inactiveDays` is how long since Discord last saw them, for prune; everyone else was seen now.
    * `bot: true` makes another bot, whose posts carry `author.bot`.
    * @example const alice = discord.member(server, "Alice");
    * @example const mod = discord.member(server, "Mod", { permissions: Permission.ModerateMembers });
-   * @example const carol = discord.member(server, "Carol", { invite: alice.invite(general) });
+   * @example const carol = discord.member(server, "Carol", { invite: alice.createInvite(general) });
    */
   member<G extends string>(
     guild: Guild<G>,
@@ -914,7 +925,7 @@ class MemberActor {
     readonly name: string,
   ) {}
 
-  async run(
+  async runCommand(
     channel: TextChannel | Thread,
     command: string,
     options: Record<string, OptionValue> = {},
@@ -931,7 +942,7 @@ class MemberActor {
     );
   }
 
-  async autocomplete(
+  async typeInOption(
     channel: TextChannel | Thread,
     command: string,
     option: string,
@@ -949,19 +960,34 @@ class MemberActor {
       .suggestions();
   }
 
-  async runApp(
+  async runUserCommand(
     channel: TextChannel | Thread,
-    target: Member | Message,
     command: string,
+    member: Member,
     form?: Form,
   ): Promise<Message> {
     const state = this.mock.state;
     return this.answer(
       this.actor().contextMenu(
         state.requireChannel(channel.id),
-        "channel_id" in target
-          ? state.requireMessage(target.channel_id, target.id)
-          : state.requireUser(target.id),
+        state.requireUser(member.id),
+        command,
+      ),
+      form,
+    );
+  }
+
+  async runMessageCommand(
+    channel: TextChannel | Thread,
+    command: string,
+    message: Message,
+    form?: Form,
+  ): Promise<Message> {
+    const state = this.mock.state;
+    return this.answer(
+      this.actor().contextMenu(
+        state.requireChannel(channel.id),
+        state.requireMessage(message.channel_id, message.id),
         command,
       ),
       form,
@@ -1008,7 +1034,7 @@ class MemberActor {
     await this.mock.waitForIdle().catch(() => {});
   }
 
-  /** The visible reply to `run`, filling and submitting the form first when the bot opens one. */
+  /** The visible reply to an action, filling and submitting the form first when the bot opens one. */
   private async answer(run: InteractionRun, form?: Form): Promise<Message> {
     await run.acknowledged();
     if (!form) return run.reply();
@@ -1034,7 +1060,7 @@ class MemberActor {
     );
   }
 
-  forumPost(
+  postInForum(
     forum: Forum,
     post: UserMessage & { title: string; tags?: string[] },
   ): { thread: Thread; message: Message } {
@@ -1045,11 +1071,11 @@ class MemberActor {
     return { thread: handle(thread.id, post.title), message };
   }
 
-  edit(message: Message, content: string): void {
+  editMessage(message: Message, content: string): void {
     this.actor().editOwnMessage(message, content);
   }
 
-  delete(message: Message): void {
+  deleteMessage(message: Message): void {
     this.actor().deleteOwnMessage(message);
   }
 
@@ -1082,17 +1108,17 @@ class MemberActor {
     this.mock.state.closedDms.add(this.id);
   }
 
-  nickname(nick: string | null): void {
+  setNickname(nick: string | null): void {
     this.markAction();
     this.mock.setNickname(this.guild(), this.user(), nick);
   }
 
-  displayName(name: string | null): void {
+  setDisplayName(name: string | null): void {
     this.markAction();
     this.mock.setDisplayName(this.user(), name);
   }
 
-  leave(): void {
+  leaveGuild(): void {
     this.markAction();
     this.mock.removeMember(this.guild(), this.user());
   }
@@ -1119,7 +1145,10 @@ class MemberActor {
     );
   }
 
-  invite(channel: TextChannel, options: { maxUses?: number } = {}): string {
+  createInvite(
+    channel: TextChannel,
+    options: { maxUses?: number } = {},
+  ): string {
     this.markAction();
     return createInvite(
       this.mock,

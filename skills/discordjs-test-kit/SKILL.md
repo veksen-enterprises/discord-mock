@@ -35,11 +35,11 @@ it("should record the result when the winner reports", async () => {
   const alice = discord.member(server, "Alice");
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions).client, { commands });
-  const opponentMenu = await alice.run(challengesChannel, "challenge");
+  const opponentMenu = await alice.runCommand(challengesChannel, "challenge");
   await alice.select(opponentMenu, "Bob");
 
   // Act: Bob reports winning 5-2
-  const reportMenu = await bob.run(challengesChannel, "report");
+  const reportMenu = await bob.runCommand(challengesChannel, "report");
   await bob.select(reportMenu, "I won");
   await bob.select(reportMenu, "5-2");
 
@@ -59,9 +59,9 @@ it("should record the result when the winner reports", async () => {
 
 | To…                                              | Write                                                                                                                                               |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| run a slash command                              | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                                       |
-| use an app from a context menu                   | `await alice.runApp(channel, bob, "View Profile")` (or a message for a message app)                                                                 |
-| check autocomplete suggestions                   | `const choices = await alice.autocomplete(channel, "docs", "query", "Promise.al")`                                                                  |
+| run a slash command                              | `await alice.runCommand(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                                |
+| use a command from the Apps menu                 | `await alice.runUserCommand(channel, "View Profile", bob)`, or `runMessageCommand(channel, "Quote", message)`                                       |
+| check autocomplete suggestions                   | `const choices = await alice.typeInOption(channel, "docs", "query", "Promise.al")`                                                                  |
 | press a button                                   | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                                               |
 | fill the form (modal) the bot opens              | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                                             |
 | reach the thread the bot started from a post     | `const thread = await discord.waitForThreadFrom(post)`, whatever the bot named it                                                                   |
@@ -69,23 +69,23 @@ it("should record the result when the winner reports", async () => {
 | a member who closed their DMs                    | `alice.closeDMs()`: the bot's DMs to them fail with 50007, so test what the bot says instead                                                        |
 | pick from a select menu                          | `await alice.select(message, "5-2")`                                                                                                                |
 | pick members, roles or channels                  | `await alice.select(setupPanel, [bob, discord.role(server, "mods")])`                                                                               |
-| post, open a forum post, react                   | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content, tags: ["Bug"] })`, `alice.react(message, "✅")`                       |
+| post, open a forum post, react                   | `alice.post(channel, { content })`, `alice.postInForum(forum, { title, content, tags: ["Bug"] })`, `alice.react(message, "✅")`                     |
 | vote in a poll, take the vote back               | `alice.vote(poll, "Pizza")`, `alice.unvote(poll)`                                                                                                   |
 | a member starts typing                           | `alice.startTyping(general)`: the bot hears `typingStart`                                                                                           |
 | DM the bot                                       | `alice.dm({ content })`, then `await discord.waitForDM(alice, /text/)`                                                                              |
 | a member with permissions                        | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                                        |
 | a member Discord hasn't seen for a while (prune) | `discord.member(server, "Ghost", { inactiveDays: 40 })`                                                                                             |
-| someone joins through an invite                  | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
+| someone joins through an invite                  | `const code = alice.createInvite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                |
 | join, move, leave voice                          | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
-| a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.run(general, "play")`, `await discord.waitForSound(lobby)`; the bot's client needs GuildVoiceStates          |
+| a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.runCommand(general, "play")`, `await discord.waitForSound(lobby)`; the bot's client needs GuildVoiceStates   |
 | create, edit, delete an event                    | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
 | add, rename, delete an emoji or sticker          | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
-| edit or delete their own message                 | `alice.edit(message, "fixed")`, `alice.delete(message)`                                                                                             |
+| edit or delete their own message                 | `alice.editMessage(message, "fixed")`, `alice.deleteMessage(message)`                                                                               |
 | another bot posts                                | `discord.member(server, "Carl-bot", { bot: true })`: its posts carry `author.bot`                                                                   |
 | deny or allow in one channel                     | `discord.deny(channel, "bot", Permission.SendMessages)` (or a member, a role, `"everyone"`), `discord.allow(…)`                                     |
 | a moderator locks a thread                       | `discord.lock(thread)`                                                                                                                              |
-| change nickname, leave the server                | `alice.nickname("Al")`, `alice.leave()`                                                                                                             |
-| change their display name                        | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                                        |
+| change nickname, leave the server                | `alice.setNickname("Al")`, `alice.leaveGuild()`                                                                                                     |
+| change their display name                        | `alice.setDisplayName("Alicia")`: discord.js emits `userUpdate`                                                                                     |
 | override who can use a command                   | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |
 | a moderator kicks or bans someone                | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                                              |
 | kick the bot from the server                     | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
@@ -110,7 +110,7 @@ One test is one journey a user takes: arrange the server, act as members, assert
 - **The success path**, end to end through the bot's real handlers and, where the bot owns state, its real database. Assert the database too.
 - **Every refusal the bot has**: a member missing a permission, the wrong state ("no pending challenge"), another member pressing someone's button. Each gets its own test, asserting the reply the user reads.
 - **Discord failing**: `discord.fail(...)` with `respond.serverError(503)` or a rate limit on the route the flow depends on. Assert what the user sees then.
-- **Interactions the bot must answer.** Await every `run`, `click` and `select`. A bot that ignores a press, an unknown button or a rate-limited command fails here with "The application did not respond", which is what the user sees.
+- **Interactions the bot must answer.** Await every `runCommand`, `click` and `select`. A bot that ignores a press, an unknown button or a rate-limited command fails here with "The application did not respond", which is what the user sees.
 - **Who can see the reply**: an ephemeral reply stays private (another member acting on it is refused), and a public one is in `discord.messages(channel)`.
 - **Gateway events the bot listens to** (a member joins, leaves, changes nickname or display name; the bot is kicked), including for members who were there before the bot started.
 
