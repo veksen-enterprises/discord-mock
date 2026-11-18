@@ -23,7 +23,7 @@
   },
   "files": [
     "dist",
-    "SKILL.md"
+    "skills"
   ],
   "type": "module",
   "main": "./dist/index.js",

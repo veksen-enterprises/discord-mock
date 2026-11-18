@@ -66,6 +66,19 @@ it("should record the result when the winner reports", async () => {
 
 A message the bot updates in place is the same object the test holds, so keep one variable per menu and act on it line by line. When the bot answers with a new message, use the value `click` or `select` returns.
 
+## What to test
+
+One test is one journey a user takes: arrange the World, act as members, assert what they see. For each command or flow, cover:
+
+- **The success path**, end to end through the bot's real handlers and, where the bot owns state, its real database. Assert the database too.
+- **Every refusal the bot has**: a member missing a permission, the wrong state ("no pending challenge"), another member pressing someone's button. Each gets its own test, asserting the reply the user reads.
+- **Discord failing**: `discord.fail(...)` with `respond.serverError(503)` or a rate limit on the route the flow depends on. Assert what the user sees then.
+- **Interactions the bot must answer.** Await every `run`, `click` and `select`. A bot that ignores a press, an unknown button or a rate-limited command fails here with "The application did not respond", which is what the user sees.
+- **Who can see the reply**: an ephemeral reply stays private (another member acting on it is refused), and a public one is in `discord.messages(channel)`.
+- **Gateway events the bot listens to** (a member joins, leaves, changes nickname), including for members who were there before the bot started.
+
+Stub third parties (an AI model, a music source, a payment API) the way you would anywhere. Never stub Discord or discord.js. Wait for absence with `vi.waitFor`, never a sleep.
+
 ## Red lines
 
 - No `vi.mock("discord.js")`, no hand-built interactions, no `as unknown as` casts, no spies on `interaction.reply`. If the test needs one, the mock is missing a feature: say so.
