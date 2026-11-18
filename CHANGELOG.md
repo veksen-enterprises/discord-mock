@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+Docs only; the code is unchanged.
+
+- The README opens with a short test of a one-command bot, compares it with hand-rolled fakes, and lists bugs the fakes miss. The full action and rules tables moved to the docs site.
+- The skill's example is written as arrange-act-assert, one action per test, and tells agents to write theirs that way.
+- The README, the skill and the API docs say "server" and "unmodelled request" instead of internal terms.
+
 ## 0.1.0
 
 First release. A stock discord.js 14 `Client` logs in to a fake Discord (REST and Gateway on `127.0.0.1`), and a test drives it through `createDiscord`.
