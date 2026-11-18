@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import type { APIThreadChannel } from "discord-api-types/v10";
 import {
   ChannelType,
   Client,
@@ -180,4 +181,29 @@ it("finds the thread the bot started, and the bot's message in it", async () => 
   expect((await discord.find(thread, "How can I help?")).channel_id).toBe(
     thread.id,
   );
+});
+
+it("unarchives a thread the bot posts in, but refuses a locked one without Manage Threads", async () => {
+  const { forum, alice } = await start();
+  const { thread } = mock.as(alice).forumPost(forum, { title: "old post" });
+  const locked = mock.as(alice).forumPost(forum, { title: "closed" }).thread;
+  mock.archiveThread(thread);
+  mock.archiveThread(locked);
+  (locked as APIThreadChannel).thread_metadata!.locked = true;
+  const unarchived = new Promise((resolve) =>
+    client.on(Events.ThreadUpdate, (_, after) => {
+      if (after.id === thread.id && !after.archived) resolve(after.id);
+    }),
+  );
+
+  await client.rest.post(Routes.channelMessages(thread.id), {
+    body: { content: "bump" },
+  });
+
+  expect(await unarchived).toBe(thread.id);
+  expect(
+    await client.rest
+      .post(Routes.channelMessages(locked.id), { body: { content: "bump" } })
+      .catch((e: unknown) => e),
+  ).toMatchObject({ code: 50083 });
 });

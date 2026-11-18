@@ -1189,6 +1189,25 @@ export class DiscordMock {
           return rest.gap(`reply to unknown message ${replyTo}`);
         const overLimit = messageLimitError(req.body);
         if (overLimit) return overLimit;
+        // topics/threads: "Sending a message will automatically unarchive the thread, unless the
+        // thread has been locked by a moderator"; a locked one only unarchives with MANAGE_THREADS.
+        // The 50083 for a locked one is inferred, not checked.
+        const meta =
+          "thread_metadata" in channel ? channel.thread_metadata : undefined;
+        if (meta?.archived) {
+          if (
+            meta.locked &&
+            this.checkBotPerms(channel, Permission.ManageThreads)
+          )
+            return respond.error(400, 50083, "Thread is archived");
+          meta.archived = false;
+          meta.archive_timestamp = new Date().toISOString();
+          this.gateway.dispatch(
+            GatewayDispatchEvents.ThreadUpdate,
+            channel,
+            GatewayIntentBits.Guilds,
+          );
+        }
         const message = state.createMessage({
           channelId: channel.id,
           authorId: state.bot.id,
