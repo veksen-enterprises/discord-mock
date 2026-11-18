@@ -1293,6 +1293,25 @@ export class DiscordMock {
       }),
     );
 
+    // Get Guild Channels (resources/guild): no threads, and "omits any channel your bot doesn't
+    // have permission to view". "Channel categories are viewable if any of their child channels
+    // are viewable"; one the bot can view itself is listed too (inferred, not checked).
+    rest.route(
+      "GET",
+      "/guilds/:guildId/channels",
+      authed((req) => {
+        const guild = state.guilds.get(req.params.guildId!);
+        if (!guild) return respond.error(404, 10004, "Unknown Guild");
+        const channels = guild.channelIds.map((id) => state.channels.get(id)!);
+        const viewable = new Set(
+          channels
+            .filter((c) => !this.checkBotPerms(c, 0n))
+            .flatMap((c) => ("parent_id" in c ? [c.id, c.parent_id] : [c.id])),
+        );
+        return respond.json(channels.filter((c) => viewable.has(c.id)));
+      }),
+    );
+
     // MANAGE_CHANNELS at guild level. Only text channels so far: another type is a 400, not a guess.
     rest.route(
       "POST",
