@@ -53,3 +53,10 @@
 .skill > h1:first-child {
   display: none;
 }
+
+/* JetBrains Mono draws `=>` as ⇒ and `!==` as ≢. Samples should show what the reader types. */
+code,
+pre,
+.expressive-code {
+  font-variant-ligatures: none;
+}
