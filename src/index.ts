@@ -187,10 +187,10 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    * @example alice.dm({ content: "!help" }); await discord.find(alice, /commands/);
    */
   dm(message: UserMessage): Message;
-  /** Opens a post in `forum`: a thread whose first message is `post`. */
+  /** Opens a post in `forum`: a thread whose first message is `post`, with the forum's tags named in `tags`. */
   forumPost(
     forum: Forum<G>,
-    post: UserMessage & { title: string },
+    post: UserMessage & { title: string; tags?: string[] },
   ): { thread: Thread<G>; message: Message };
   /** Reacts to `message` with a unicode emoji. */
   react(message: Message, emoji: string): void;
@@ -337,8 +337,13 @@ class Discord {
     return handle(this.mock.createRole(this.g(guild), name, 0n).id, name);
   }
 
-  forum<G extends string>(guild: Guild<G>, name: string): Forum<G> {
-    return handle(this.mock.createForum(this.g(guild), name).id, name);
+  /** A forum offering these tags to its posts. @example discord.forum(server, "help", ["Solved"]) */
+  forum<G extends string>(
+    guild: Guild<G>,
+    name: string,
+    tags: string[] = [],
+  ): Forum<G> {
+    return handle(this.mock.createForum(this.g(guild), name, tags).id, name);
   }
 
   /**
@@ -711,7 +716,7 @@ class MemberActor {
 
   forumPost(
     forum: Forum,
-    post: UserMessage & { title: string },
+    post: UserMessage & { title: string; tags?: string[] },
   ): { thread: Thread; message: Message } {
     const { thread, message } = this.actor().forumPost(
       this.mock.state.requireChannel(forum.id),

@@ -346,10 +346,10 @@ export class DiscordMock {
     setVoiceState(this, guild, user.id, { channelId: channel?.id ?? null });
   }
 
-  /** A forum: users post in it with `as(user).forumPost()`. */
-  createForum(guild: GuildRecord, name: string) {
+  /** A forum with these tags: users post in it with `as(user).forumPost()`. */
+  createForum(guild: GuildRecord, name: string, tags: string[] = []) {
     return this.announceChannel(
-      this.state.createForumChannel(guild.id, { name }),
+      this.state.createForumChannel(guild.id, { name, tags }),
     );
   }
 
@@ -691,9 +691,14 @@ export class DiscordMock {
       /** Adds a unicode emoji reaction, dispatched as MESSAGE_REACTION_ADD. */
       react: (message: APIMessage, emoji: string) =>
         this.userReacts(user, message, emoji),
-      /** A new forum post: a thread plus its starter message, which shares the thread's id. */
-      forumPost: (forum: APIChannel, post: UserMessage & { title: string }) =>
-        this.userPostsInForum(user, forum, post),
+      /**
+       * A new forum post: a thread plus its starter message, which shares the thread's id. `tags`
+       * are the forum's tag names.
+       */
+      forumPost: (
+        forum: APIChannel,
+        post: UserMessage & { title: string; tags?: string[] },
+      ) => this.userPostsInForum(user, forum, post),
       slashCommand: (
         channel: APIChannel,
         name: string,
@@ -818,15 +823,25 @@ export class DiscordMock {
   private userPostsInForum(
     user: APIUser,
     forum: APIChannel,
-    post: UserMessage & { title: string },
+    post: UserMessage & { title: string; tags?: string[] },
   ) {
     if (forum.type !== ChannelType.GuildForum)
       throw new Error(`discordjs-test-kit: ${forum.id} isn't a forum`);
     this.requireMembership(user, forum);
+    const available = forum.available_tags ?? [];
+    const appliedTags = (post.tags ?? []).map((name) => {
+      const tag = available.find((t) => t.name === name);
+      if (!tag)
+        throw new Error(
+          `discordjs-test-kit: ${forum.name} has no tag "${name}"${available.length ? `; it has ${available.map((t) => t.name).join(", ")}` : ""}`,
+        );
+      return tag.id;
+    });
     const thread = this.state.createThread({
       parentId: forum.id,
       name: post.title,
       ownerId: user.id,
+      appliedTags,
     });
     // docs.discord.food/gateway/gateway-events#thread-create: newly_created on creation.
     this.gateway.dispatch(

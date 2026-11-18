@@ -302,7 +302,10 @@ export class DiscordState extends EventEmitter<{
    * A forum (thread-only) channel. Its posts are threads; see `createThread`.
    * docs.discord.food/topics/threads#thread-only-channels
    */
-  createForumChannel(guildId: string, input: { name: string }): APIChannel {
+  createForumChannel(
+    guildId: string,
+    input: { name: string; tags?: string[] },
+  ): APIChannel {
     const guild = this.requireGuild(guildId);
     const channel = {
       id: snowflake(),
@@ -317,7 +320,14 @@ export class DiscordState extends EventEmitter<{
       last_message_id: null,
       rate_limit_per_user: 0,
       flags: 0 as ChannelFlags,
-      available_tags: [],
+      // resources/channel#forum-tag-object.
+      available_tags: (input.tags ?? []).map((name) => ({
+        id: snowflake(),
+        name,
+        moderated: false,
+        emoji_id: null,
+        emoji_name: null,
+      })),
       default_reaction_emoji: null,
       default_sort_order: null,
       default_forum_layout: 0,
@@ -342,6 +352,8 @@ export class DiscordState extends EventEmitter<{
     type?: ChannelType;
     autoArchiveDuration?: number;
     invitable?: boolean;
+    /** Tag ids, for a post in a forum. */
+    appliedTags?: string[];
   }): APIChannel {
     const parent = this.requireChannel(input.parentId);
     if (!("guild_id" in parent) || !parent.guild_id)
@@ -360,6 +372,9 @@ export class DiscordState extends EventEmitter<{
       member_count: 1,
       total_message_sent: 0,
       flags: 0 as ChannelFlags,
+      ...(parent.type === ChannelType.GuildForum
+        ? { applied_tags: input.appliedTags ?? [] }
+        : {}),
       thread_metadata: {
         archived: !!input.archived,
         // docs.discord.food/resources/channel#start-thread-from-message: default 4320.

@@ -1,4 +1,5 @@
 import {
+  ChannelFlags,
   ChannelType,
   GatewayDispatchEvents,
   GatewayIntentBits,
@@ -6,7 +7,7 @@ import {
   type APIChannel,
   type APIThreadChannel,
 } from "discord-api-types/v10";
-import { threadNameError } from "./limits.js";
+import { messageLimitError, threadNameError } from "./limits.js";
 import type { DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
@@ -25,6 +26,35 @@ const archivedThread = () =>
   );
 const wrongChannelType = () =>
   respond.error(400, 50024, "Cannot execute action on this channel type");
+
+/**
+ * `applied_tags` problems for a post in `forum`: "limited to 5" (Modify Channel, thread), ids among
+ * the forum's available_tags (inferred), and a `moderated` tag needs MANAGE_THREADS ("can only be
+ * added to or removed from threads by a member with the MANAGE_THREADS permission"). The 50035 code
+ * is inferred, not checked.
+ */
+function tagsError(
+  forum: APIChannel,
+  tags: unknown,
+  before: string[],
+  canManage: boolean,
+) {
+  if (!Array.isArray(tags) || tags.length > 5) return respond.invalidFormBody();
+  const available =
+    "available_tags" in forum ? (forum.available_tags ?? []) : [];
+  if (tags.some((id) => !available.some((t) => t.id === id)))
+    return respond.invalidFormBody();
+  const changed = [
+    ...tags.filter((id) => !before.includes(id)),
+    ...before.filter((id) => !tags.includes(id)),
+  ];
+  if (
+    !canManage &&
+    changed.some((id) => available.find((t) => t.id === id)?.moderated)
+  )
+    return respond.missingPermissions();
+  return undefined;
+}
 
 export function registerThreadRoutes(
   mock: DiscordMock,
@@ -121,7 +151,7 @@ export function registerThreadRoutes(
       const parent = state.channels.get(req.params.channelId!);
       if (!parent) return respond.unknownChannel();
       if (parent.type === ChannelType.GuildForum)
-        return rest.gap("forum post created by the bot");
+        return startForumPost(req, parent);
       const type = (req.body?.type ?? ChannelType.PrivateThread) as ChannelType;
       const allowed =
         parent.type === ChannelType.GuildText
@@ -168,7 +198,13 @@ export function registerThreadRoutes(
       const thread = threadOf(req);
       if (!thread) return rest.gap(`PATCH a channel of type ${channel.type}`);
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const known = ["name", "archived", "auto_archive_duration", "locked"];
+      const known = [
+        "name",
+        "archived",
+        "auto_archive_duration",
+        "locked",
+        "applied_tags",
+      ];
       const other = Object.keys(body).find((key) => !known.includes(key));
       if (other) return rest.gap(`PATCH thread ${other}`);
       const meta = thread.thread_metadata!;
@@ -194,6 +230,18 @@ export function registerThreadRoutes(
       if (denied) return denied;
       const badName = threadNameError(body.name);
       if (badName) return badName;
+      if ("applied_tags" in body) {
+        const forum = state.requireChannel(thread.parent_id!);
+        if (forum.type !== ChannelType.GuildForum) return wrongChannelType();
+        const badTags = tagsError(
+          forum,
+          body.applied_tags,
+          thread.applied_tags ?? [],
+          (botPerms(thread) & Permission.ManageThreads) !== 0n,
+        );
+        if (badTags) return badTags;
+        thread.applied_tags = body.applied_tags as string[];
+      }
       if (typeof body.name === "string") thread.name = body.name;
       if (typeof body.archived === "boolean") {
         meta.archived = body.archived;
@@ -287,6 +335,65 @@ export function registerThreadRoutes(
   // gateway-events#thread-create: "When a thread is created, includes an additional newly_created
   // boolean field". GUILDS intent.
   // Discord's response carries the bot's thread member as `member` (contract run 8).
+  // Start Thread in Forum or Media Channel: "The current user must have the SEND_MESSAGES
+  // permission (CREATE_PUBLIC_THREADS is ignored)"; a PUBLIC_THREAD whose first message is
+  // `message`, answered with the thread and that message nested. REQUIRE_TAG wants a tag: 40067
+  // (pairing inferred). Files on the starter message are a Gap. Fires THREAD_CREATE and the
+  // message's MESSAGE_CREATE. 201 like the other thread starts (inferred).
+  function startForumPost(req: RestRequest, forum: APIChannel) {
+    const denied = refuse(forum, Permission.SendMessages);
+    if (denied) return denied;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (req.files?.length) return rest.gap("files on the bot's forum post");
+    const badName = threadNameError(body.name ?? "");
+    if (badName) return badName;
+    const message = (body.message ?? {}) as Record<string, unknown>;
+    if (
+      message.content == null &&
+      message.embeds == null &&
+      message.components == null &&
+      message.sticker_ids == null
+    )
+      return respond.error(400, 50006, "Cannot send an empty message");
+    if (message.sticker_ids != null)
+      return rest.gap("stickers on the bot's forum post");
+    const overLimit = messageLimitError(message);
+    if (overLimit) return overLimit;
+    const tags = (body.applied_tags ?? []) as string[];
+    const badTags = tagsError(
+      forum,
+      tags,
+      [],
+      (botPerms(forum) & Permission.ManageThreads) !== 0n,
+    );
+    if (badTags) return badTags;
+    if (((forum.flags ?? 0) & ChannelFlags.RequireTag) !== 0 && !tags.length)
+      return respond.error(
+        400,
+        40067,
+        "A tag is required to create a forum post in this channel",
+      );
+    const thread = state.createThread({
+      parentId: forum.id,
+      name: body.name as string,
+      ownerId: bot,
+      autoArchiveDuration: body.auto_archive_duration as number | undefined,
+      appliedTags: tags,
+    });
+    announceCreate(thread);
+    const starter = state.createMessage({
+      id: thread.id,
+      channelId: thread.id,
+      authorId: bot,
+      content: message.content as string | undefined,
+      embeds: message.embeds as never,
+      components: message.components as never,
+      flags: message.flags as number | undefined,
+    });
+    gateway.dispatchMessage("MESSAGE_CREATE", starter);
+    return respond.json({ ...withBotMember(thread), message: starter }, 201);
+  }
+
   const withBotMember = (thread: APIChannel) => ({
     ...thread,
     member: state.threadMember(thread.id, bot),
