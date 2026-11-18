@@ -5,7 +5,7 @@ import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
 
 export default defineConfig({
   // Absolute URLs in llms.txt and the sitemap. The deploy sets SITE_URL to the public address.
-  site: process.env.SITE_URL ?? "http://localhost:4321",
+  site: process.env.SITE_URL || "http://localhost:4321",
   integrations: [
     starlight({
       title: "discordjs-test-kit",
