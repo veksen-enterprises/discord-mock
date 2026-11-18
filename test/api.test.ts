@@ -39,6 +39,15 @@ it("names the channel and its last messages when find gives up", async () => {
   );
 });
 
+it("quotes a message's first non-empty line when find gives up", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+  alice.post(generalChannel, { content: "\nhello" });
+
+  await expect(discord.find(generalChannel, /goodbye/)).rejects.toThrow(
+    'Last 1: "hello"',
+  );
+});
+
 it("passes a member handle as a user option, under their server nickname", async () => {
   const { generalChannel, alice, bob } = await startBot();
 

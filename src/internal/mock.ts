@@ -1518,7 +1518,7 @@ export function readable(message: APIMessage): string {
 
 /** Names a message by the start of what a user reads in it, for error messages. */
 export function shown(message: APIMessage): string {
-  const text = readable(message).split("\n")[0];
+  const text = readable(message).split("\n").find(Boolean);
   if (!text) return "a message with no text";
   return JSON.stringify(text.length > 40 ? `${text.slice(0, 39)}…` : text);
 }

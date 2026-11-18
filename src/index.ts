@@ -229,8 +229,8 @@ class Discord {
    * Waits for a message the bot created or edited since the latest action (a member's action,
    * `start` or `archive`) in `where`: a channel, a thread, or a member's DMs with the bot. Its text
    * must contain `text`, or match it when it's a RegExp; the text is the content plus each embed's
-   * title, description, fields and footer. Resolves with the newest match; rejects after 2 seconds,
-   * showing the last messages. To wait for something to disappear, use `vi.waitFor`.
+   * title, description, fields and footer. Resolves with the newest match already written, else the
+   * first one to land; rejects after 2 seconds, showing the last messages. To wait for something to disappear, use `vi.waitFor`.
    * @example await discord.find(leaderboardChannel, /Bobby/);
    */
   async find(
