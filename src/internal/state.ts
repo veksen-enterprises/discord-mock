@@ -113,6 +113,8 @@ export class DiscordState extends EventEmitter<{
   readonly scheduledEvents = new Map<string, APIGuildScheduledEvent>();
 
   readonly applicationId: string;
+  /** The app's description, which a bot can rewrite with PATCH /applications/@me. */
+  applicationDescription = "";
   readonly bot: APIUser;
 
   constructor() {

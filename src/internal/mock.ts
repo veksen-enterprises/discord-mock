@@ -1752,29 +1752,48 @@ export class DiscordMock {
     // docs.discord.food/resources/application, Get Current Application: "Returns the application
     // object associated with the requestor." Fields per the Application Structure table; the owner
     // and verify_key values are placeholders (the World has no developer account).
+    const application = () => ({
+      id: state.applicationId,
+      name: state.bot.username,
+      icon: null,
+      description: state.applicationDescription,
+      bot_public: true,
+      bot_require_code_grant: false,
+      owner: {
+        id: this.developerId,
+        username: state.users.get(this.developerId)?.username ?? "developer",
+        discriminator: "0",
+        avatar: null,
+      },
+      team: null,
+      flags: 0,
+      verify_key: "0".repeat(64),
+    });
     rest.route(
       "GET",
       "/applications/@me",
-      authed(() =>
-        respond.json({
-          id: state.applicationId,
-          name: state.bot.username,
-          icon: null,
-          description: "",
-          bot_public: true,
-          bot_require_code_grant: false,
-          owner: {
-            id: this.developerId,
-            username:
-              state.users.get(this.developerId)?.username ?? "developer",
-            discriminator: "0",
-            avatar: null,
-          },
-          team: null,
-          flags: 0,
-          verify_key: "0".repeat(64),
-        }),
-      ),
+      authed(() => respond.json(application())),
+    );
+    // docs.discord.food/resources/application, Modify Current Application: every param is
+    // optional and it "Returns the updated application object on success". Only the description
+    // is modelled; neither docs.discord.food nor Discord's docs give it a length limit, so none is
+    // enforced (inferred, not checked).
+    rest.route(
+      "PATCH",
+      "/applications/@me",
+      authed((req) => {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const other = Object.keys(body).find(
+          (key) => key !== "description" && body[key] !== undefined,
+        );
+        if (other) return rest.gap(`modify current application ${other}`);
+        if ("description" in body) {
+          if (body.description !== null && typeof body.description !== "string")
+            return respond.invalidFormBody();
+          state.applicationDescription = body.description ?? "";
+        }
+        return respond.json(application());
+      }),
     );
 
     const putCommands = (

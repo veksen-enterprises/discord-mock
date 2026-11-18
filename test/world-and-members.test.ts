@@ -88,6 +88,24 @@ it("gives the bot its invite permissions in a server that adds it after start", 
   expect(me.permissions.has(Permission.EmbedLinks)).toBe(true);
 });
 
+it("keeps the description a bot writes to its application, as bots that credit themselves do", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  discord.guild("SIN");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...discord.clientOptions,
+  });
+  await discord.start(client);
+
+  // Act
+  await client.application!.edit({ description: "Powered by the kit" });
+
+  // Assert
+  const application = await client.application!.fetch();
+  expect(application.description).toBe("Powered by the kit");
+});
+
 it("names the application's owner", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
