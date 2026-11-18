@@ -1854,24 +1854,102 @@ export class DiscordMock {
       }),
     );
 
-    // MANAGE_CHANNELS at guild level. Only text channels so far: another type is a 400, not a guess.
+    // docs.discord.food/resources/channel#create-guild-channel: MANAGE_CHANNELS; "only permissions
+    // you have in the guild can be allowed/denied" in permission_overwrites, and MANAGE_ROLES there
+    // "is only possible for guild administrators". Fires CHANNEL_CREATE. Text, voice, category,
+    // stage and forum channels; another type, or a param not listed here, is a Gap.
     rest.route(
       "POST",
       "/guilds/:guildId/channels",
       authed((req) => {
         const guild = state.guilds.get(req.params.guildId!);
         if (!guild) return respond.error(404, 10004, "Unknown Guild");
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const type = (body.type ?? ChannelType.GuildText) as ChannelType;
+        const creatable = [
+          ChannelType.GuildText,
+          ChannelType.GuildVoice,
+          ChannelType.GuildCategory,
+          ChannelType.GuildStageVoice,
+          ChannelType.GuildForum,
+        ];
+        if (!creatable.includes(type))
+          return rest.gap(`create channel of type ${type}`);
+        const known = [
+          "name",
+          "type",
+          "topic",
+          "nsfw",
+          "rate_limit_per_user",
+          "user_limit",
+          "bitrate",
+          "parent_id",
+          "permission_overwrites",
+        ];
+        const other = Object.keys(body).find(
+          (key) => !known.includes(key) && body[key] != null,
+        );
+        if (other) return rest.gap(`create channel with ${other}`);
         const perms = computePermissions(state, guild, state.bot.id);
         if (!(perms & Permission.ManageChannels))
           return respond.missingPermissions();
-        if ((req.body?.type ?? 0) !== ChannelType.GuildText)
-          return respond.error(
-            400,
-            50035,
-            `discordjs-test-kit: channel type ${req.body?.type} not implemented`,
+        if (typeof body.name !== "string") return respond.invalidFormBody();
+        const invalid = channelEditError(body);
+        if (invalid) return invalid;
+        const parent =
+          typeof body.parent_id === "string"
+            ? state.channels.get(body.parent_id)
+            : undefined;
+        if (
+          body.parent_id != null &&
+          (type === ChannelType.GuildCategory ||
+            parent?.type !== ChannelType.GuildCategory ||
+            !("guild_id" in parent) ||
+            parent.guild_id !== guild.id)
+        )
+          return respond.invalidFormBody();
+        const overwrites = (body.permission_overwrites ?? []) as {
+          id: string;
+          type: 0 | 1;
+          allow?: string;
+          deny?: string;
+        }[];
+        const admin = (perms & Permission.Administrator) !== 0n;
+        const refused = overwrites.some((o) => {
+          const bits = BigInt(o.allow ?? 0) | BigInt(o.deny ?? 0);
+          return (
+            (bits & ~perms) !== 0n ||
+            ((bits & Permission.ManageRoles) !== 0n && !admin)
           );
-        const channel = state.createTextChannel(guild.id, {
-          name: req.body.name,
+        });
+        if (refused) return respond.missingPermissions();
+        const name = body.name;
+        const channel =
+          type === ChannelType.GuildText
+            ? state.createTextChannel(guild.id, { name })
+            : type === ChannelType.GuildCategory
+              ? state.createCategoryChannel(guild.id, { name })
+              : type === ChannelType.GuildForum
+                ? state.createForumChannel(guild.id, { name })
+                : state.createVoiceChannel(guild.id, {
+                    name,
+                    stage: type === ChannelType.GuildStageVoice,
+                  });
+        Object.assign(channel, {
+          ...pick(body, [
+            "topic",
+            "nsfw",
+            "rate_limit_per_user",
+            "user_limit",
+            "bitrate",
+          ]),
+          ...(parent ? { parent_id: parent.id } : {}),
+          permission_overwrites: overwrites.map((o) => ({
+            id: o.id,
+            type: o.type,
+            allow: o.allow ?? "0",
+            deny: o.deny ?? "0",
+          })),
         });
         this.gateway.dispatch(
           GatewayDispatchEvents.ChannelCreate,
