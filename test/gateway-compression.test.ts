@@ -7,7 +7,11 @@
  */
 import { once } from "node:events";
 import { createInflate } from "node:zlib";
-import { GatewayOpcodes } from "discord-api-types/v10";
+import {
+  GatewayDispatchEvents,
+  GatewayOpcodes,
+  type GatewayReceivePayload,
+} from "discord-api-types/v10";
 import { afterEach, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
@@ -23,7 +27,7 @@ async function connectCompressed(url: string) {
     `${url}?v=10&encoding=json&compress=zlib-stream`,
   );
   const inflate = createInflate();
-  const packets: { op: number; t?: string; d: any }[] = [];
+  const packets: GatewayReceivePayload[] = [];
   let text = "";
   inflate.on("data", (chunk: Buffer) => (text += chunk.toString()));
   socket.on("message", (data: Buffer) => {
@@ -63,7 +67,9 @@ it("compresses HELLO and READY on one zlib stream, each ending in the sync flush
       d: { token: mock.token, intents: 1, properties: {} },
     }),
   );
-  const ready = await until(() => packets.find((p) => p.t === "READY"));
+  const ready = await until(() =>
+    packets.find((p) => p.t === GatewayDispatchEvents.Ready),
+  );
 
   // Assert
   expect(ready.d.user.id).toBe(mock.state.bot.id);

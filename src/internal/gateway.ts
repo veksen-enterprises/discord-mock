@@ -8,6 +8,8 @@ import {
   GatewayOpcodes,
   MessageFlags,
   type APIMessage,
+  type GatewaySendPayload,
+  type GatewayVoiceStateUpdateData,
 } from "discord-api-types/v10";
 import { WebSocketServer, type WebSocket } from "ws";
 import { guildCreatePayload } from "./payloads.js";
@@ -36,7 +38,10 @@ export interface GatewayOptions {
   /** Called on every Dispatch, so the Mock can tell when the bot has something to react to. */
   onDispatch?: () => void;
   /** Op 4 from the bot; `reply` dispatches to the session that sent it alone. */
-  onVoiceStateUpdate?: (d: any, reply: (t: string, d: unknown) => void) => void;
+  onVoiceStateUpdate?: (
+    d: GatewayVoiceStateUpdateData,
+    reply: (t: string, d: unknown) => void,
+  ) => void;
 }
 
 export class Gateway {
@@ -93,7 +98,7 @@ export class Gateway {
 
     let session: Session | undefined;
     socket.on("message", (raw) => {
-      let payload: { op: number; d: any };
+      let payload: GatewaySendPayload;
       try {
         payload = JSON.parse(raw.toString());
       } catch {
@@ -178,8 +183,8 @@ export class Gateway {
           }
           session = existing;
           session.socket = socket;
-          for (const payload of session.missed.splice(0))
-            this.write(socket, payload);
+          for (const missed of session.missed.splice(0))
+            this.write(socket, missed);
           this.send(session, GatewayDispatchEvents.Resumed, null);
           return;
         }

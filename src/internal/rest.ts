@@ -8,7 +8,7 @@ export interface RestRequest {
   query: URLSearchParams;
   headers: IncomingMessage["headers"];
   /** Parsed JSON body, or payload_json for multipart. */
-  body: any;
+  body: unknown;
   files: UploadedFile[];
 }
 
@@ -224,7 +224,7 @@ type UploadedFile = Exclude<ReturnType<FormData["get"]>, string | null>;
 async function parseBody(
   raw: Buffer,
   contentType: string | undefined,
-): Promise<{ body: any; files: UploadedFile[] }> {
+): Promise<{ body: unknown; files: UploadedFile[] }> {
   if (!raw.length) return { body: undefined, files: [] };
   if (contentType?.startsWith("multipart/form-data")) {
     const form = await new Response(new Uint8Array(raw), {

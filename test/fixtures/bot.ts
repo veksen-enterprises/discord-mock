@@ -298,11 +298,14 @@ export function createBot(
           try {
             await channel.send("📣 announcement");
             await interaction.editReply("posted");
-          } catch (error: any) {
+          } catch (error) {
             errors.push(error);
-            await interaction.editReply(
-              `failed: ${error.code ?? error.status ?? error.message}`,
-            );
+            const { code, status, message } = error as {
+              code?: number | string;
+              status?: number;
+              message?: string;
+            };
+            await interaction.editReply(`failed: ${code ?? status ?? message}`);
           }
           return;
         }

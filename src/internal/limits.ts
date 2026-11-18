@@ -121,6 +121,7 @@ function limitError(problems: Problem[]): RestResponse | undefined {
   for (const { path, message } of problems) {
     let node = errors;
     for (const key of path) node = (node[String(key)] ??= {}) as typeof node;
+    // oxlint-disable-next-line no-underscore-dangle -- Discord's error body names it `_errors`
     ((node._errors ??= []) as unknown[]).push({
       code: "BASE_TYPE_MAX_LENGTH",
       message,

@@ -293,6 +293,7 @@ function invalid(
     return respond.invalidFormBody();
   for (const pattern of meta.regex_patterns ?? []) {
     try {
+      // oxlint-disable-next-line no-new -- compiled only to see whether it throws
       new RegExp(pattern);
     } catch {
       // What Discord answers an invalid Rust regex with is undocumented.

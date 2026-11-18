@@ -265,8 +265,8 @@ export function registerExpressionRoutes(
   const unknownGuild = () => respond.error(404, 10004, "Unknown Guild");
   const shown = <T extends { user: APIUser }>(item: T, withUser: boolean) => {
     if (withUser) return item;
-    const { user: _, ...rest } = item;
-    return rest;
+    const { user: _, ...withoutUser } = item;
+    return withoutUser;
   };
   const either = (guild: GuildRecord) =>
     can(guild, Permission.CreateGuildExpressions) ||

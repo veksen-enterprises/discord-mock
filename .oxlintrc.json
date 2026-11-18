@@ -8,7 +8,7 @@
   },
   "rules": {
     "no-unused-vars": "off",
-    "typescript/no-unused-vars": "warn",
+    "typescript/no-unused-vars": ["warn", { "ignoreRestSiblings": true }],
     "typescript/no-explicit-any": "warn"
   }
 }

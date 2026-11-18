@@ -5,6 +5,7 @@ import {
   GatewayIntentBits,
   type APIChannel,
   type APIMessage,
+  type RESTPostAPIChannelMessagesBulkDeleteJSONBody,
 } from "discord-api-types/v10";
 import { reasonOf, recordAudit } from "./audit.js";
 import type { DiscordMock } from "./mock.js";
@@ -164,7 +165,9 @@ export function registerMessageRoutes(
         );
       const denied = mock.checkBotPerms(channel, Permission.ManageMessages);
       if (denied) return denied;
-      const ids: unknown = req.body?.messages;
+      const ids: unknown = (
+        req.body as RESTPostAPIChannelMessagesBulkDeleteJSONBody | undefined
+      )?.messages;
       if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string"))
         return respond.invalidFormBody();
       // Contract run 11: one id is 400 + 50035, not 50016 as the code table suggests. Over 100 is

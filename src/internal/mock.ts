@@ -5,6 +5,7 @@ import {
   ApplicationCommandPermissionType,
   AuditLogEvent,
   ApplicationCommandType,
+  ButtonStyle,
   ApplicationCommandOptionType,
   ChannelType,
   ComponentType,
@@ -18,8 +19,20 @@ import {
   type APIApplicationCommandOption,
   type RESTPostAPIApplicationCommandsJSONBody,
   type APIChannel,
+  type APIAutoPopulatedSelectMenuComponent,
+  type APIButtonComponent,
+  type APIComponentInLabel,
   type APIMessage,
+  type APIMessageComponent,
+  type APIModalInteractionResponseCallbackData,
   type APIUser,
+  type RESTPatchAPIApplicationCommandJSONBody,
+  type RESTPatchAPIWebhookWithTokenMessageJSONBody,
+  type RESTPostAPIChannelMessageJSONBody,
+  type RESTPostAPICurrentUserCreateDMChannelJSONBody,
+  type RESTPostAPIInteractionCallbackJSONBody,
+  type RESTPostAPIInteractionFollowupJSONBody,
+  type RESTPutAPIChannelPermissionJSONBody,
 } from "discord-api-types/v10";
 import { reasonOf, recordAudit, registerAuditLogRoutes } from "./audit.js";
 import { moderateMessage, registerAutoModRoutes } from "./automod.js";
@@ -118,7 +131,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   originalMessageId?: string;
   ephemeral = false;
   /** The modal the bot opened (callback type 9), while state is "modal". */
-  modal?: Modal;
+  modal?: APIModalInteractionResponseCallbackData;
   /** The choices the bot suggested (callback type 8) to an autocomplete interaction. */
   choices?: { name: string; value: string | number }[];
   readonly followups: APIMessage[] = [];
@@ -236,14 +249,14 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     // that works on Discord. The margin covers the callback request landing just inside it.
     const deadlineMs = this.mock.interactionDeadlineMs;
     // What the Discord app shows for an unanswered autocomplete is from the app, not the docs.
-    const shown =
+    const appText =
       this.type === InteractionType.ApplicationCommandAutocomplete
         ? "Loading options failed"
         : "The application did not respond";
     return this.waitUntil((r) => r.state !== "pending", deadlineMs + 250).catch(
       () => {
         throw new Error(
-          `discordjs-test-kit: the bot didn't answer within ${deadlineMs / 1000}s, so Discord shows the user "${shown}"`,
+          `discordjs-test-kit: the bot didn't answer within ${deadlineMs / 1000}s, so Discord shows the user "${appText}"`,
         );
       },
     );
@@ -262,7 +275,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
       throw new Error(
         `discordjs-test-kit: the bot opened the form ${describeModal(this.modal)} instead of replying. Pass the values to fill it in`,
       );
-    const shown = (r: this) =>
+    const visible = (r: this) =>
       r.replyDeleted ||
       (r.state === "replied" &&
         !!r.original &&
@@ -274,15 +287,15 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     // until the bot edits it, by this interaction or any other way. So the click is done once the
     // bot goes quiet, and the member sees the message as it then stands.
     if (this.responseType === InteractionResponseType.DeferredMessageUpdate) {
-      await this.waitWhileBotActive(shown, "settle");
+      await this.waitWhileBotActive(visible, "settle");
       return this.mock.state.requireMessage(
         this.channelId,
         this.sourceMessageId!,
       );
     }
     if (this.state === "deferred" && timeoutMs === undefined)
-      await this.waitWhileBotActive(shown);
-    else await this.waitUntil(shown, timeoutMs);
+      await this.waitWhileBotActive(visible);
+    else await this.waitUntil(visible, timeoutMs);
     if (this.replyDeleted)
       throw new Error(
         "discordjs-test-kit: the bot deleted its reply, so the user sees no answer",
@@ -1025,7 +1038,7 @@ export class DiscordMock {
     this.requireMembership(user, channel);
     const content = input.content ?? "";
     const mentions = [...content.matchAll(/<@!?(\d+)>/g)].flatMap(
-      ([, id]) => this.state.users.get(id!) ?? [],
+      ([, userId]) => this.state.users.get(userId!) ?? [],
     );
     let message: APIMessage | undefined;
     const post = () => {
@@ -1037,9 +1050,9 @@ export class DiscordMock {
         replyTo: input.replyTo?.id,
         id,
       });
-      for (const user of mentions)
-        if (!message.mentions.some((u) => u.id === user.id))
-          message.mentions.push(user);
+      for (const mentioned of mentions)
+        if (!message.mentions.some((u) => u.id === mentioned.id))
+          message.mentions.push(mentioned);
       this.gateway.dispatchMessage("MESSAGE_CREATE", message);
       return message;
     };
@@ -1330,9 +1343,9 @@ export class DiscordMock {
   ) {
     this.requireVisibleTo(user, message);
     const buttons = componentsIn(message).filter(
-      (c: any) => c.type === ComponentType.Button,
+      (c) => c.type === ComponentType.Button,
     );
-    const found = buttons.filter((b: any) => matches(buttonLabel(b), label));
+    const found = buttons.filter((b) => matches(buttonLabel(b), label));
     if (found.length !== 1)
       throw new Error(
         found.length
@@ -1346,7 +1359,7 @@ export class DiscordMock {
       );
     // docs.discord.food/resources/components#button-object: a link button (style 5) opens its
     // URL and a premium button (style 6) opens a purchase; neither sends the bot an interaction.
-    if (button.custom_id === undefined)
+    if (!("custom_id" in button))
       throw new Error(
         `discordjs-test-kit: button ${buttonLabel(button)} ${button.style === 6 ? "opens a purchase" : "opens a URL"}; the bot gets no interaction`,
       );
@@ -1372,9 +1385,9 @@ export class DiscordMock {
   ) {
     this.requireVisibleTo(user, message);
     const offered = componentsIn(message)
-      .filter((c: any) => c.type === ComponentType.StringSelect)
-      .flatMap((select: any) =>
-        (select.options ?? []).map((option: any) => ({ select, option })),
+      .filter((c) => c.type === ComponentType.StringSelect)
+      .flatMap((select) =>
+        (select.options ?? []).map((option) => ({ select, option })),
       );
     const picks = (Array.isArray(labels) ? labels : [labels]).map((label) => {
       const found = offered.filter(({ option }) =>
@@ -1389,7 +1402,7 @@ export class DiscordMock {
       return found[0]!;
     });
     const select = picks[0]!.select;
-    if (picks.some((pick) => pick.select !== select))
+    if (picks.some((p) => p.select !== select))
       throw new Error(
         `discordjs-test-kit: the options picked on ${shown(message)} are in different select menus`,
       );
@@ -1461,7 +1474,7 @@ export class DiscordMock {
         throw new Error(`discordjs-test-kit: no user, role or channel ${id}`);
     }
     // Which select accepts every pick: users and roles go in a mentionable select too.
-    const accepts = (select: any) => {
+    const accepts = (select: APIAutoPopulatedSelectMenuComponent) => {
       switch (select.type) {
         case ComponentType.UserSelect:
           return !picked.roles.length && !picked.channels.length;
@@ -1485,13 +1498,12 @@ export class DiscordMock {
           return false;
       }
     };
-    const selects = componentsIn(message).filter((c: any) =>
-      [
-        ComponentType.UserSelect,
-        ComponentType.RoleSelect,
-        ComponentType.MentionableSelect,
-        ComponentType.ChannelSelect,
-      ].includes(c.type),
+    const selects = componentsIn(message).filter(
+      (c) =>
+        c.type === ComponentType.UserSelect ||
+        c.type === ComponentType.RoleSelect ||
+        c.type === ComponentType.MentionableSelect ||
+        c.type === ComponentType.ChannelSelect,
     );
     const found = selects.filter(accepts);
     if (found.length !== 1)
@@ -1597,14 +1609,14 @@ export class DiscordMock {
       );
     // Discord numbers components it wasn't given an id for; the order here is inferred, not checked.
     let nextId = 1;
-    const id = (c: any) => c.id ?? nextId++;
-    const input = (c: any) => ({
+    const id = (c: { id?: number }) => c.id ?? nextId++;
+    const input = (c: APIComponentInLabel) => ({
       type: c.type,
       id: id(c),
       custom_id: c.custom_id,
       ...answers.get(c),
     });
-    const submitted = (modal.components as any[]).map((top) => {
+    const submitted = modal.components.map((top) => {
       if (top.type === ComponentType.ActionRow)
         return {
           type: top.type,
@@ -1825,10 +1837,15 @@ export class DiscordMock {
         if (req.params.appId !== state.applicationId)
           return respond.error(403, 50001, "Missing Access");
         // docs.discord.food/interactions/application-commands: a CHAT_INPUT command needs a description.
-        const bodies = req.body as { type?: number; description?: string }[];
-        if (bodies.some((c) => (c.type ?? 1) === 1 && !c.description))
+        const bodies = req.body as RESTPostAPIApplicationCommandsJSONBody[];
+        if (
+          bodies.some(
+            (c) =>
+              (c.type ?? 1) === 1 && !("description" in c && c.description),
+          )
+        )
           return respond.invalidFormBody();
-        return respond.json(state.setCommands(scope(req.params), req.body));
+        return respond.json(state.setCommands(scope(req.params), bodies));
       });
     rest.route(
       "PUT",
@@ -1895,14 +1912,15 @@ export class DiscordMock {
           const scope = scopeOf(req.params);
           const previous = state.commandById(scope, req.params.commandId!);
           if (!previous) return unknownCommand();
+          const body = req.body as RESTPatchAPIApplicationCommandJSONBody;
           const patch = {
             type: previous.type,
             name: previous.name,
-            ...req.body,
+            ...body,
           };
           if (state.commandNamed(scope, patch, previous.id))
             return rest.gap("rename a command onto an existing name");
-          return respond.json(state.editCommand(scope, previous.id, req.body)!);
+          return respond.json(state.editCommand(scope, previous.id, body)!);
         }),
       );
       // #delete-global-application-command: "Returns 204 No Content".
@@ -2203,12 +2221,15 @@ export class DiscordMock {
         if (!channel) return respond.unknownChannel();
         const denied = this.checkBotPerms(channel, Permission.ManageRoles);
         if (denied) return denied;
+        const body = req.body as
+          | RESTPutAPIChannelPermissionJSONBody
+          | undefined;
         this.setOverwrite(
           channel,
-          { id: req.params.overwriteId!, type: req.body?.type ?? 0 },
+          { id: req.params.overwriteId!, type: body?.type ?? 0 },
           {
-            allow: BigInt(req.body?.allow ?? 0),
-            deny: BigInt(req.body?.deny ?? 0),
+            allow: BigInt(body?.allow ?? 0),
+            deny: BigInt(body?.deny ?? 0),
           },
         );
         return respond.noContent();
@@ -2252,8 +2273,8 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const replyTo: string | undefined =
-          req.body?.message_reference?.message_id;
+        const body = req.body as RESTPostAPIChannelMessageJSONBody | undefined;
+        const replyTo = body?.message_reference?.message_id;
         // docs.discord.food/resources/message#create-message: a reply also needs READ_MESSAGE_HISTORY.
         const denied = this.checkBotPerms(
           channel,
@@ -2263,7 +2284,7 @@ export class DiscordMock {
         if (denied) return denied;
         if (replyTo && !this.historyIn(channel).some((m) => m.id === replyTo))
           return rest.gap(`reply to unknown message ${replyTo}`);
-        const overLimit = messageLimitError(req.body);
+        const overLimit = messageLimitError(body);
         if (overLimit) return overLimit;
         // A user who turned off DMs from server members can't be messaged: 50007 "Cannot send
         // messages to this user" (Discord's code table). The 403 status is inferred, not checked.
@@ -2293,20 +2314,20 @@ export class DiscordMock {
         }
         // resources/permissions: SEND_POLLS "Allows sending polls"; needed in guild channels
         // (inferred: a DM has no permissions to check).
-        if (req.body?.poll && "guild_id" in channel && channel.guild_id) {
+        if (body?.poll && "guild_id" in channel && channel.guild_id) {
           const noPolls = this.checkBotPerms(channel, Permission.SendPolls);
           if (noPolls) return noPolls;
         }
         const message = state.createMessage({
           channelId: channel.id,
           authorId: state.bot.id,
-          content: req.body?.content,
-          embeds: req.body?.embeds,
-          components: req.body?.components,
-          flags: req.body?.flags,
-          poll: pollFrom(req.body?.poll),
+          content: body?.content,
+          embeds: body?.embeds,
+          components: body?.components,
+          flags: body?.flags,
+          poll: pollFrom(body?.poll),
           replyTo,
-          pingReplied: req.body?.allowed_mentions?.replied_user ?? true,
+          pingReplied: body?.allowed_mentions?.replied_user ?? true,
         });
         this.gateway.dispatchMessage("MESSAGE_CREATE", message);
         addMentionedToPrivateThread(
@@ -2561,7 +2582,10 @@ export class DiscordMock {
       "POST",
       "/users/@me/channels",
       authed((req) => {
-        const user = state.users.get(req.body?.recipient_id);
+        const body = req.body as
+          | RESTPostAPICurrentUserCreateDMChannelJSONBody
+          | undefined;
+        const user = state.users.get(body?.recipient_id ?? "");
         if (!user) return respond.error(404, 10013, "Unknown User");
         return respond.json(state.dmChannel(user.id));
       }),
@@ -2584,10 +2608,9 @@ export class DiscordMock {
       if (Date.now() - run.createdAt > this.interactionDeadlineMs)
         return respond.unknownInteraction();
 
-      const { type, data } = req.body as {
-        type: InteractionResponseType;
-        data?: any;
-      };
+      const body = req.body as RESTPostAPIInteractionCallbackJSONBody;
+      const { type } = body;
+      const data = "data" in body ? body.data : undefined;
       // receiving-and-responding#interaction-callback-type: AUTOCOMPLETE_RESULT (8) answers an
       // autocomplete, and an autocomplete takes nothing else. Discord's answer otherwise is unchecked.
       const isAutocomplete =
@@ -2604,19 +2627,19 @@ export class DiscordMock {
             ? choicesLimitError(data)
             : messageLimitError(data);
       if (overLimit) return overLimit;
-      const ephemeral = !!((data?.flags ?? 0) & MessageFlags.Ephemeral);
       run.responseType = type;
-      switch (type) {
+      switch (body.type) {
         case InteractionResponseType.ChannelMessageWithSource:
         case InteractionResponseType.DeferredChannelMessageWithSource: {
           const deferred =
             type === InteractionResponseType.DeferredChannelMessageWithSource;
-          run.ephemeral = ephemeral;
+          const flags = body.data?.flags ?? 0;
+          run.ephemeral = !!(flags & MessageFlags.Ephemeral);
           const message = state.createMessage({
             channelId: run.channelId,
             authorId: state.bot.id,
-            ...(deferred ? {} : pickMessageFields(data)),
-            flags: (data?.flags ?? 0) | (deferred ? MessageFlags.Loading : 0),
+            ...(deferred ? {} : pickMessageFields(body.data)),
+            flags: flags | (deferred ? MessageFlags.Loading : 0),
             interaction: interactionMetadata(run),
             webhookId: state.applicationId,
           });
@@ -2638,13 +2661,13 @@ export class DiscordMock {
           const pollGap = pollEditGap(
             rest,
             state.requireMessage(run.channelId, run.sourceMessageId),
-            data,
+            body.data,
           );
           if (pollGap) return pollGap;
           const updated = state.updateMessage(
             run.channelId,
             run.sourceMessageId,
-            pickMessageFields(data),
+            pickMessageFields(body.data),
           );
           this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
           run.state = "replied";
@@ -2653,7 +2676,7 @@ export class DiscordMock {
         // docs.discord.food/interactions/receiving-and-responding: MODAL (9) is allowed by
         // APPLICATION_COMMAND and MESSAGE_COMPONENT only. What Discord answers otherwise is unchecked.
         case InteractionResponseType.ApplicationCommandAutocompleteResult:
-          run.choices = data?.choices ?? [];
+          run.choices = body.data?.choices ?? [];
           run.state = "replied";
           break;
         case InteractionResponseType.Modal:
@@ -2662,7 +2685,7 @@ export class DiscordMock {
             run.type !== InteractionType.MessageComponent
           )
             return rest.gap(`callback type 9 on a ${run.type} interaction`);
-          run.modal = data as Modal;
+          run.modal = body.data;
           run.state = "modal";
           break;
         default:
@@ -2815,7 +2838,9 @@ export class DiscordMock {
         channelId: run.channelId,
         authorId: state.bot.id,
         ...pickMessageFields(req.body),
-        flags: req.body?.flags ?? 0,
+        flags:
+          (req.body as RESTPostAPIInteractionFollowupJSONBody | undefined)
+            ?.flags ?? 0,
         interaction: {
           ...interactionMetadata(run),
           originalResponseMessageId: run.originalMessageId,
@@ -2913,14 +2938,17 @@ function interactionMetadata(run: InteractionRun) {
  * removing buttons) is unchecked, so editing a poll message is a Gap, as is adding a poll to a
  * message that isn't a deferred reply still loading (that one becomes the reply, inferred).
  */
-function pollEditGap(rest: RestRouter, message: APIMessage, body: any) {
+function pollEditGap(rest: RestRouter, message: APIMessage, raw: unknown) {
+  const body = raw as RESTPostAPIChannelMessageJSONBody | undefined;
   if (message.poll) return rest.gap("editing a poll message");
   if (body?.poll && !((message.flags ?? 0) & MessageFlags.Loading))
     return rest.gap("adding a poll to a message in an edit");
   return undefined;
 }
 
-function pickMessageFields(body: any) {
+function pickMessageFields(raw: unknown) {
+  // The widest edit body: an interaction's webhook edit is the one that can carry a poll.
+  const body = raw as RESTPatchAPIWebhookWithTokenMessageJSONBody | undefined;
   if (!body) return {};
   const out: Partial<
     Pick<APIMessage, "content" | "embeds" | "components" | "poll">
@@ -3211,7 +3239,7 @@ export function readable(message: APIMessage): string {
     // Components V2 Text Displays carry a message's text in place of content.
     ...componentsIn(message)
       .filter((c) => c.type === ComponentType.TextDisplay)
-      .map((c) => c.content as string),
+      .map((c) => c.content),
   ]
     .filter(Boolean)
     .join("\n");
@@ -3225,18 +3253,20 @@ export function shown(message: APIMessage): string {
 }
 
 /** Every component on `message`, nested ones included (rows, and Components V2 containers and accessories). */
-function componentsIn(message: APIMessage): any[] {
-  const found: any[] = [];
-  const walk = (component: any) => {
+function componentsIn(message: APIMessage): APIMessageComponent[] {
+  const found: APIMessageComponent[] = [];
+  const walk = (component: APIMessageComponent) => {
     found.push(component);
-    for (const child of component.components ?? []) walk(child);
-    if (component.accessory) walk(component.accessory);
+    if ("components" in component)
+      for (const child of component.components ?? []) walk(child);
+    if ("accessory" in component) walk(component.accessory);
   };
   for (const component of message.components ?? []) walk(component);
   return found;
 }
 
-function buttonLabel(button: any): string {
+function buttonLabel(button: APIButtonComponent): string {
+  if (button.style === ButtonStyle.Premium) return "(no label)";
   return button.label ?? button.emoji?.name ?? "(no label)";
 }
 
@@ -3255,13 +3285,6 @@ export function matches(
 
 export function quote(label: string | RegExp) {
   return typeof label === "string" ? JSON.stringify(label) : String(label);
-}
-
-/** The modal a bot opens with callback type 9: docs.discord.food/interactions/receiving-and-responding#modal. */
-export interface Modal {
-  custom_id: string;
-  title: string;
-  components: unknown[];
 }
 
 /**
@@ -3285,7 +3308,7 @@ export type FormValue =
  * leaves the field as the bot pre-filled it.
  */
 function submittedField(
-  input: any,
+  input: APIComponentInLabel,
   given: FormValue | undefined,
   at: string,
   world: {
@@ -3297,7 +3320,9 @@ function submittedField(
     v === undefined ? [] : Array.isArray(v) ? v : [v];
   const wrong = (what: string) =>
     new Error(`discordjs-test-kit: ${at} takes ${what}`);
-  const required = input.required ?? input.type !== ComponentType.FileUpload;
+  const required =
+    ("required" in input ? input.required : undefined) ??
+    input.type !== ComponentType.FileUpload;
   const count = (n: number, min = required ? 1 : 0, max = 1) => {
     if (required && n === 0)
       throw new Error(
@@ -3308,14 +3333,17 @@ function submittedField(
         `discordjs-test-kit: ${at} takes ${min === max ? min : `${min} to ${max}`} picks, not ${n}`,
       );
   };
-  const byLabel = (labels: string[]) =>
+  const byLabel = (
+    options: { label: string; value: string }[],
+    labels: string[],
+  ) =>
     labels.map((label) => {
-      const option = (input.options as any[]).find((o) => o.label === label);
+      const option = options.find((o) => o.label === label);
       if (!option)
         throw new Error(
-          `discordjs-test-kit: ${at} has no option "${label}". It offers: ${(input.options as any[]).map((o) => `"${o.label}"`).join(", ")}`,
+          `discordjs-test-kit: ${at} has no option "${label}". It offers: ${options.map((o) => `"${o.label}"`).join(", ")}`,
         );
-      return option.value as string;
+      return option.value;
     });
   switch (input.type) {
     case ComponentType.TextInput: {
@@ -3338,10 +3366,8 @@ function submittedField(
         throw wrong("option labels");
       const values =
         given === undefined
-          ? (input.options as any[])
-              .filter((o) => o.default)
-              .map((o) => o.value)
-          : byLabel(list(given as string | string[]));
+          ? input.options.filter((o) => o.default).map((o) => o.value)
+          : byLabel(input.options, list(given as string | string[]));
       count(
         values.length,
         input.min_values ?? (required ? 1 : 0),
@@ -3357,8 +3383,8 @@ function submittedField(
         throw wrong("one option label");
       const value =
         given === undefined
-          ? ((input.options as any[]).find((o) => o.default)?.value ?? null)
-          : byLabel([given])[0]!;
+          ? (input.options.find((o) => o.default)?.value ?? null)
+          : byLabel(input.options, [given])[0]!;
       count(value === null ? 0 : 1);
       return { value };
     }
@@ -3394,27 +3420,30 @@ function submittedField(
       count(files.length, input.min_values ?? 0, input.max_values ?? 10);
       return { values: world.upload(files) };
     }
+    // The types list every component a label holds; a bot can still send a newer one.
     default:
       throw new Error(
-        `discordjs-test-kit: ${at} is a component of type ${input.type}, which forms don't model yet`,
+        `discordjs-test-kit: ${at} is a component of type ${(input as { type: number }).type}, which forms don't model yet`,
       );
   }
 }
 
-function modalFields(modal: Modal): { label: string; input: any }[] {
-  return (modal.components as any[]).flatMap((top) => {
+function modalFields(
+  modal: APIModalInteractionResponseCallbackData,
+): { label: string; input: APIComponentInLabel }[] {
+  return modal.components.flatMap((top) => {
     if (top.type === ComponentType.Label)
-      return [{ label: top.label as string, input: top.component }];
+      return [{ label: top.label, input: top.component }];
     if (top.type === ComponentType.ActionRow)
-      return (top.components as any[]).map((input) => ({
-        label: input.label as string,
+      return top.components.map((input) => ({
+        label: input.label ?? "",
         input,
       }));
     return [];
   });
 }
 
-function describeModal(modal: Modal): string {
+function describeModal(modal: APIModalInteractionResponseCallbackData): string {
   const labels = modalFields(modal).map((f) => `"${f.label}"`);
   return `"${modal.title}" (fields ${labels.join(", ") || "none"})`;
 }

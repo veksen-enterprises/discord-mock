@@ -203,11 +203,11 @@ export function registerWebhookRoutes(
     const { refused, webhook } = named(req);
     if (refused) return refused;
     const channel = state.requireChannel(webhook.channelId);
-    if (req.query.get("thread_id") || req.body?.thread_name)
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (req.query.get("thread_id") || body.thread_name)
       return rest.gap("executing a webhook into a thread");
     if (!state.messages.has(channel.id))
       return rest.gap("executing a webhook in a channel without messages");
-    const body = (req.body ?? {}) as Record<string, unknown>;
     if (body.content == null && body.embeds == null && body.components == null)
       // "You must provide a value for at least one of content, embeds, components, file, or poll":
       // 50006 "Cannot send an empty message" from the code table (pairing inferred).

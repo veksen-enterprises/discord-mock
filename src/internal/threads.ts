@@ -6,6 +6,8 @@ import {
   MessageFlags,
   type APIChannel,
   type APIThreadChannel,
+  type RESTPostAPIChannelMessagesThreadsJSONBody,
+  type RESTPostAPIChannelThreadsJSONBody,
 } from "discord-api-types/v10";
 import { messageLimitError, threadNameError } from "./limits.js";
 import type { DiscordMock } from "./mock.js";
@@ -108,9 +110,13 @@ export function registerThreadRoutes(
             ? ChannelType.AnnouncementThread
             : undefined;
       if (type === undefined) return wrongChannelType();
+      const body = req.body as
+        | RESTPostAPIChannelMessagesThreadsJSONBody
+        | undefined;
       const denied = refuse(parent, Permission.CreatePublicThreads);
       if (denied) return denied;
-      const badName = threadNameError(req.body?.name ?? "");
+      const name = body?.name ?? "";
+      const badName = threadNameError(name);
       if (badName) return badName;
       if (state.channels.has(message.id))
         return respond.error(
@@ -122,10 +128,10 @@ export function registerThreadRoutes(
         id: message.id,
         type,
         parentId: parent.id,
-        name: req.body?.name,
+        name,
         ownerId: bot,
-        autoArchiveDuration: req.body?.auto_archive_duration,
-        rateLimitPerUser: req.body?.rate_limit_per_user ?? undefined,
+        autoArchiveDuration: body?.auto_archive_duration,
+        rateLimitPerUser: body?.rate_limit_per_user ?? undefined,
       });
       announceCreate(thread);
       // Not an edit: edited_timestamp stays as it was.
@@ -153,7 +159,8 @@ export function registerThreadRoutes(
       if (!parent) return respond.unknownChannel();
       if (parent.type === ChannelType.GuildForum)
         return startForumPost(req, parent);
-      const type = (req.body?.type ?? ChannelType.PrivateThread) as ChannelType;
+      const body = req.body as RESTPostAPIChannelThreadsJSONBody | undefined;
+      const type = body?.type ?? ChannelType.PrivateThread;
       const allowed =
         parent.type === ChannelType.GuildText
           ? [ChannelType.PublicThread, ChannelType.PrivateThread]
@@ -168,18 +175,19 @@ export function registerThreadRoutes(
           : Permission.CreatePublicThreads,
       );
       if (denied) return denied;
-      const badName = threadNameError(req.body?.name ?? "");
+      const name = body?.name ?? "";
+      const badName = threadNameError(name);
       if (badName) return badName;
       const thread = state.createThread({
         type,
         parentId: parent.id,
-        name: req.body?.name,
+        name,
         ownerId: bot,
-        autoArchiveDuration: req.body?.auto_archive_duration,
-        rateLimitPerUser: req.body?.rate_limit_per_user ?? undefined,
+        autoArchiveDuration: body?.auto_archive_duration,
+        rateLimitPerUser: body?.rate_limit_per_user ?? undefined,
         invitable:
           type === ChannelType.PrivateThread
-            ? (req.body?.invitable ?? true)
+            ? (body?.invitable ?? true)
             : undefined,
       });
       announceCreate(thread);

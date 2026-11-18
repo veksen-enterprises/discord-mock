@@ -8,6 +8,7 @@ import {
   type APIGuildMember,
   type APIRole,
   type APIUser,
+  type RESTPutAPIGuildBanJSONBody,
 } from "discord-api-types/v10";
 import { reasonOf, recordAudit } from "./audit.js";
 import type { DiscordMock } from "./mock.js";
@@ -298,7 +299,10 @@ export function registerMemberRoutes(
       )
         return respond.missingPermissions();
       // Deleting the user's recent messages isn't modelled: say so rather than pretend.
-      const seconds = Number(req.body?.delete_message_seconds ?? 0);
+      const seconds = Number(
+        (req.body as RESTPutAPIGuildBanJSONBody | undefined)
+          ?.delete_message_seconds ?? 0,
+      );
       if (seconds > 0) return rest.gap("ban with delete_message_seconds");
       banUser(mock, guild, user, bot, reasonOf(req));
       return respond.noContent();

@@ -3,7 +3,10 @@ import { createSocket, type RemoteInfo, type Socket } from "node:dgram";
 import { EventEmitter, once } from "node:events";
 import { createServer, type Server } from "node:https";
 import type { AddressInfo } from "node:net";
-import { VoiceOpcodes } from "discord-api-types/voice/v8";
+import {
+  VoiceOpcodes,
+  type VoiceSendPayload,
+} from "discord-api-types/voice/v8";
 import { WebSocketServer, type WebSocket } from "ws";
 import { selfSignedCertificate, trustCertificate } from "./certificate.js";
 
@@ -126,13 +129,13 @@ export class VoiceServer extends EventEmitter<{ sound: [VoiceSession] }> {
     socket.on("message", (raw, binary) => {
       // Binary messages are DAVE's, which isn't modelled.
       if (binary) return this.recordGap("voice DAVE binary message");
-      let op: number;
-      let d: any;
+      let payload: VoiceSendPayload;
       try {
-        ({ op, d } = JSON.parse(raw.toString()));
+        payload = JSON.parse(raw.toString());
       } catch {
         return socket.close(4002, "Failed to decode payload");
       }
+      const { op, d } = payload;
       if (op === VoiceOpcodes.Heartbeat)
         return send(VoiceOpcodes.HeartbeatAck, { t: d?.t ?? d }, false);
       if (op === VoiceOpcodes.Identify) {
