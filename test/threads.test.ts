@@ -222,3 +222,18 @@ it("adds a member the bot mentions in its private thread, so they can answer the
   const record = mock.state.requireChannel(ticket.id);
   expect(mock.as(alice).sendMessage(record, "hi").content).toBe("hi");
 });
+
+it("refuses a thread name over 100 characters, which discord.js sends as is", async () => {
+  const { general, channel, alice } = await startInText(
+    SEND | Permission.CreatePublicThreads,
+  );
+  const posted = mock.as(alice).sendMessage(general, "a very long question");
+  const message = await channel.messages.fetch(posted.id);
+
+  const error = await message
+    .startThread({ name: "x".repeat(101) })
+    .catch((e: unknown) => e);
+
+  expect(error).toMatchObject({ code: 50035 });
+  expect(mock.state.channels.has(posted.id)).toBe(false);
+});

@@ -69,6 +69,22 @@ export function choicesLimitError(body: unknown): RestResponse | undefined {
   return limitError(problems);
 }
 
+// resources/channel#start-thread-from-message and #modify-channel-json-params-thread: a thread's
+// name is 1-100 characters. Discord doesn't trim it here as far as the docs say; untrimmed is inferred.
+export function threadNameError(name: unknown): RestResponse | undefined {
+  if (typeof name !== "string") return undefined;
+  if (name.length >= 1 && name.length <= 100) return undefined;
+  return limitError([
+    {
+      path: ["name"],
+      message:
+        name.length > 100
+          ? "Must be 100 or fewer in length."
+          : "Must be 1 or more in length.",
+    },
+  ]);
+}
+
 function limitError(problems: Problem[]): RestResponse | undefined {
   if (problems.length === 0) return undefined;
   const errors: Record<string, unknown> = {};

@@ -6,6 +6,7 @@ import {
   type APIChannel,
   type APIThreadChannel,
 } from "discord-api-types/v10";
+import { threadNameError } from "./limits.js";
 import type { DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
@@ -79,6 +80,8 @@ export function registerThreadRoutes(
       if (type === undefined) return wrongChannelType();
       const denied = refuse(parent, Permission.CreatePublicThreads);
       if (denied) return denied;
+      const badName = threadNameError(req.body?.name ?? "");
+      if (badName) return badName;
       if (state.channels.has(message.id))
         return respond.error(
           400,
@@ -131,6 +134,8 @@ export function registerThreadRoutes(
           : Permission.CreatePublicThreads,
       );
       if (denied) return denied;
+      const badName = threadNameError(req.body?.name ?? "");
+      if (badName) return badName;
       const thread = state.createThread({
         type,
         parentId: parent.id,
@@ -184,6 +189,8 @@ export function registerThreadRoutes(
             : 0n,
       );
       if (denied) return denied;
+      const badName = threadNameError(body.name);
+      if (badName) return badName;
       if (typeof body.name === "string") thread.name = body.name;
       if (typeof body.archived === "boolean") {
         meta.archived = body.archived;
