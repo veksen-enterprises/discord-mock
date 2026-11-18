@@ -1,0 +1,23 @@
+---
+// Every code sample is a test in ../test/docs that `npm test` runs, so a sample can't go stale.
+// The test imports the kit from source and the fixture bot; a reader imports the package and
+// their own bot.
+import { Code } from "@astrojs/starlight/components";
+
+interface Props {
+  name: string;
+}
+
+const samples = import.meta.glob<string>("../../../test/docs/*.test.ts", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+const source = samples[`../../../test/docs/${Astro.props.name}.test.ts`];
+if (!source) throw new Error(`no sample test/docs/${Astro.props.name}.test.ts`);
+const code = source
+  .replace('"../../src/index.js"', '"discordjs-test-kit"')
+  .replace('"../fixtures/bot.js"', '"../src/bot.js"');
+---
+
+<Code code={code} lang="ts" title={`${Astro.props.name}.test.ts`} />

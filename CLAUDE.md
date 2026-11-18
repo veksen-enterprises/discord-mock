@@ -48,6 +48,8 @@ npm run format:check  # oxfmt (check only)
   compared by status and shape; accepted differences in `baseline.json`. Runs nightly
   in Actions (`.github/workflows/contract.yml`); this container can't reach discord.com
 - `docs/adoption.md` — what each consumer needs, checked against their repos
+- `site/` — the docs site (Astro + Starlight), its own package.json. `cd site && npm ci && npm run dev`.
+  Code samples are tests in `test/docs/`; the API reference is generated from `src/index.ts`
 
 ## Modelling Discord
 

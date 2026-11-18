@@ -1,0 +1,4 @@
+/* The testing guide renders the skill file, whose own title repeats the page's. */
+.skill > h1:first-child {
+  display: none;
+}
