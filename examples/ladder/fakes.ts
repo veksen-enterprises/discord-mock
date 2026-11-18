@@ -2,7 +2,7 @@
  * The hand-rolled fakes, as sin-bot has them in `src/test/discord-utils.ts` (trimmed). Kept here only
  * to show what the mock replaces.
  */
-import type { ChatInputCommandInteraction } from "discord.js";
+import type { StringSelectMenuInteraction } from "discord.js";
 import { vi } from "vitest";
 
 // Runs for every test file that imports this module: discord.js's builders become stubs.
@@ -15,15 +15,18 @@ vi.mock("discord.js", async () => ({
   })),
 }));
 
-export function createMockChatInputCommandInteraction(
-  options: { userId?: string; username?: string; displayName?: string } = {},
-) {
-  const { userId = "123456789", username = "TestUser", displayName } = options;
+/** A pick from a select menu, with the channel lookup and the DM send stubbed. */
+export function createMockStringSelectMenuInteraction(options: {
+  userId: string;
+  values: string[];
+  channels: { name: string; isSendable(): boolean; send: unknown }[];
+}) {
   return {
-    user: { id: userId, username, displayName: username },
-    member: displayName === undefined ? null : { displayName },
-    guildId: "987654321",
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-  } as unknown as ChatInputCommandInteraction;
+    user: { id: options.userId },
+    values: options.values,
+    channel: null,
+    guild: { channels: { cache: options.channels } },
+    client: { users: { send: vi.fn().mockResolvedValue(undefined) } },
+    update: vi.fn().mockResolvedValue(undefined),
+  } as unknown as StringSelectMenuInteraction;
 }
