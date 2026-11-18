@@ -2532,6 +2532,10 @@ export function readable(message: APIMessage): string {
       ...(embed.fields ?? []).flatMap((field) => [field.name, field.value]),
       embed.footer?.text,
     ]),
+    // Components V2 Text Displays carry a message's text in place of content.
+    ...componentsIn(message)
+      .filter((c) => c.type === ComponentType.TextDisplay)
+      .map((c) => c.content as string),
   ]
     .filter(Boolean)
     .join("\n");

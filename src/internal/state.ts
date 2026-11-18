@@ -558,7 +558,7 @@ export class DiscordState extends EventEmitter<{
       mention_roles: [],
       attachments,
       embeds: input.embeds ?? [],
-      components: input.components ?? [],
+      components: withIds(input.components ?? []),
       pinned: false,
       // 20 CHAT_INPUT_COMMAND for any interaction response, followups and component replies
       // included: inferred, not checked (the docs only describe 20 as the slash command reply).
@@ -646,6 +646,8 @@ export class DiscordState extends EventEmitter<{
     patch: Partial<APIMessage>,
   ): APIMessage {
     const message = this.requireMessage(channelId, messageId);
+    if (patch.components)
+      patch = { ...patch, components: withIds(patch.components) };
     Object.assign(message, patch, {
       edited_timestamp: new Date().toISOString(),
     });
@@ -808,4 +810,29 @@ export class DiscordState extends EventEmitter<{
 /** Names are unique "per application, per type, within each scope". */
 function commandKey(body: { name?: string; type?: number }) {
   return `${body.type ?? 1}:${body.name}`;
+}
+
+/**
+ * components/reference, anatomy of a component: `id` "must be unique within the message and is
+ * generated sequentially if left empty", skipping ids already used, and 0 counts as empty. Numbering
+ * depth first from 1, accessories after children, is inferred, not checked.
+ */
+function withIds<T>(components: T[]): T[] {
+  type Node = { id?: number; components?: Node[]; accessory?: Node };
+  const copy = structuredClone(components) as Node[];
+  const all: Node[] = [];
+  const walk = (c: Node) => {
+    all.push(c);
+    c.components?.forEach(walk);
+    if (c.accessory) walk(c.accessory);
+  };
+  copy.forEach(walk);
+  const used = new Set(all.map((c) => c.id).filter(Boolean));
+  let next = 1;
+  for (const c of all) {
+    if (c.id) continue;
+    while (used.has(next)) next++;
+    c.id = next++;
+  }
+  return copy as T[];
 }

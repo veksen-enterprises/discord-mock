@@ -200,8 +200,26 @@ function messageProblems(body: MessageBody | undefined): Problem[] {
       message: "Embed size exceeds maximum size of 6000",
     });
 
-  // Components V2 messages have their own limits (40 components, 4000 characters of text), not modelled.
-  if (((body.flags ?? 0) & MessageFlags.IsComponentsV2) === 0) {
+  // Components V2 (components/reference): "Messages allow up to 40 total components", nested ones
+  // and accessories counted (inferred); "the content and embeds fields will no longer work", which
+  // the mock answers with 50035 (inferred, not checked).
+  if ((body.flags ?? 0) & MessageFlags.IsComponentsV2) {
+    if (countComponents(body.components ?? []) > 40)
+      problems.push({
+        path: ["components"],
+        message: "Must be 40 or fewer in length.",
+      });
+    if (body.content)
+      problems.push({
+        path: ["content"],
+        message: "Cannot be used with the IS_COMPONENTS_V2 flag.",
+      });
+    if (body.embeds?.length)
+      problems.push({
+        path: ["embeds"],
+        message: "Cannot be used with the IS_COMPONENTS_V2 flag.",
+      });
+  } else {
     const rows = body.components ?? [];
     if (rows.length > 5)
       problems.push({
@@ -229,4 +247,20 @@ function messageProblems(body: MessageBody | undefined): Problem[] {
     });
   }
   return problems;
+}
+
+type NestedComponent = {
+  components?: NestedComponent[];
+  accessory?: NestedComponent;
+};
+
+function countComponents(components: NestedComponent[]): number {
+  return components.reduce(
+    (n, c) =>
+      n +
+      1 +
+      countComponents(c.components ?? []) +
+      (c.accessory ? countComponents([c.accessory]) : 0),
+    0,
+  );
 }

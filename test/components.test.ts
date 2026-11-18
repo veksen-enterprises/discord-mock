@@ -8,10 +8,16 @@ import {
   Events,
   GatewayIntentBits,
   MessageFlags,
+  SectionBuilder,
   StringSelectMenuBuilder,
+  TextDisplayBuilder,
 } from "discord.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
+import {
+  createDiscordMock,
+  readable,
+  type DiscordMock,
+} from "../src/internal/mock.js";
 
 let mock: DiscordMock;
 let client: Client;
@@ -275,4 +281,64 @@ it("sends several picks from a multi-select, and refuses a count outside its min
   expect(() => mock.as(alice).selectOption(menu, "News")).toThrow(
     "takes 2 to 3 picks, not 1",
   );
+});
+
+it("reads a Components V2 reply's text, numbers its components, and refuses content beside them", async () => {
+  const guild = mock.createGuild("ladder");
+  const general = mock.createTextChannel(guild, "general");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  const refused: unknown[] = [];
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    const card = new ContainerBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Season 3"))
+      .addSectionComponents(
+        new SectionBuilder()
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("Rank 1: alice"),
+          )
+          .setButtonAccessory(
+            new ButtonBuilder()
+              .setCustomId("more")
+              .setLabel("More")
+              .setStyle(ButtonStyle.Secondary),
+          ),
+      );
+    await interaction
+      .reply({
+        flags: MessageFlags.IsComponentsV2,
+        content: "no",
+        components: [card],
+      })
+      .catch((e: unknown) => refused.push(e));
+    await interaction.reply({
+      flags: MessageFlags.IsComponentsV2,
+      components: [card],
+    });
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  await client.application!.commands.set([
+    { name: "ladder", description: "ladder" },
+  ]);
+
+  const reply = await mock.as(alice).slashCommand(general, "ladder").reply();
+
+  expect(readable(reply)).toBe("Season 3\nRank 1: alice");
+  expect(refused).toMatchObject([{ code: 50035 }]);
+  const container = reply.components![0] as unknown as {
+    id: number;
+    components: { id: number; accessory?: { id: number } }[];
+  };
+  expect([
+    container.id,
+    ...container.components.map((c) => c.id),
+    container.components[1]!.accessory!.id,
+  ]).toEqual([1, 2, 3, 5]);
 });
