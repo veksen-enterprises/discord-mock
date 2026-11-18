@@ -69,6 +69,7 @@ it("should record the result when the winner reports", async () => {
 | join, move, leave voice             | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                             |
 | change nickname, leave the server   | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | change their display name           | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                      |
+| override who can use a command      | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                        |
 | kick the bot from the server        | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                             |
 | rename the server                   | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                          |
 | make Discord fail a route           | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |

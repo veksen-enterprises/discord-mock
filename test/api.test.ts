@@ -367,3 +367,20 @@ it("tells the bot a member joined and left voice", async () => {
   await vi.waitFor(() => expect(seen).toEqual(["lobby", null]));
   expect(() => alice.leaveVoice()).toThrow("isn't in voice");
 });
+
+it("lets an admin open an admin-only command to one member", async () => {
+  const { discord, server, generalChannel, alice, bob } = await startBot();
+  await expect(alice.run(generalChannel, "settings")).rejects.toThrow(
+    "needs permissions",
+  );
+
+  discord.commandPermissions(server, "settings", [
+    { target: alice, allow: true },
+    { target: bob, allow: false },
+  ]);
+
+  await expect(alice.run(generalChannel, "settings")).resolves.toBeTruthy();
+  await expect(bob.run(generalChannel, "settings")).rejects.toThrow(
+    "an override denies them",
+  );
+});

@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
+  ApplicationCommandPermissionType,
   ApplicationCommandType,
   ApplicationCommandOptionType,
   ChannelType,
@@ -18,6 +19,10 @@ import {
   type APIMessage,
   type APIUser,
 } from "discord-api-types/v10";
+import {
+  overridesFor,
+  registerCommandPermissionRoutes,
+} from "./command-permissions.js";
 import { Gateway } from "./gateway.js";
 import { registerGuildRoutes } from "./guilds.js";
 import { deleteInvite, registerInviteRoutes } from "./invites.js";
@@ -827,7 +832,20 @@ export class DiscordMock {
     command: APIApplicationCommand,
     shownName: string,
   ) {
-    if (!guild || command.default_member_permissions == null) return;
+    if (!guild) return;
+    // A command-level override for this very member decides, over default_member_permissions
+    // (change-log, "Upcoming Application Command Permission Changes"). Role, @everyone, channel
+    // and app-level overrides aren't enforced: their precedence is only in a flowchart image.
+    const own = overridesFor(this, guild, command.id)?.find(
+      (p) =>
+        p.type === ApplicationCommandPermissionType.User && p.id === user.id,
+    );
+    if (own?.permission) return;
+    if (own)
+      throw new Error(
+        `discordjs-test-kit: ${user.username} can't use ${shownName}: an override denies them`,
+      );
+    if (command.default_member_permissions == null) return;
     const needed = BigInt(command.default_member_permissions);
     const has = computePermissions(this.state, guild, user.id, channel);
     const allowed =
@@ -1199,6 +1217,7 @@ export class DiscordMock {
         return handler(req);
       };
     registerMessageRoutes(this, authed);
+    registerCommandPermissionRoutes(this, authed);
 
     rest.route(
       "GET",

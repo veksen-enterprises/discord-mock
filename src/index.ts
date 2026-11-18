@@ -1,11 +1,13 @@
 import { once } from "node:events";
-import type {
-  APIMessage,
-  APIUser,
-  RESTPostAPIApplicationCommandsJSONBody,
+import {
+  ApplicationCommandPermissionType,
+  type APIMessage,
+  type APIUser,
+  type RESTPostAPIApplicationCommandsJSONBody,
 } from "discord-api-types/v10";
 import type { Client } from "discord.js";
 import { onTestFinished } from "vitest";
+import { setCommandPermissions } from "./internal/command-permissions.js";
 import { createInvite } from "./internal/invites.js";
 import {
   createDiscordMock,
@@ -321,6 +323,45 @@ class Discord {
    */
   fail(method: string, path: string, response: RestResponse): void {
     this.mock.use(method, path, () => response);
+  }
+
+  /**
+   * An admin overrides who can use `command` in `guild` (Server Settings > Integrations): each
+   * `target` is a member, a channel, or the guild itself for @everyone. The bot hears
+   * `applicationCommandPermissionsUpdate` and can fetch them. Call it after `start`, once the
+   * command is registered. Only an override naming a member changes whether they can run it here.
+   * @example discord.commandPermissions(server, "ban", [{ target: mod, allow: true }]);
+   */
+  commandPermissions<G extends string>(
+    guild: Guild<G>,
+    command: string,
+    overrides: {
+      target: Member<NoInfer<G>> | TextChannel<NoInfer<G>> | Guild<NoInfer<G>>;
+      allow: boolean;
+    }[],
+  ): void {
+    const record = this.g(guild);
+    const found = this.mock.state.findCommand(record.id, command);
+    if (!found)
+      throw new Error(
+        `discordjs-test-kit: no command "${command}" in ${record.name}; call this after start`,
+      );
+    const { users, channels } = this.mock.state;
+    this.markAction();
+    setCommandPermissions(
+      this.mock,
+      record,
+      found.id,
+      overrides.map(({ target, allow }) => ({
+        id: target.id,
+        type: users.has(target.id)
+          ? ApplicationCommandPermissionType.User
+          : channels.has(target.id)
+            ? ApplicationCommandPermissionType.Channel
+            : ApplicationCommandPermissionType.Role,
+        permission: allow,
+      })),
+    );
   }
 
   /**

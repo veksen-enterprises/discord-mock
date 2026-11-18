@@ -3,6 +3,7 @@ import {
   ApplicationCommandType,
   ChannelType,
   type APIApplicationCommand,
+  type APIApplicationCommandPermission,
   type APIBan,
   type ChannelFlags,
   type GuildMemberFlags,
@@ -66,6 +67,11 @@ export class DiscordState extends EventEmitter<{
   readonly commands = new Map<string, Map<string, APIApplicationCommand>>();
   /** Who is in a voice channel, by guild id, then user id. */
   readonly voiceStates = new Map<string, Map<string, APIVoiceState>>();
+  /** Command permission overrides by guild id, then command id (or the application id for all). */
+  readonly commandPermissions = new Map<
+    string,
+    Map<string, APIApplicationCommandPermission[]>
+  >();
   /** Invites by code. */
   readonly invites = new Map<string, InviteRecord>();
 
@@ -687,6 +693,10 @@ export class DiscordState extends EventEmitter<{
   deleteCommand(scope: string, id: string): boolean {
     const commands = this.scopeCommands(scope);
     const key = [...commands].find(([, command]) => command.id === id)?.[0];
+    // "Deleting or renaming a command will permanently delete all permissions for the command"
+    // (Edit Application Command Permissions). Renaming isn't modelled.
+    for (const overrides of this.commandPermissions.values())
+      overrides.delete(id);
     return key ? commands.delete(key) : false;
   }
 
