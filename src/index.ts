@@ -53,6 +53,17 @@ export type VoiceChannel<G extends string = string> = Handle<"voice", G>;
 export type Forum<G extends string = string> = Handle<"forum", G>;
 /** A thread, such as a forum post. */
 export type Thread<G extends string = string> = Handle<"thread", G>;
+/** A role. Members pick it in a role select. */
+export type Role<G extends string = string> = Handle<"role", G>;
+/** What a member can pick in a user, role, mentionable or channel select. */
+export type Pickable<G extends string = string> =
+  | Member<G>
+  | Role<G>
+  | Category<G>
+  | TextChannel<G>
+  | VoiceChannel<G>
+  | Forum<G>
+  | Thread<G>;
 /** A message as Discord stores it. The object is live: edits, reactions and updates show up on it. */
 export type Message = APIMessage;
 
@@ -135,7 +146,18 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    */
   select(
     message: Message,
-    label: string | RegExp,
+    label: string | RegExp | (string | RegExp)[],
+    form?: Form,
+  ): Promise<Message>;
+  /**
+   * Picks members, roles or channels in the user, role, mentionable or channel select on `message`
+   * that offers them, one or several (between its min_values and max_values). Resolves like the
+   * label form.
+   * @example await alice.select(setupPanel, [modRole, adminRole]);
+   */
+  select(
+    message: Message,
+    picks: Pickable<G> | Pickable<G>[],
     form?: Form,
   ): Promise<Message>;
   /**
@@ -255,6 +277,11 @@ class Discord {
     name: string,
   ): VoiceChannel<G> {
     return handle(this.mock.createVoiceChannel(this.g(guild), name).id, name);
+  }
+
+  /** A role in `guild` with no permissions, for members to pick in a role select. */
+  role<G extends string>(guild: Guild<G>, name: string): Role<G> {
+    return handle(this.mock.createRole(this.g(guild), name, 0n).id, name);
   }
 
   forum<G extends string>(guild: Guild<G>, name: string): Forum<G> {
@@ -584,10 +611,23 @@ class MemberActor {
 
   async select(
     message: Message,
-    label: string | RegExp | (string | RegExp)[],
+    picks: string | RegExp | Pickable | (string | RegExp)[] | Pickable[],
     form?: Form,
   ): Promise<Message> {
-    return this.answer(this.actor().selectOption(message, label), form);
+    const list = Array.isArray(picks) ? picks : [picks];
+    const labels = list.filter(
+      (pick): pick is string | RegExp =>
+        typeof pick === "string" || pick instanceof RegExp,
+    );
+    return this.answer(
+      labels.length
+        ? this.actor().selectOption(message, labels)
+        : this.actor().pickEntities(
+            message,
+            (list as Pickable[]).map((pick) => pick.id),
+          ),
+      form,
+    );
   }
 
   /** The visible reply to `run`, filling and submitting the form first when the bot opens one. */

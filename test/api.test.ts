@@ -1,4 +1,10 @@
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import {
+  ActionRowBuilder,
+  Client,
+  Events,
+  GatewayIntentBits,
+  RoleSelectMenuBuilder,
+} from "discord.js";
 import { expect, it, vi } from "vitest";
 import {
   createDiscord,
@@ -403,4 +409,43 @@ it("lets a moderator kick a member, which the audit log credits to them", async 
 
   const log = await client.guilds.cache.get(server.id)!.fetchAuditLogs();
   expect(log.entries.first()?.executor?.username).toBe("mod");
+});
+
+it("picks roles in a role select by handle, and refuses a member there", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const general = discord.channel(server, "general");
+  const alice = discord.member(server, "alice");
+  const ranked = discord.role(server, "ranked");
+  const casual = discord.role(server, "casual");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...discord.clientOptions,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isChatInputCommand())
+      await interaction.reply({
+        components: [
+          new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+            new RoleSelectMenuBuilder().setCustomId("roles").setMaxValues(2),
+          ),
+        ],
+      });
+    if (interaction.isRoleSelectMenu())
+      await interaction.update({
+        content: interaction.roles.map((r) => r.name).join(","),
+        components: [],
+      });
+  });
+  await discord.start(client, {
+    commands: [{ name: "roles", description: "Pick your roles" }],
+  });
+  const menu = await alice.run(general, "roles");
+
+  await expect(alice.select(menu, alice)).rejects.toThrow(
+    "no select menu that offers them",
+  );
+  const picked = await alice.select(menu, [ranked, casual]);
+
+  expect(picked.content).toBe("ranked,casual");
 });

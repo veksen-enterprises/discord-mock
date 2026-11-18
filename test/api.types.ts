@@ -41,6 +41,12 @@ void alice.run(discord.voiceChannel(server, "lobby"), "join");
 // Overriding a command for a member of another server
 // @ts-expect-error
 discord.commandPermissions(server, "join", [{ target: carol, allow: true }]);
+// Picking another server's role
+// @ts-expect-error
+void alice.select({} as never, discord.role(otherServer, "mods"));
+// Mixing labels and picks in one select
+// @ts-expect-error
+void alice.select({} as never, ["5-2", discord.role(server, "mods")]);
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.run(challengesChannel, "jion");

@@ -731,6 +731,12 @@ export class DiscordMock {
         message: APIMessage,
         label: string | RegExp | (string | RegExp)[],
       ) => this.userSelectsOption(user, message, label),
+      /**
+       * Picks users, roles or channels, by id, in the user, role, mentionable or channel select on
+       * `message` that accepts them.
+       */
+      pickEntities: (message: APIMessage, ids: string[]) =>
+        this.userPicksEntities(user, message, ids),
     };
   }
 
@@ -1070,6 +1076,113 @@ export class DiscordMock {
         custom_id: select.custom_id,
         component_type: ComponentType.StringSelect,
         values: picks.map(({ option }) => option.value),
+      },
+      message,
+    );
+  }
+
+  // components/reference#user-select (and role, mentionable, channel select): the user picks
+  // members, roles or channels; the bot receives their ids as `values` and the entities in
+  // `resolved` (interactions/receiving-and-responding#interaction-object-resolved-data-structure).
+  // A user select offers the guild's members, a channel select the channels the user can view
+  // (both inferred, not checked: the Discord app's picker isn't documented).
+  private userPicksEntities(user: APIUser, message: APIMessage, ids: string[]) {
+    this.requireVisibleTo(user, message);
+    const channel = this.state.requireChannel(message.channel_id);
+    const guild =
+      "guild_id" in channel && channel.guild_id
+        ? this.state.requireGuild(channel.guild_id)
+        : undefined;
+    const picked = {
+      users: [] as string[],
+      roles: [] as string[],
+      channels: [] as string[],
+    };
+    for (const id of ids) {
+      if (guild?.roles.has(id)) picked.roles.push(id);
+      else if (this.state.users.has(id)) {
+        if (guild && !guild.members.has(id))
+          throw new Error(
+            `discordjs-test-kit: ${this.state.requireUser(id).username} isn't in ${guild.name}, so no select offers them`,
+          );
+        picked.users.push(id);
+      } else if (this.state.channels.has(id)) {
+        const target = this.state.requireChannel(id);
+        if (
+          guild &&
+          !(
+            computePermissions(this.state, guild, user.id, target) &
+            Permission.ViewChannel
+          )
+        )
+          throw new Error(
+            `discordjs-test-kit: ${user.username} can't see ${"name" in target ? target.name : id}, so no select offers it`,
+          );
+        picked.channels.push(id);
+      } else
+        throw new Error(`discordjs-test-kit: no user, role or channel ${id}`);
+    }
+    // Which select accepts every pick: users and roles go in a mentionable select too.
+    const accepts = (select: any) => {
+      switch (select.type) {
+        case ComponentType.UserSelect:
+          return !picked.roles.length && !picked.channels.length;
+        case ComponentType.RoleSelect:
+          return !picked.users.length && !picked.channels.length;
+        case ComponentType.MentionableSelect:
+          return !picked.channels.length;
+        case ComponentType.ChannelSelect:
+          return (
+            !picked.users.length &&
+            !picked.roles.length &&
+            picked.channels.every(
+              (id) =>
+                !select.channel_types?.length ||
+                select.channel_types.includes(
+                  this.state.requireChannel(id).type,
+                ),
+            )
+          );
+        default:
+          return false;
+      }
+    };
+    const selects = componentsIn(message).filter((c: any) =>
+      [
+        ComponentType.UserSelect,
+        ComponentType.RoleSelect,
+        ComponentType.MentionableSelect,
+        ComponentType.ChannelSelect,
+      ].includes(c.type),
+    );
+    const found = selects.filter(accepts);
+    if (found.length !== 1)
+      throw new Error(
+        found.length
+          ? `discordjs-test-kit: ${found.length} select menus on ${shown(message)} accept those picks`
+          : `discordjs-test-kit: ${user.username} can't pick those: ${shown(message)} ${selects.length ? "has no select menu that offers them" : "has no user, role, mentionable or channel select"}`,
+      );
+    const select = found[0]!;
+    if (select.disabled)
+      throw new Error(
+        `discordjs-test-kit: the select menu on ${shown(message)} is disabled`,
+      );
+    // components/reference#user-select: min_values and max_values default to 1.
+    const min = select.min_values ?? 1;
+    const max = select.max_values ?? 1;
+    if (ids.length < min || ids.length > max)
+      throw new Error(
+        `discordjs-test-kit: the select menu on ${shown(message)} takes ${min === max ? min : `${min} to ${max}`} picks, not ${ids.length}`,
+      );
+    return this.dispatchInteraction(
+      user,
+      channel,
+      InteractionType.MessageComponent,
+      {
+        custom_id: select.custom_id,
+        component_type: select.type,
+        values: ids,
+        resolved: resolvedData(this.state, guild, user.id, picked),
       },
       message,
     );
@@ -2467,9 +2580,35 @@ function resolvedFor(
     schema
       .filter((o) => o.type === type && typeof input[o.name] === "string")
       .map((o) => input[o.name] as string);
-  const users = idsOf(ApplicationCommandOptionType.User).map((id) =>
-    state.requireUser(id),
-  );
+  // The option's channel_types limit what the user can pick.
+  for (const o of schema) {
+    if (o.type !== ApplicationCommandOptionType.Channel) continue;
+    if (typeof input[o.name] !== "string") continue;
+    const channel = state.requireChannel(input[o.name] as string);
+    const allowed = "channel_types" in o ? o.channel_types : undefined;
+    if (allowed?.length && !allowed.includes(channel.type as never))
+      throw new Error(
+        `discordjs-test-kit: option "${o.name}" only offers channel types ${allowed.join(", ")}`,
+      );
+  }
+  return resolvedData(state, guild, invokerId, {
+    users: idsOf(ApplicationCommandOptionType.User),
+    roles: [],
+    channels: idsOf(ApplicationCommandOptionType.Channel),
+  });
+}
+
+/**
+ * The `resolved` object of an interaction for these ids (interactions/receiving-and-responding#
+ * interaction-object-resolved-data-structure), or undefined when there are none.
+ */
+function resolvedData(
+  state: DiscordState,
+  guild: GuildRecord | undefined,
+  invokerId: string,
+  ids: { users: string[]; roles: string[]; channels: string[] },
+) {
+  const users = ids.users.map((id) => state.requireUser(id));
   // Resolved members carry no user, deaf or mute; the user is in `users`.
   const members = users.flatMap((u) => {
     const m = guild?.members.get(u.id);
@@ -2477,21 +2616,15 @@ function resolvedFor(
     const { user: _, deaf: _d, mute: _m, ...partial } = m;
     return [[u.id, partial] as const];
   });
+  const roles = ids.roles.map((id) => {
+    const role = guild?.roles.get(id);
+    if (!role) throw new Error(`discordjs-test-kit: unknown role ${id}`);
+    return [id, role] as const;
+  });
   // Discord's docs: a resolved channel is partial (id, name, type, permissions, parent_id, …);
-  // `permissions` are the invoker's in that channel. The option's channel_types limit what the
-  // user can pick.
-  const channelOptions = schema.filter(
-    (o) =>
-      o.type === ApplicationCommandOptionType.Channel &&
-      typeof input[o.name] === "string",
-  );
-  const channels = channelOptions.map((o) => {
-    const channel = state.requireChannel(input[o.name] as string);
-    const allowed = "channel_types" in o ? o.channel_types : undefined;
-    if (allowed?.length && !allowed.includes(channel.type as never))
-      throw new Error(
-        `discordjs-test-kit: option "${o.name}" only offers channel types ${allowed.join(", ")}`,
-      );
+  // `permissions` are the invoker's in that channel.
+  const channels = ids.channels.map((id) => {
+    const channel = state.requireChannel(id);
     const c = channel as APIChannel & Record<string, unknown>;
     return [
       channel.id,
@@ -2512,12 +2645,13 @@ function resolvedFor(
       },
     ] as const;
   });
-  if (!users.length && !channels.length) return undefined;
+  if (!users.length && !roles.length && !channels.length) return undefined;
   return {
     ...(users.length
       ? { users: Object.fromEntries(users.map((u) => [u.id, u])) }
       : {}),
     ...(members.length ? { members: Object.fromEntries(members) } : {}),
+    ...(roles.length ? { roles: Object.fromEntries(roles) } : {}),
     ...(channels.length ? { channels: Object.fromEntries(channels) } : {}),
   };
 }

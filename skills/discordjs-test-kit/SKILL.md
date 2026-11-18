@@ -62,6 +62,7 @@ it("should record the result when the winner reports", async () => {
 | reach a thread the bot started            | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`     |
 | a member who closed their DMs             | `alice.closeDMs()`: the bot's DMs to them fail with 50007, so test what the bot says instead                                      |
 | pick from a select menu                   | `await alice.select(message, "5-2")`                                                                                              |
+| pick members, roles or channels           | `await alice.select(setupPanel, [bob, discord.role(server, "mods")])`                                                             |
 | post, open a forum post, react            | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |
 | DM the bot                                | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                 |
 | a member with permissions                 | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                      |
