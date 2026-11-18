@@ -24,9 +24,10 @@ If the bot builds its `Client` at module load, extract a factory like this first
 ## A test
 
 ```ts
-import { createDiscord, respond } from "discordjs-test-kit";
+import { createDiscord } from "discordjs-test-kit";
 
 it("should record the result when the winner reports", async () => {
+  // Arrange: two members, the bot logged in, and Alice's challenge to Bob
   const discord = await createDiscord();
   const server = discord.guild("SIN");
   const challengesChannel = discord.channel(server, "challenges");
@@ -34,20 +35,24 @@ it("should record the result when the winner reports", async () => {
   const alice = discord.member(server, "Alice");
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions).client, { commands });
-
   const opponentMenu = await alice.run(challengesChannel, "challenge");
   await alice.select(opponentMenu, "Bob");
+
+  // Act: Bob reports winning 5-2
   const reportMenu = await bob.run(challengesChannel, "report");
   await bob.select(reportMenu, "I won");
   await bob.select(reportMenu, "5-2");
 
+  // Assert
   expect(reportMenu.embeds.at(-1)?.title).toBe("Match Reported!");
-  await discord.find(leaderboardChannel, /Bob/);
+  const board = await discord.find(leaderboardChannel, /Bob/);
+  expect(board.embeds[0]?.description).toMatch(/1\s+Bob/);
 });
 ```
 
 - `createDiscord()` per test. Teardown is automatic and fails the test if the bot hit a route the mock doesn't model (a Gap).
 - `start(client, { commands })` registers commands the way the bot's deploy script would: pass the same command JSON. Add `permissions` (from `Permission`; for a flag it lacks, discord.js's `PermissionFlagsBits` works, both are bigints) when the bot needs more than @everyone's. If the bot deploys its own commands instead, skip `commands` and let it: `client.application.id` is set once `start` resolves.
+- Write every test as `// Arrange`, `// Act`, `// Assert`, separated by a blank line. The Act is the one thing the test is about: one member's action, which can take several steps of the same menu. Actions that only set the scene (joining, an earlier challenge) go in Arrange. Assert only after the Act; a second Act is a second test.
 - Name variables for what they are: `challengesChannel`, `reportMenu`, `searchResults`, not `c`, `msg`, `res`.
 
 ## One way per action
