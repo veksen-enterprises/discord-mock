@@ -30,8 +30,8 @@ it("should record the result when the winner reports", async () => {
   // Arrange: two members, the bot logged in, and Alice's challenge to Bob
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const challengesChannel = discord.channel(server, "challenges");
-  const leaderboardChannel = discord.channel(server, "leaderboard");
+  const challengesChannel = discord.textChannel(server, "challenges");
+  const leaderboardChannel = discord.textChannel(server, "leaderboard");
   const alice = discord.member(server, "Alice");
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions).client, { commands });
@@ -86,15 +86,15 @@ it("should record the result when the winner reports", async () => {
 | a moderator locks a thread                       | `discord.lock(thread)`                                                                                                                              |
 | change nickname, leave the server                | `alice.setNickname("Al")`, `alice.leaveGuild()`                                                                                                     |
 | change their display name                        | `alice.setDisplayName("Alicia")`: discord.js emits `userUpdate`                                                                                     |
-| override who can use a command                   | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |
+| override who can use a command                   | `discord.setCommandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                       |
 | a moderator kicks or bans someone                | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                                              |
 | kick the bot from the server                     | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
-| a Discord outage                                 | `discord.outage(server)`, then `discord.endOutage(server)`: `guildUnavailable`, then `guildAvailable`                                               |
+| a Discord outage                                 | `discord.startOutage(server)`, then `discord.endOutage(server)`: `guildUnavailable`, then `guildAvailable`                                          |
 | open and end a stage                             | `const hall = discord.stageChannel(server, "hall")`, `mod.startStage(hall, "Q&A")`, `mod.endStage(hall)`                                            |
 | rename the server                                | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                                            |
 | a bot that logs through a `WebhookClient`        | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                                             |
-| make Discord fail a route                        | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                                          |
-| take a permission from the bot                   | `discord.deny(channel, Permission.SendMessages)`                                                                                                    |
+| make Discord fail a route                        | `discord.answerWith("POST", "/channels/:id/messages", respond.serverError(503))`                                                                    |
+| take a permission from the bot                   | `discord.deny(channel, "bot", Permission.SendMessages)`                                                                                             |
 | lose the gateway session                         | `discord.disconnect()`, act, `await discord.reconnect()` (give the test a 10 s timeout)                                                             |
 | wait for a message                               | `await discord.waitForMessage(channel, /text/)`, or `waitForDM(member, /text/)`; only the bot's messages written since the latest action count      |
 | check the bot sent nothing more                  | `await discord.waitForIdle()`, then assert                                                                                                          |
@@ -109,7 +109,7 @@ One test is one journey a user takes: arrange the server, act as members, assert
 
 - **The success path**, end to end through the bot's real handlers and, where the bot owns state, its real database. Assert the database too.
 - **Every refusal the bot has**: a member missing a permission, the wrong state ("no pending challenge"), another member pressing someone's button. Each gets its own test, asserting the reply the user reads.
-- **Discord failing**: `discord.fail(...)` with `respond.serverError(503)` or a rate limit on the route the flow depends on. Assert what the user sees then.
+- **Discord failing**: `discord.answerWith(...)` with `respond.serverError(503)` or a rate limit on the route the flow depends on. Assert what the user sees then.
 - **Interactions the bot must answer.** Await every `runCommand`, `click` and `select`. A bot that ignores a press, an unknown button or a rate-limited command fails here with "The application did not respond", which is what the user sees.
 - **Who can see the reply**: an ephemeral reply stays private (another member acting on it is refused), and a public one is in `discord.messages(channel)`.
 - **Gateway events the bot listens to** (a member joins, leaves, changes nickname or display name; the bot is kicked), including for members who were there before the bot started.
@@ -136,7 +136,7 @@ The mock names messages by their text and lists what exists. Fix the test from t
 | `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                                                                          |
 | `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`                                                            |
 | `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug                                                             |
-| `the bot deferred, then went quiet`               | The bot deferred and never answered: a real bug, or a `fail` you set                                                         |
+| `the bot deferred, then went quiet`               | The bot deferred and never answered: a real bug, or an `answerWith` you set                                                  |
 | `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`                                                            |
 | `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post                                                              |
 | `unhandled requests: …`                           | The bot used a route the kit doesn't model yet: report it                                                                    |

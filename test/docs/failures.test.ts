@@ -5,8 +5,8 @@ import { commands, createBot } from "../fixtures/bot.js";
 async function startBot() {
   const discord = await createDiscord();
   const server = discord.guild("My Server");
-  const generalChannel = discord.channel(server, "general");
-  const newsChannel = discord.channel(server, "news");
+  const generalChannel = discord.textChannel(server, "general");
+  const newsChannel = discord.textChannel(server, "news");
   const alice = discord.member(server, "alice");
   await discord.start(createBot(discord.clientOptions).client, { commands });
   return { discord, generalChannel, newsChannel, alice };
@@ -15,7 +15,7 @@ async function startBot() {
 it("tells the member when the bot can't post in the channel", async () => {
   // Arrange
   const { discord, generalChannel, newsChannel, alice } = await startBot();
-  discord.fail(
+  discord.answerWith(
     "POST",
     `/channels/${newsChannel.id}/messages`,
     respond.missingPermissions(),
@@ -33,7 +33,11 @@ it("tells the member when the bot can't post in the channel", async () => {
 it("tells the member when Discord keeps answering 503", async () => {
   // Arrange
   const { discord, generalChannel, newsChannel, alice } = await startBot();
-  discord.fail("POST", "/channels/:id/messages", respond.serverError(503));
+  discord.answerWith(
+    "POST",
+    "/channels/:id/messages",
+    respond.serverError(503),
+  );
 
   // Act
   const reply = await alice.runCommand(generalChannel, "announce", {
@@ -47,7 +51,11 @@ it("tells the member when Discord keeps answering 503", async () => {
 it("tells the member when Discord drops the connection", async () => {
   // Arrange
   const { discord, generalChannel, newsChannel, alice } = await startBot();
-  discord.fail("POST", "/channels/:id/messages", respond.connectionClosed());
+  discord.answerWith(
+    "POST",
+    "/channels/:id/messages",
+    respond.connectionClosed(),
+  );
 
   // Act
   const reply = await alice.runCommand(generalChannel, "announce", {

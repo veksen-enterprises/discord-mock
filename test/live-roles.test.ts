@@ -35,7 +35,7 @@ it("lets a moderator who joined after the bot connected keep their invite", asyn
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("TPH");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   await discord.start(createBot(discord.clientOptions), {
     permissions: Permission.ManageMessages,
   });
@@ -57,7 +57,7 @@ it("still deletes the invite of a member without Manage Server", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("TPH");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   await discord.start(createBot(discord.clientOptions), {
     permissions: Permission.ManageMessages,
   });

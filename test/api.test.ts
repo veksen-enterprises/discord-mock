@@ -18,7 +18,7 @@ import { commands, createBot } from "./fixtures/bot.js";
 async function startBot() {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const generalChannel = discord.channel(server, "general");
+  const generalChannel = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const bob = discord.member(server, "bob", { nickname: "Bobby" });
   await discord.start(createBot(discord.clientOptions).client, { commands });
@@ -74,7 +74,7 @@ it("waits until the bot has gone quiet, so a check for exactly one reply holds",
 it("lets a member who holds Manage Server run an admin command, and refuses one who doesn't", async () => {
   const { discord } = await startBot();
   const server = discord.guild("mods");
-  const modsChannel = discord.channel(server, "mods");
+  const modsChannel = discord.textChannel(server, "mods");
   const mod = discord.member(server, "mod", {
     permissions: Permission.ManageGuild,
   });
@@ -188,7 +188,7 @@ it("still gives up when the test has faked timers and Date", async () => {
 it("refuses to let a member act in a server they aren't in, even when the types are widened", async () => {
   const { discord, alice } = await startBot();
   const elsewhere: Guild = discord.guild("elsewhere");
-  const strangers = discord.channel(elsewhere, "strangers");
+  const strangers = discord.textChannel(elsewhere, "strangers");
   const forum = discord.forum(elsewhere, "listings");
   const outsider: Member = alice;
   const insider = discord.member(elsewhere, "carol");
@@ -274,9 +274,9 @@ it("refuses a form the Discord app wouldn't submit, and says when the bot opened
 it("fails one channel by its literal path, and leaves the others working", async () => {
   const { discord, generalChannel, alice } = await startBot();
   const server = discord.guild("news");
-  const board = discord.channel(server, "board");
-  const news = discord.channel(server, "news");
-  discord.fail(
+  const board = discord.textChannel(server, "board");
+  const news = discord.textChannel(server, "news");
+  discord.answerWith(
     "POST",
     `/channels/${board.id}/messages`,
     respond.missingPermissions(),
@@ -344,7 +344,7 @@ it("renames the guild as its owner, which a member without Manage Server can't",
 it("counts a join through a member's invite, and refuses a used-up one", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const { client } = createBot(discord.clientOptions);
   await discord.start(client, {
@@ -392,7 +392,7 @@ it("lets an admin open an admin-only command to one member", async () => {
     "needs permissions",
   );
 
-  discord.commandPermissions(server, "settings", [
+  discord.setCommandPermissions(server, "settings", [
     { target: alice, allow: true },
     { target: bob, allow: false },
   ]);
@@ -428,7 +428,7 @@ it("lets a moderator kick a member, which the audit log credits to them", async 
 it("picks roles in a role select by handle, and refuses a member there", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const ranked = discord.role(server, "ranked");
   const casual = discord.role(server, "casual");

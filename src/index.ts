@@ -348,6 +348,7 @@ class Discord {
   private readonly markAction = () => this.written.clear();
 
   constructor(private readonly mock: DiscordMock) {
+    onTestFinished(() => this.close());
     const record = (message: Message) => {
       if (message.author.id === mock.state.bot.id) this.written.add(message);
     };
@@ -378,8 +379,8 @@ class Discord {
     return handle(this.mock.createCategory(this.g(guild), name).id, name);
   }
 
-  /** @example const challengesChannel = discord.channel(server, "challenges", ladderCategory); */
-  channel<G extends string>(
+  /** A text channel. @example const challengesChannel = discord.textChannel(server, "challenges", ladderCategory); */
+  textChannel<G extends string>(
     guild: Guild<G>,
     name: string,
     category?: Category<NoInfer<G>>,
@@ -504,9 +505,9 @@ class Discord {
    * Answers every `method path` request with `response` instead of the kit's own answer, until you call the
    * function it returns. `:name` segments match anything; a literal id fails only that channel, message
    * or member.
-   * @example const recover = discord.fail("GET", "/attachments/:channel/:id/:name", respond.serverError(503));
+   * @example const recover = discord.answerWith("GET", "/attachments/:channel/:id/:name", respond.serverError(503));
    */
-  fail(method: string, path: string, response: RestResponse): () => void {
+  answerWith(method: string, path: string, response: RestResponse): () => void {
     return this.mock.use(method, path, () => response);
   }
 
@@ -540,9 +541,9 @@ class Discord {
    * `target` is a member, a channel, or the guild itself for @everyone. The bot hears
    * `applicationCommandPermissionsUpdate` and can fetch them. Call it after `start`, once the
    * command is registered. Only an override naming a member changes whether they can run it here.
-   * @example discord.commandPermissions(server, "ban", [{ target: mod, allow: true }]);
+   * @example discord.setCommandPermissions(server, "ban", [{ target: mod, allow: true }]);
    */
-  commandPermissions<G extends string>(
+  setCommandPermissions<G extends string>(
     guild: Guild<G>,
     command: string,
     overrides: {
@@ -587,14 +588,14 @@ class Discord {
   /**
    * A Discord outage takes `guild` away: the bot gets `guildUnavailable` and hears nothing from it
    * until `endOutage`, which brings `guildAvailable`. REST still answers during the outage.
-   * @example discord.outage(server); discord.endOutage(server);
+   * @example discord.startOutage(server); discord.endOutage(server);
    */
-  outage(guild: Guild): void {
+  startOutage(guild: Guild): void {
     this.markAction();
     this.mock.gateway.startOutage(this.g(guild));
   }
 
-  /** Ends `outage`: the bot gets the guild again, with `guildAvailable`. */
+  /** Ends `startOutage`: the bot gets the guild again, with `guildAvailable`. */
   endOutage(guild: Guild): void {
     this.markAction();
     this.mock.gateway.endOutage(this.g(guild));
@@ -607,54 +608,32 @@ class Discord {
   }
 
   /**
-   * Takes `permission` from the bot in `channel`, or from `who` (a member, a role, `"bot"` or
-   * `"everyone"`): a channel overwrite denying it, announced as CHANNEL_UPDATE, which keeps what
-   * the target's overwrite already allowed or denied. Discord then answers the bot there as it
-   * would: 50001 Missing Access without View Channel, else 50013.
-   * @example discord.deny(isoChannel, Permission.SendMessages);
+   * Takes `permission` from `who` (a member, a role, `"bot"` or `"everyone"`) in `channel`: a channel
+   * overwrite denying it, announced as CHANNEL_UPDATE, which keeps what the target's overwrite
+   * already allowed or denied. Discord then answers the bot there as it would: 50001 Missing Access
+   * without View Channel, else 50013.
+   * @example discord.deny(isoChannel, "bot", Permission.SendMessages);
    * @example discord.deny(staffChannel, "everyone", Permission.ViewChannel);
    */
   deny<G extends string>(
     channel: TextChannel<G> | Forum<G> | Category<G>,
-    permission: bigint,
-  ): void;
-  deny<G extends string>(
-    channel: TextChannel<G> | Forum<G> | Category<G>,
     who: Member<NoInfer<G>> | Role<NoInfer<G>> | "bot" | "everyone",
     permission: bigint,
-  ): void;
-  deny(
-    channel: TextChannel | Forum | Category,
-    whoOrPermission: Member | Role | "bot" | "everyone" | bigint,
-    permission?: bigint,
   ): void {
-    if (typeof whoOrPermission === "bigint")
-      this.overwrite(channel, "bot", { deny: whoOrPermission });
-    else this.overwrite(channel, whoOrPermission, { deny: permission! });
+    this.overwrite(channel, who, { deny: permission });
   }
 
   /**
-   * The opposite of `deny`: allows `permission` in `channel` for the bot, or for `who`, despite
-   * roles that don't grant it.
+   * The opposite of `deny`: allows `permission` in `channel` for `who`, despite roles that don't
+   * grant it.
    * @example discord.allow(staffChannel, mods, Permission.ViewChannel);
    */
   allow<G extends string>(
     channel: TextChannel<G> | Forum<G> | Category<G>,
-    permission: bigint,
-  ): void;
-  allow<G extends string>(
-    channel: TextChannel<G> | Forum<G> | Category<G>,
     who: Member<NoInfer<G>> | Role<NoInfer<G>> | "bot" | "everyone",
     permission: bigint,
-  ): void;
-  allow(
-    channel: TextChannel | Forum | Category,
-    whoOrPermission: Member | Role | "bot" | "everyone" | bigint,
-    permission?: bigint,
   ): void {
-    if (typeof whoOrPermission === "bigint")
-      this.overwrite(channel, "bot", { allow: whoOrPermission });
-    else this.overwrite(channel, whoOrPermission, { allow: permission! });
+    this.overwrite(channel, who, { allow: permission });
   }
 
   private overwrite(
@@ -686,7 +665,7 @@ class Discord {
   }
 
   /** Discord archives `thread` for inactivity: it moves from the active list to the archived one. */
-  archive(thread: Thread): void {
+  autoArchive(thread: Thread): void {
     this.markAction();
     this.mock.archiveThread(this.mock.state.requireChannel(thread.id));
   }
@@ -886,8 +865,7 @@ class Discord {
     return this.mock.waitForIdle();
   }
 
-  /** Called when the test finishes. */
-  async close(): Promise<void> {
+  private async close(): Promise<void> {
     await this.client?.destroy();
     try {
       this.mock.assertNoUnhandledRequests();
@@ -1326,7 +1304,5 @@ function handle<T>(id: string, name: string): T {
  * @example const discord = await createDiscord();
  */
 export async function createDiscord(): Promise<Discord> {
-  const discord = new Discord(await createDiscordMock());
-  onTestFinished(() => discord.close());
-  return discord;
+  return new Discord(await createDiscordMock());
 }

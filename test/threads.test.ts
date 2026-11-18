@@ -153,7 +153,7 @@ it("opens a private thread, lets in only the members the bot adds, then archives
 it("finds the thread the bot started, and the bot's message in it", async () => {
   const discord = await createDiscord();
   const server = discord.guild("help");
-  const helpChannel = discord.channel(server, "help");
+  const helpChannel = discord.textChannel(server, "help");
   const alice = discord.member(server, "alice");
   const bot = new Client({
     intents: [

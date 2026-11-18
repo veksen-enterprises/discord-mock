@@ -76,7 +76,7 @@ it("gives the bot the role picked in a role option", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   const members = discord.role(server, "Members");
   await discord.start(createBot(discord.clientOptions), { commands });
@@ -92,7 +92,7 @@ it("resolves a mentionable option to a role or a member", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   const mods = discord.role(server, "Mods");
   await discord.start(createBot(discord.clientOptions), { commands });
@@ -108,7 +108,7 @@ it("resolves a mentionable option given a member to a user", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions), { commands });
@@ -124,7 +124,7 @@ it("uploads the file given as an attachment option, so the bot can download it",
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "Alice");
   await discord.start(createBot(discord.clientOptions), { commands });
   const file = {
@@ -144,7 +144,7 @@ it("takes a voice channel where the option offers only voice channels", async ()
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   const lobby = discord.voiceChannel(server, "Lobby");
   await discord.start(createBot(discord.clientOptions), { commands });

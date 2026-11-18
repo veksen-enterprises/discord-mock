@@ -75,7 +75,7 @@ it("creates a category and a locked voice channel in it", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   await discord.start(createBot(discord.clientOptions), {
     commands,
@@ -93,7 +93,7 @@ it("refuses an overwrite granting Manage Roles from a bot that isn't an administ
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   await discord.start(createBot(discord.clientOptions), {
     commands,

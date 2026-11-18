@@ -6,7 +6,7 @@ import { createDiscord } from "../src/index.js";
 it("takes a guild away in an outage, keeps its events from the bot, and brings it back", async () => {
   const discord = await createDiscord();
   const server = discord.guild("g");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const client = new Client({
     intents: [
@@ -21,7 +21,7 @@ it("takes a guild away in an outage, keeps its events from the bot, and brings i
   client.on(Events.MessageCreate, (m) => heard.push(m.content));
   const gone = once(client, Events.GuildUnavailable);
 
-  discord.outage(server);
+  discord.startOutage(server);
   const [guild] = (await gone) as [Guild];
   alice.post(general, { content: "anyone?" });
   const back = once(client, Events.GuildAvailable);
@@ -38,7 +38,7 @@ it("takes a guild away in an outage, keeps its events from the bot, and brings i
 it("sends a guild in an outage as unavailable when the bot connects", async () => {
   const discord = await createDiscord();
   const server = discord.guild("g");
-  discord.outage(server);
+  discord.startOutage(server);
   const client = new Client({
     intents: [GatewayIntentBits.Guilds],
     ...discord.clientOptions,

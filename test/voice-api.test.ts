@@ -45,7 +45,7 @@ function musicBot(options: ConstructorParameters<typeof Client>[0]) {
 it("hears a music bot play in the member's voice channel", async () => {
   const discord = await createDiscord();
   const server = discord.guild("g");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const lobby = discord.voiceChannel(server, "lobby");
   const alice = discord.member(server, "alice");
   const client = musicBot({

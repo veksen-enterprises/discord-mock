@@ -113,7 +113,7 @@ it("submits selects, a radio group, checkboxes and a file in a form", async () =
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions), { commands });
@@ -141,7 +141,7 @@ it("refuses to submit a form whose required radio group is left empty", async ()
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions), { commands });

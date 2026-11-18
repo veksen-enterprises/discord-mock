@@ -6,26 +6,30 @@ const discord = await createDiscord();
 const server = discord.guild("SIN");
 const otherServer = discord.guild("Other");
 const ladderCategory = discord.category(server, "Test Ladder");
-const challengesChannel = discord.channel(server, "challenges", ladderCategory);
-const otherChannel = discord.channel(otherServer, "elsewhere");
+const challengesChannel = discord.textChannel(
+  server,
+  "challenges",
+  ladderCategory,
+);
+const otherChannel = discord.textChannel(otherServer, "elsewhere");
 const alice = discord.member(server, "alice");
 const carol = discord.member(otherServer, "carol");
 
 // A category where a text channel goes
 // @ts-expect-error
-void alice.run(ladderCategory, "join");
+void alice.runCommand(ladderCategory, "join");
 // A member where a channel goes
 // @ts-expect-error
-void alice.run(carol, "join");
+void alice.runCommand(carol, "join");
 // A channel in another server
 // @ts-expect-error
-void alice.run(otherChannel, "join");
+void alice.runCommand(otherChannel, "join");
 // A user option from another server
 // @ts-expect-error
-void alice.run(challengesChannel, "challenge", { opponent: carol });
+void alice.runCommand(challengesChannel, "challenge", { opponent: carol });
 // A category from another server
 // @ts-expect-error
-discord.channel(otherServer, "late", ladderCategory);
+discord.textChannel(otherServer, "late", ladderCategory);
 // Posting in another server's channel
 // @ts-expect-error
 alice.post(otherChannel, { content: "hi" });
@@ -37,10 +41,10 @@ alice.joinVoice(challengesChannel);
 alice.joinVoice(discord.voiceChannel(otherServer, "lobby"));
 // Running a command in a voice channel's chat isn't modelled
 // @ts-expect-error
-void alice.run(discord.voiceChannel(server, "lobby"), "join");
+void alice.runCommand(discord.voiceChannel(server, "lobby"), "join");
 // Overriding a command for a member of another server
 // @ts-expect-error
-discord.commandPermissions(server, "join", [{ target: carol, allow: true }]);
+discord.setCommandPermissions(server, "join", [{ target: carol, allow: true }]);
 // Picking another server's role
 // @ts-expect-error
 void alice.select({} as never, discord.role(otherServer, "mods"));
@@ -70,7 +74,7 @@ const post = alice.postInForum(discord.forum(server, "listings"), {
   title: "t",
 });
 // @ts-expect-error
-discord.deny(post.thread, Permission.SendMessages);
+discord.deny(post.thread, "bot", Permission.SendMessages);
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.runCommand(challengesChannel, "jion");

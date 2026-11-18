@@ -12,12 +12,12 @@ async function ladderServer() {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
   const ladderCategory = discord.category(server, "Test Ladder");
-  const challengesChannel = discord.channel(
+  const challengesChannel = discord.textChannel(
     server,
     "challenges",
     ladderCategory,
   );
-  const generalChannel = discord.channel(server, "general");
+  const generalChannel = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice", { nickname: "Bravo" });
   const store: Store = new Map([["Test Ladder", new Map()]]);
   const bot = createBot(store, discord.clientOptions);
@@ -77,7 +77,7 @@ describe("/join", () => {
     // Arrange
     const { discord, challengesChannel, alice, store, errors } =
       await ladderServer();
-    discord.fail(
+    discord.answerWith(
       "PATCH",
       "/webhooks/:appId/:token/messages/@original",
       respond.serverError(503),
@@ -97,7 +97,7 @@ describe("/join", () => {
     const { discord } = await ladderServer();
     // Built after start: the bot learns about them from GUILD_CREATE and CHANNEL_CREATE.
     const lateServer = discord.guild("late");
-    const lateChannel = discord.channel(
+    const lateChannel = discord.textChannel(
       lateServer,
       "challenges",
       discord.category(lateServer, "Test Ladder"),

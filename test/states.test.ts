@@ -9,8 +9,8 @@ import { commands, createBot } from "./fixtures/bot.js";
 async function startBot() {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const generalChannel = discord.channel(server, "general");
-  const newsChannel = discord.channel(server, "news");
+  const generalChannel = discord.textChannel(server, "general");
+  const newsChannel = discord.textChannel(server, "news");
   const alice = discord.member(server, "alice");
   await discord.start(createBot(discord.clientOptions).client, { commands });
   return { discord, generalChannel, newsChannel, alice };
@@ -19,7 +19,7 @@ async function startBot() {
 it("answers 50013 once the bot is denied Send Messages in a channel", async () => {
   const { discord, generalChannel, newsChannel, alice } = await startBot();
 
-  discord.deny(newsChannel, Permission.SendMessages);
+  discord.deny(newsChannel, "bot", Permission.SendMessages);
 
   const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
@@ -30,8 +30,8 @@ it("answers 50013 once the bot is denied Send Messages in a channel", async () =
 it("answers 50001 Missing Access once the bot is denied View Channel, whatever else it was denied", async () => {
   const { discord, generalChannel, newsChannel, alice } = await startBot();
 
-  discord.deny(newsChannel, Permission.ViewChannel);
-  discord.deny(newsChannel, Permission.SendMessages);
+  discord.deny(newsChannel, "bot", Permission.ViewChannel);
+  discord.deny(newsChannel, "bot", Permission.SendMessages);
 
   const reply = await alice.runCommand(generalChannel, "announce", {
     channel: newsChannel.id,
@@ -41,7 +41,7 @@ it("answers 50001 Missing Access once the bot is denied View Channel, whatever e
 
 it("serves the Model again once a failure is recovered", async () => {
   const { discord, generalChannel, newsChannel, alice } = await startBot();
-  const recover = discord.fail(
+  const recover = discord.answerWith(
     "POST",
     "/channels/:channelId/messages",
     respond.serverError(503),

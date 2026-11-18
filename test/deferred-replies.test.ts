@@ -53,7 +53,7 @@ it("waits through a deferred reply for as long as the bot keeps working", async 
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "Alice");
   await discord.start(createBot(discord.clientOptions), {
     commands,
@@ -74,7 +74,7 @@ it("fails a deferred reply once the bot goes quiet without answering", async () 
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "Alice");
   await discord.start(createBot(discord.clientOptions), { commands });
 
@@ -91,7 +91,7 @@ it("fails a deferred reply when the bot keeps working without ever answering, na
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "Alice");
   await discord.start(createBot(discord.clientOptions), {
     commands,

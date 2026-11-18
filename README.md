@@ -11,7 +11,7 @@ it("DMs the player you challenge", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const channel = discord.channel(server, "challenges");
+  const channel = discord.textChannel(server, "challenges");
   const alice = discord.member(server, "Alice");
   const bob = discord.member(server, "Bob");
   await discord.start(createBot(discord.clientOptions), { commands });

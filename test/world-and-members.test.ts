@@ -23,7 +23,7 @@ import { commands, createBot } from "./fixtures/bot.js";
 it("hands out its token, so a deploy script can register commands before the bot logs in", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   // What deploy scripts do: the application id is the token's first part, in base64.
   const appId = Buffer.from(discord.token.split(".")[0]!, "base64").toString();
@@ -41,7 +41,7 @@ it("hands out its token, so a deploy script can register commands before the bot
 it("makes a member that is another bot", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const otherBot = discord.member(server, "Carl-bot", { bot: true });
   const { client } = createBot(discord.clientOptions);
   await discord.start(client);
@@ -56,8 +56,8 @@ it("makes a member that is another bot", async () => {
 it("denies the bot a permission in one channel, and allows it back", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
-  const news = discord.channel(server, "news");
+  const general = discord.textChannel(server, "general");
+  const news = discord.textChannel(server, "news");
   const alice = discord.member(server, "alice");
   await discord.start(createBot(discord.clientOptions).client, {
     commands,
@@ -115,7 +115,7 @@ it("keeps the description a bot writes to its application, as bots that credit t
 it("names the application's owner", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const bob = discord.member(server, "bob");
   const client = new Client({
@@ -148,7 +148,7 @@ it("names the application's owner", async () => {
 async function watcher() {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const bob = discord.member(server, "bob");
   const client = new Client({
@@ -212,7 +212,7 @@ it("locks a thread without archiving it", async () => {
 it("gets the thread the bot started from a message, whatever it named it", async () => {
   const discord = await createDiscord();
   const server = discord.guild("help");
-  const questions = discord.channel(server, "questions");
+  const questions = discord.textChannel(server, "questions");
   const alice = discord.member(server, "alice");
   const client = new Client({
     intents: [
@@ -246,7 +246,7 @@ it("gets the thread the bot started from a message, whatever it named it", async
 it("submits what the bot pre-filled in a form field the member leaves alone", async () => {
   const discord = await createDiscord();
   const server = discord.guild("SIN");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   const client = new Client({
     intents: [GatewayIntentBits.Guilds],
@@ -299,7 +299,7 @@ it("submits what the bot pre-filled in a form field the member leaves alone", as
 it("starts a thread from a message with the slowmode the bot asked for", async () => {
   const discord = await createDiscord();
   const server = discord.guild("help");
-  const questions = discord.channel(server, "questions");
+  const questions = discord.textChannel(server, "questions");
   const alice = discord.member(server, "alice");
   const client = new Client({
     intents: [

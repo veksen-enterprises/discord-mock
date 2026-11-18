@@ -45,7 +45,7 @@ it("purges the member's message, not the bot's ephemeral reply", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("Titan");
-  const general = discord.channel(server, "general");
+  const general = discord.textChannel(server, "general");
   const owner = discord.owner(server);
   await discord.start(createBot(discord.clientOptions), {
     commands,

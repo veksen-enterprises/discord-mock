@@ -6,7 +6,7 @@ it("echoes what a member types in /echo", async () => {
   // Arrange
   const discord = await createDiscord();
   const server = discord.guild("My Server");
-  const generalChannel = discord.channel(server, "general");
+  const generalChannel = discord.textChannel(server, "general");
   const alice = discord.member(server, "alice");
   await discord.start(createBot(discord.clientOptions).client, { commands });
 

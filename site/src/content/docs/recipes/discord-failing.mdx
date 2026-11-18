@@ -5,7 +5,7 @@ description: Make a route fail, and test what the member sees.
 
 import Sample from "../../../components/Sample.astro";
 
-`discord.fail(method, path, response)` answers every matching request with `response` instead of the kit's own answer. `:name` segments in the path match anything; a literal id fails only that channel, message or member. `respond` builds the responses.
+`discord.answerWith(method, path, response)` answers every matching request with `response` instead of the kit's own answer. `:name` segments in the path match anything; a literal id fails only that channel, message or member. `respond` builds the responses.
 
 <Sample name="failures" />
 
@@ -24,4 +24,4 @@ These are verified by the kit's own tests against a stock `Client`.
 | `missingPermissions()`         | 403, code 50013                   | Throws, no retry                      | `DiscordAPIError` with `code` 50013        |
 | `error(status, code, message)` | Any 4xx                           | Throws, no retry                      | `DiscordAPIError` with Discord's `code`    |
 
-`fail` holds until the test ends, so a persistent 429 never clears and discord.js waits forever. A rate limit only shows as latency to the bot; test it only if the bot sets `rejectOnRateLimit`.
+`answerWith` holds until the test ends, so a persistent 429 never clears and discord.js waits forever. A rate limit only shows as latency to the bot; test it only if the bot sets `rejectOnRateLimit`.
