@@ -91,6 +91,7 @@ export { Permission } from "./payloads.js";
 // calls vi.useFakeTimers() to move the bot's clock.
 const realSetTimeout = globalThis.setTimeout;
 const realClearTimeout = globalThis.clearTimeout;
+const realSetImmediate = globalThis.setImmediate;
 
 /** What a user posts: text, files, and the message it replies to. */
 /** A file a member uploads: in a post, or as a command's attachment option. */
@@ -121,6 +122,15 @@ type InteractionState = "pending" | "deferred" | "replied" | "modal";
  * trials hit (TitanBot's /poll, about 5s of spaced reactions).
  */
 const MAX_BUSY_WAIT_MS = 10_000;
+
+/**
+ * Event-loop turns a quiet spell must last before waitForIdle counts it. The bot runs in this process,
+ * and after a stall Node runs due timers before it reads I/O that arrived meanwhile (the timers phase
+ * comes before the poll phase), so a quiet timer can fire while the bot's next request or a Dispatch
+ * is already waiting to be read. Each turn polls I/O once. With no window at all, the collector test
+ * failed 8 runs in 10 without these turns and passed 10 in 10 with three.
+ */
+const QUIET_CONFIRM_TURNS = 3;
 
 /** A user-triggered interaction, and what the bot did with it. */
 export class InteractionRun extends EventEmitter<{ change: [] }> {
@@ -812,6 +822,7 @@ export class DiscordMock {
   /**
    * Resolves once the bot has had no REST request open and been sent no Dispatch for `quietMs`.
    * A heuristic: a bot that thinks longer than `quietMs` before its first request looks idle.
+   * The spell must then last `QUIET_CONFIRM_TURNS` turns of the event loop.
    */
   waitForIdle(
     opts: { quietMs?: number; timeoutMs?: number } = {},
@@ -819,14 +830,26 @@ export class DiscordMock {
     const { quietMs = 100, timeoutMs = 2_000 } = opts;
     return new Promise((resolve, reject) => {
       let quiet: ReturnType<typeof setTimeout> | undefined;
+      // Bumped by every change, so a confirmation started before it no longer counts.
+      let generation = 0;
+      const confirm = (turns: number, started: number) => {
+        if (started !== generation) return;
+        if (turns === 0) {
+          cleanup();
+          return resolve();
+        }
+        realSetImmediate(() => confirm(turns - 1, started));
+      };
       const restart = () => {
+        generation++;
         realClearTimeout(quiet);
+        const started = generation;
         quiet =
           this.inFlight === 0
-            ? realSetTimeout(() => {
-                cleanup();
-                resolve();
-              }, quietMs)
+            ? realSetTimeout(
+                () => confirm(QUIET_CONFIRM_TURNS, started),
+                quietMs,
+              )
             : undefined;
       };
       const deadline = realSetTimeout(() => {
@@ -838,6 +861,7 @@ export class DiscordMock {
         );
       }, timeoutMs);
       const cleanup = () => {
+        generation++;
         realClearTimeout(quiet);
         realClearTimeout(deadline);
         this.activity.off("change", restart);

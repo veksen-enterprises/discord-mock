@@ -78,3 +78,10 @@ discord.deny(post.thread, "bot", Permission.SendMessages);
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.runCommand(challengesChannel, "jion");
+
+// A wait given as text
+// @ts-expect-error
+void createDiscord({ quietTimeMs: "50" });
+// A misspelled setting
+// @ts-expect-error
+void createDiscord({ quietMs: 50 });

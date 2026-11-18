@@ -30,6 +30,14 @@ Resolves once the bot has no request open to Discord and nothing new has reached
 
 A bot that works for longer than 100ms before its first request looks done. Wait on `waitForMessage` for what it should send instead.
 
+## Before a click or a pick
+
+`click` and `select` first wait until the bot has been quiet for 100ms: no request to Discord open, nothing new sent to it. A member reads a message before using it, and a bot often fetches its reply and starts listening for the buttons just after sending it.
+
+That wait adds up: 40 clicks spend 4 seconds in it. Change it for the whole test with `createDiscord({ quietTimeMs: 20 })`; 0 still waits for every open request.
+
+Lower it only when the bot does nothing between sending a message and listening for its buttons. The kit can't see the bot's database queries or timers, so that work has to fit in the wait. If it doesn't, the click lands before the bot listens, and the test fails with "The application did not respond" although the bot works on Discord.
+
 ## Threads and sound
 
 `waitForThread(channel, name)` waits for a thread the bot starts in `channel`, by name. `waitForThreadFrom(message)` waits for the thread the bot starts from `message`, whatever it names it. `waitForSound(channel)` waits for the bot to play sound in a voice or stage channel. Each gives up after 2 seconds.

@@ -353,7 +353,10 @@ class Discord {
   private readonly written = new Set<Message>();
   private readonly markAction = () => this.written.clear();
 
-  constructor(private readonly mock: DiscordMock) {
+  constructor(
+    private readonly mock: DiscordMock,
+    private readonly quietTimeMs: number,
+  ) {
     onTestFinished(() => this.close());
     const record = (message: Message) => {
       if (message.author.id === mock.state.bot.id) this.written.add(message);
@@ -885,6 +888,7 @@ class Discord {
     return new MemberActor(
       this.mock,
       this.markAction,
+      this.quietTimeMs,
       guild.id,
       user.id,
       user.username,
@@ -898,6 +902,7 @@ class MemberActor {
   constructor(
     private readonly mock: DiscordMock,
     private readonly markAction: () => void,
+    private readonly quietTimeMs: number,
     private readonly guildId: string,
     readonly id: string,
     readonly name: string,
@@ -1009,7 +1014,7 @@ class MemberActor {
    * still busy after the idle wait gets the click anyway, as a member wouldn't wait forever.
    */
   private async botSettled() {
-    await this.mock.waitForIdle().catch(() => {});
+    await this.mock.waitForIdle({ quietMs: this.quietTimeMs }).catch(() => {});
   }
 
   /** The visible reply to an action, filling and submitting the form first when the bot opens one. */
@@ -1318,10 +1323,41 @@ function handle<T>(id: string, name: string): T {
   return { id, name } as T;
 }
 
+/** Settings for `createDiscord`. */
+export interface DiscordOptions {
+  /**
+   * How long, in milliseconds, the bot must stay quiet (no request to Discord open, nothing new sent
+   * to it) before a member clicks a button or picks from a select. Default: 100.
+   *
+   * A member reads a message before using it, so the bot has time to finish what it does after
+   * replying, such as fetching its reply and starting a component collector on it. The kit can't see
+   * work the bot does away from Discord, such as a database query or a timer: that work has to fit in
+   * this window. Too low, and a click can land before the bot listens for it; the test then fails with
+   * "The application did not respond", although the bot works on Discord.
+   *
+   * Lower it to speed up tests that click or pick many times, when the bot does nothing between
+   * sending a message and listening for its buttons. 0 still waits for every open request and for
+   * whatever reached the bot to be read.
+   */
+  quietTimeMs?: number;
+}
+
 /**
  * A fake Discord for the current test, on its own port, shut down when the test finishes.
  * @example const discord = await createDiscord();
+ * @example const discord = await createDiscord({ quietTimeMs: 20 });
  */
-export async function createDiscord(): Promise<Discord> {
-  return new Discord(await createDiscordMock());
+export async function createDiscord(
+  options: DiscordOptions = {},
+): Promise<Discord> {
+  const { quietTimeMs = 100 } = options;
+  if (
+    typeof quietTimeMs !== "number" ||
+    !Number.isFinite(quietTimeMs) ||
+    quietTimeMs < 0
+  )
+    throw new Error(
+      `discordjs-test-kit: quietTimeMs must be a number of milliseconds, 0 or more, not ${String(quietTimeMs)}`,
+    );
+  return new Discord(await createDiscordMock(), quietTimeMs);
 }
