@@ -79,6 +79,7 @@ describe("scenarios against the mock", () => {
       listScheduledEvents: 200,
       unknownScheduledEvent: 404,
       listEmojis: 200,
+      sendTyping: 204,
       sendPoll: 200,
       expirePoll: 200,
       expireNonPoll: 400,

@@ -159,6 +159,7 @@ export async function runScenarios(
         components: [card],
       },
     );
+    out.sendTyping = await call("POST", `/channels/${channelId}/typing`);
     out.sendPoll = await call("POST", `/channels/${channelId}/messages`, {
       poll: {
         question: { text: "contract?" },
