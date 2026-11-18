@@ -492,6 +492,22 @@ class Discord {
     this.mock.removeBot(this.g(guild));
   }
 
+  /**
+   * A Discord outage takes `guild` away: the bot gets `guildUnavailable` and hears nothing from it
+   * until `endOutage`, which brings `guildAvailable`. REST still answers during the outage.
+   * @example discord.outage(server); discord.endOutage(server);
+   */
+  outage(guild: Guild): void {
+    this.markAction();
+    this.mock.gateway.startOutage(this.g(guild));
+  }
+
+  /** Ends `outage`: the bot gets the guild again, with `guildAvailable`. */
+  endOutage(guild: Guild): void {
+    this.markAction();
+    this.mock.gateway.endOutage(this.g(guild));
+  }
+
   /** Discord archives `thread` for inactivity: it moves from the active list to the archived one. */
   archive(thread: Thread): void {
     this.markAction();

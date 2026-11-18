@@ -74,6 +74,8 @@ export class DiscordState extends EventEmitter<{
 }> {
   readonly users = new Map<string, APIUser>();
   readonly guilds = new Map<string, GuildRecord>();
+  /** Guilds in an outage: the bot hears nothing from them (gateway-events#guild-delete). */
+  readonly outages = new Set<string>();
   readonly channels = new Map<string, APIChannel>();
   readonly messages = new Map<string, APIMessage[]>();
   /** Users who turned off DMs from server members, so the bot can't message them. */

@@ -132,12 +132,20 @@ export class Gateway {
             shard: [0, 1],
             application: { id: this.state.applicationId, flags: 0 },
           });
+          // gateway-events#guild-create, scenario 1: "Guilds that are unavailable due to an outage
+          // will send a Guild Delete event."
           for (const guild of guilds)
-            this.send(
-              session,
-              GatewayDispatchEvents.GuildCreate,
-              guildCreatePayload(this.state, guild, session.intents),
-            );
+            if (this.state.outages.has(guild.id))
+              this.send(session, GatewayDispatchEvents.GuildDelete, {
+                id: guild.id,
+                unavailable: true,
+              });
+            else
+              this.send(
+                session,
+                GatewayDispatchEvents.GuildCreate,
+                guildCreatePayload(this.state, guild, session.intents),
+              );
           return;
         }
         case GatewayOpcodes.Resume: {
@@ -254,10 +262,33 @@ export class Gateway {
       );
   }
 
+  /** Whether the bot hears `guildId`'s events: it's in the guild, and the guild isn't in an outage. */
+  private hears(guildId: string) {
+    return this.state.botIn(guildId) && !this.state.outages.has(guildId);
+  }
+
+  /**
+   * An outage takes `guild` away: GUILD_DELETE with `unavailable: true`, then nothing from it until
+   * `endOutage`, which sends GUILD_CREATE (gateway-events#guild-delete, #guild-create scenario 2).
+   */
+  startOutage(guild: GuildRecord) {
+    this.dispatch(
+      GatewayDispatchEvents.GuildDelete,
+      { id: guild.id, unavailable: true },
+      GatewayIntentBits.Guilds,
+    );
+    this.state.outages.add(guild.id);
+  }
+
+  endOutage(guild: GuildRecord) {
+    this.state.outages.delete(guild.id);
+    if (this.state.botIn(guild.id)) this.announceGuild(guild);
+  }
+
   /** Dispatch to every session whose intents allow it. Nothing from a guild the bot isn't in. */
   dispatch(t: string, d: unknown, requiredIntent?: number) {
     const guildId = (d as { guild_id?: string } | undefined)?.guild_id;
-    if (guildId && !this.state.botIn(guildId)) return;
+    if (guildId && !this.hears(guildId)) return;
     for (const session of this.sessions.values()) {
       if (requiredIntent && !(session.intents & requiredIntent)) continue;
       this.send(session, t, d);
@@ -271,7 +302,7 @@ export class Gateway {
     requiredIntent: number,
     build: (intents: number) => unknown,
   ) {
-    if (!this.state.botIn(guildId)) return;
+    if (!this.hears(guildId)) return;
     for (const session of this.sessions.values())
       if (session.intents & requiredIntent)
         this.send(session, t, build(session.intents));
@@ -290,7 +321,7 @@ export class Gateway {
     const channel = this.state.requireChannel(message.channel_id);
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
     const inGuild = !!guildId;
-    if (inGuild && !this.state.botIn(guildId)) return;
+    if (inGuild && !this.hears(guildId)) return;
     const required = inGuild
       ? GatewayIntentBits.GuildMessages
       : GatewayIntentBits.DirectMessages;
