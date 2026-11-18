@@ -59,6 +59,7 @@ Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/S
 | `post(channel, message)`            | `Message`             | Files are served by the mock                             |
 | `forumPost(forum, post)`            | `{ thread, message }` |                                                          |
 | `react(message, emoji)`             | `void`                |                                                          |
+| `closeDMs()`                        | `void`                | The bot's DMs to them fail with 50007                    |
 | `nickname(nick \| null)`            | `void`                | null goes back to their name                             |
 | `leave()`                           | `void`                |                                                          |
 

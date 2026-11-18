@@ -40,6 +40,8 @@ export class DiscordState extends EventEmitter<{
   readonly guilds = new Map<string, GuildRecord>();
   readonly channels = new Map<string, APIChannel>();
   readonly messages = new Map<string, APIMessage[]>();
+  /** Users who turned off DMs from server members, so the bot can't message them. */
+  readonly closedDms = new Set<string>();
   /** Thread id to its members' join timestamps, by user id. */
   private readonly threadMemberIds = new Map<string, Map<string, string>>();
   /** Bytes behind each attachment url, keyed by attachment id. */

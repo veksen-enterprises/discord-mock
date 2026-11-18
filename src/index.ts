@@ -131,6 +131,11 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   ): { thread: Thread<G>; message: Message };
   /** Reacts to `message` with a unicode emoji. */
   react(message: Message, emoji: string): void;
+  /**
+   * Turns off DMs from server members, as a privacy setting: the bot's DMs to them fail with 50007.
+   * @example alice.closeDMs(); await alice.run(general, "remind-me"); // the bot should say it can't DM
+   */
+  closeDMs(): void;
   /** Sets their server nickname; null goes back to their name. */
   nickname(nick: string | null): void;
   /** Leaves the guild. */
@@ -488,6 +493,11 @@ class MemberActor {
 
   react(message: Message, emoji: string): void {
     this.actor().react(message, emoji);
+  }
+
+  closeDMs(): void {
+    this.markAction();
+    this.mock.state.closedDms.add(this.id);
   }
 
   nickname(nick: string | null): void {

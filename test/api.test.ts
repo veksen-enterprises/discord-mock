@@ -84,6 +84,19 @@ it("lets a member DM the bot and finds the answer in their DMs", async () => {
   expect((await discord.find(alice, "pong")).content).toBe("pong");
 });
 
+it("lets the bot DM a member, and refuses with 50007 once they close their DMs", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+
+  expect((await alice.run(generalChannel, "remind")).content).toBe(
+    "check your DMs",
+  );
+  expect(discord.dms(alice).map((m) => m.content)).toEqual(["reminder set"]);
+  alice.closeDMs();
+  expect((await alice.run(generalChannel, "remind")).content).toBe(
+    "I can't DM you",
+  );
+});
+
 it("names the channel and its last messages when find gives up", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "hello" });

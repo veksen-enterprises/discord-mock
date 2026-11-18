@@ -64,6 +64,9 @@ export const commands = [
     .setDescription("Server settings, for whoever can manage the server")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
+    .setName("remind")
+    .setDescription("DMs you a reminder, or says it can't"),
+  new SlashCommandBuilder()
     .setName("feedback")
     .setDescription("Opens a feedback form"),
   new SlashCommandBuilder()
@@ -174,6 +177,15 @@ export function createBot(
           await interaction.deferReply();
           await new Promise((r) => setTimeout(r, 50));
           await interaction.editReply("done thinking");
+          return;
+        case "remind":
+          try {
+            await interaction.user.send("reminder set");
+            await interaction.reply("check your DMs");
+          } catch (error) {
+            if ((error as { code?: number }).code !== 50007) throw error;
+            await interaction.reply("I can't DM you");
+          }
           return;
         case "feedback":
           await interaction.showModal(

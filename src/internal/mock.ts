@@ -1287,6 +1287,13 @@ export class DiscordMock {
           return rest.gap(`reply to unknown message ${replyTo}`);
         const overLimit = messageLimitError(req.body);
         if (overLimit) return overLimit;
+        // A user who turned off DMs from server members can't be messaged: 50007 "Cannot send
+        // messages to this user" (Discord's code table). The 403 status is inferred, not checked.
+        if (
+          channel.type === ChannelType.DM &&
+          channel.recipients?.some((u) => state.closedDms.has(u.id))
+        )
+          return respond.error(403, 50007, "Cannot send messages to this user");
         // topics/threads: "Sending a message will automatically unarchive the thread, unless the
         // thread has been locked by a moderator"; a locked one only unarchives with MANAGE_THREADS.
         // The 50083 for a locked one is inferred, not checked.
