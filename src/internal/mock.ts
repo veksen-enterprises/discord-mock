@@ -25,6 +25,7 @@ import {
   modalLimitError,
 } from "./limits.js";
 import { registerMemberRoutes } from "./members.js";
+import { registerMessageRoutes } from "./messages.js";
 import {
   ALL_PERMISSIONS,
   computePermissions,
@@ -1131,6 +1132,7 @@ export class DiscordMock {
           return respond.missingAccess();
         return handler(req);
       };
+    registerMessageRoutes(this, authed);
 
     rest.route(
       "GET",
@@ -1989,7 +1991,7 @@ export class DiscordMock {
   }
 
   /** VIEW_CHANNEL first: without it "other channel permissions are effectively ignored" (docs.discord.food/topics/permissions). */
-  private checkBotPerms(channel: APIChannel, needed: bigint) {
+  checkBotPerms(channel: APIChannel, needed: bigint) {
     if (!("guild_id" in channel) || !channel.guild_id) return undefined;
     const guild = this.state.requireGuild(channel.guild_id);
     const perms = computePermissions(
