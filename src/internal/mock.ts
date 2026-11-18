@@ -54,6 +54,7 @@ import {
   registerThreadRoutes,
 } from "./threads.js";
 import { registerVoiceRoutes, setVoiceState } from "./voice.js";
+import { registerWebhookRoutes } from "./webhooks.js";
 
 export { respond } from "./rest.js";
 export type { RestHandler, RestRequest, RestResponse } from "./rest.js";
@@ -1218,6 +1219,7 @@ export class DiscordMock {
       };
     registerMessageRoutes(this, authed);
     registerCommandPermissionRoutes(this, authed);
+    registerWebhookRoutes(this, authed);
 
     rest.route(
       "GET",

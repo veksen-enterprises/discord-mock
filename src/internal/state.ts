@@ -32,6 +32,16 @@ export interface InviteRecord {
   created_at: string;
 }
 
+/** A channel webhook (resources/webhook, type 1 Incoming). */
+export interface WebhookRecord {
+  id: string;
+  guildId: string;
+  channelId: string;
+  creatorId: string;
+  name: string;
+  token: string;
+}
+
 export interface GuildRecord {
   id: string;
   name: string;
@@ -72,6 +82,8 @@ export class DiscordState extends EventEmitter<{
     string,
     Map<string, APIApplicationCommandPermission[]>
   >();
+  /** Channel webhooks by id. */
+  readonly webhooks = new Map<string, WebhookRecord>();
   /** Invites by code. */
   readonly invites = new Map<string, InviteRecord>();
 
