@@ -417,6 +417,7 @@ export class DiscordMock {
     input: UserMessage,
     id?: string,
   ): APIMessage {
+    this.requireMembership(user, channel);
     const content = input.content ?? "";
     const mentions = [...content.matchAll(/<@!?(\d+)>/g)].flatMap(
       ([, id]) => this.state.users.get(id!) ?? [],
@@ -437,13 +438,11 @@ export class DiscordMock {
   }
 
   private userReacts(user: APIUser, message: APIMessage, emoji: string) {
+    const channel = this.state.requireChannel(message.channel_id);
+    const member = this.requireMembership(user, channel)?.member;
     if (!this.state.addReaction(message.channel_id, message.id, emoji, user.id))
       return;
-    const channel = this.state.requireChannel(message.channel_id);
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
-    const member = guildId
-      ? this.state.guilds.get(guildId)?.members.get(user.id)
-      : undefined;
     // docs.discord.food/gateway/gateway-events#message-reaction-add; GUILD_MESSAGE_REACTIONS
     // in guilds, DIRECT_MESSAGE_REACTIONS in DMs.
     this.gateway.dispatch(
@@ -472,6 +471,7 @@ export class DiscordMock {
   ) {
     if (forum.type !== ChannelType.GuildForum)
       throw new Error(`discordjs-test-kit: ${forum.id} isn't a forum`);
+    this.requireMembership(user, forum);
     const thread = this.state.createThread({
       parentId: forum.id,
       name: post.title,
@@ -637,6 +637,22 @@ export class DiscordMock {
     );
   }
 
+  /**
+   * `channel`'s server and `user`'s member record in it, or undefined in a DM. A non-member can't see a
+   * server's channels at all (Discord answers 50001 Missing Access), so the World refuses the
+   * action rather than let a test act as someone the bot would never hear from.
+   */
+  private requireMembership(user: APIUser, channel: APIChannel) {
+    if (!("guild_id" in channel) || !channel.guild_id) return undefined;
+    const guild = this.state.requireGuild(channel.guild_id);
+    const member = guild.members.get(user.id);
+    if (!member)
+      throw new Error(
+        `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
+      );
+    return { guild, member };
+  }
+
   private dispatchInteraction(
     user: APIUser,
     channel: APIChannel,
@@ -644,15 +660,7 @@ export class DiscordMock {
     data: unknown,
     message?: APIMessage,
   ) {
-    const guild =
-      "guild_id" in channel && channel.guild_id
-        ? this.state.requireGuild(channel.guild_id)
-        : undefined;
-    const member = guild?.members.get(user.id);
-    if (guild && !member)
-      throw new Error(
-        `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
-      );
+    const { guild, member } = this.requireMembership(user, channel) ?? {};
     const run = new InteractionRun(
       this,
       snowflake(),

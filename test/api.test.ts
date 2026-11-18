@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { createDiscord } from "../src/index.js";
+import { createDiscord, type Guild, type Member } from "../src/index.js";
 import { commands, createBot } from "./fixtures/bot.js";
 
 async function startBot() {
@@ -83,4 +83,25 @@ it("still gives up when the test has frozen Date", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("refuses to let a member act in a server they aren't in, even when the types are widened", async () => {
+  const { discord, alice } = await startBot();
+  const elsewhere: Guild = discord.guild("elsewhere");
+  const strangers = discord.channel(elsewhere, "strangers");
+  const forum = discord.forum(elsewhere, "listings");
+  const outsider: Member = alice;
+  const insider = discord.member(elsewhere, "carol");
+  const message = insider.post(strangers, { content: "hi" });
+
+  expect(() => outsider.post(strangers, { content: "hi" })).toThrow(
+    "alice isn't a member of elsewhere",
+  );
+  expect(() => outsider.react(message, "👍")).toThrow(
+    "alice isn't a member of elsewhere",
+  );
+  expect(() =>
+    outsider.forumPost(forum, { title: "wts", content: "x" }),
+  ).toThrow("alice isn't a member of elsewhere");
+  expect(message.reactions ?? []).toEqual([]);
 });
