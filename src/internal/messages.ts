@@ -9,8 +9,9 @@ import type { DiscordMock } from "./mock.js";
 import { Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
 
-// Pin and bulk delete Routes. Sources: discord-api-docs resources/message (Get Channel
-// Pins, Pin Message, Unpin Message, Bulk Delete Messages), topics/opcodes-and-status-codes for the
+// Pin, bulk delete and reaction Routes. Sources: discord-api-docs resources/message (Get Channel
+// Pins, Pin Message, Unpin Message, Bulk Delete Messages, Get Reactions, Delete User Reaction,
+// Delete All Reactions, Delete All Reactions for Emoji), topics/opcodes-and-status-codes for the
 // JSON codes, and docs.discord.food/resources/message. HTTP statuses the docs don't give are
 // inferred, not checked.
 
@@ -193,6 +194,122 @@ export function registerMessageRoutes(
         { ids: deleted, channel_id: channel.id, guild_id: guildId },
         GatewayIntentBits.GuildMessages,
       );
+      return respond.noContent();
+    }),
+  );
+
+  /** Reaction events: GUILD_MESSAGE_REACTIONS in guilds, DIRECT_MESSAGE_REACTIONS in DMs. */
+  const announceReaction = (
+    t: GatewayDispatchEvents,
+    channel: APIChannel,
+    message: APIMessage,
+    extra: object,
+  ) => {
+    const guildId = guildIdOf(channel);
+    gateway.dispatch(
+      t,
+      {
+        channel_id: channel.id,
+        message_id: message.id,
+        ...(guildId ? { guild_id: guildId } : {}),
+        ...extra,
+      },
+      guildId
+        ? GatewayIntentBits.GuildMessageReactions
+        : GatewayIntentBits.DirectMessageReactions,
+    );
+  };
+
+  // Get Reactions: users who reacted with `emoji`, ordered by id for `after`, 25 by default.
+  // Needs READ_MESSAGE_HISTORY like reading the message (inferred, not checked).
+  rest.route(
+    "GET",
+    "/channels/:channelId/messages/:messageId/reactions/:emoji",
+    authed((req) => {
+      const { refused, message } = target(req, Permission.ReadMessageHistory);
+      if (refused) return refused;
+      const after = BigInt(req.query.get("after") ?? 0);
+      const limit = Math.min(100, Number(req.query.get("limit") ?? 25));
+      const ids = [
+        ...(state.reactors.get(`${message.id}:${req.params.emoji}`) ?? []),
+      ]
+        .filter((id) => BigInt(id) > after)
+        .sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : 1));
+      return respond.json(
+        ids.slice(0, limit).map((id) => state.requireUser(id)),
+      );
+    }),
+  );
+
+  // Delete User Reaction: MANAGE_MESSAGES. The bot's own reaction has its @me Route.
+  rest.route(
+    "DELETE",
+    "/channels/:channelId/messages/:messageId/reactions/:emoji/:userId",
+    authed((req) => {
+      if (req.params.userId === "@me") return undefined;
+      const { refused, channel, message } = target(
+        req,
+        Permission.ManageMessages,
+      );
+      if (refused) return refused;
+      const emoji = req.params.emoji!;
+      const userId = req.params.userId!;
+      if (state.removeReaction(channel.id, message.id, emoji, userId))
+        announceReaction(
+          GatewayDispatchEvents.MessageReactionRemove,
+          channel,
+          message,
+          {
+            user_id: userId,
+            emoji: { id: null, name: emoji },
+            type: 0,
+            burst: false,
+          },
+        );
+      return respond.noContent();
+    }),
+  );
+
+  // Delete All Reactions for Emoji: MANAGE_MESSAGES, fires MESSAGE_REACTION_REMOVE_EMOJI. With
+  // nothing to remove the mock sends no event, here and below (inferred, not checked).
+  rest.route(
+    "DELETE",
+    "/channels/:channelId/messages/:messageId/reactions/:emoji",
+    authed((req) => {
+      const { refused, channel, message } = target(
+        req,
+        Permission.ManageMessages,
+      );
+      if (refused) return refused;
+      const emoji = req.params.emoji!;
+      if (state.clearReactions(message, emoji))
+        announceReaction(
+          GatewayDispatchEvents.MessageReactionRemoveEmoji,
+          channel,
+          message,
+          { emoji: { id: null, name: emoji } },
+        );
+      return respond.noContent();
+    }),
+  );
+
+  // Delete All Reactions: MANAGE_MESSAGES, fires MESSAGE_REACTION_REMOVE_ALL.
+  rest.route(
+    "DELETE",
+    "/channels/:channelId/messages/:messageId/reactions",
+    authed((req) => {
+      const { refused, channel, message } = target(
+        req,
+        Permission.ManageMessages,
+      );
+      if (refused) return refused;
+      if (state.clearReactions(message))
+        announceReaction(
+          GatewayDispatchEvents.MessageReactionRemoveAll,
+          channel,
+          message,
+          {},
+        );
       return respond.noContent();
     }),
   );

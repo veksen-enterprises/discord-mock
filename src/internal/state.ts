@@ -409,6 +409,21 @@ export class DiscordState extends EventEmitter<{
     return true;
   }
 
+  /** Removes every reaction on `message`, or only `emoji`'s. False when there was none. */
+  clearReactions(message: APIMessage, emoji?: string) {
+    const before = message.reactions?.length ?? 0;
+    message.reactions = (message.reactions ?? []).filter(
+      (r) => emoji !== undefined && r.emoji.name !== emoji,
+    );
+    for (const key of this.reactors.keys())
+      if (
+        key === `${message.id}:${emoji}` ||
+        (!emoji && key.startsWith(`${message.id}:`))
+      )
+        this.reactors.delete(key);
+    return message.reactions.length < before;
+  }
+
   /** Who reacted with what, keyed by `${messageId}:${emoji}`. */
   readonly reactors = new Map<string, Set<string>>();
 

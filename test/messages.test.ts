@@ -117,3 +117,31 @@ it("refuses a bulk delete with a message over two weeks old, or too few ids", as
     ).code,
   ).toBe(50016);
 });
+
+it("removes another user's reaction, an emoji's, then all, lists who reacted, and announces each", async () => {
+  const { general, channel, alice, bob } = await start(
+    Permission.ManageMessages | Permission.ReadMessageHistory,
+  );
+  const posted = mock.as(alice).sendMessage(general, "poll");
+  for (const user of [alice, bob]) mock.as(user).react(posted, "👍");
+  mock.as(alice).react(posted, "👎");
+  const message = await channel.messages.fetch(posted.id);
+  const thumbsUp = message.reactions.resolve("👍")!;
+
+  const removed = once(client, Events.MessageReactionRemove);
+  await thumbsUp.users.remove(alice.id);
+  expect((await removed)[1].id).toBe(alice.id);
+  expect((await thumbsUp.users.fetch()).map((u) => u.username)).toEqual([
+    "bob",
+  ]);
+
+  const emojiCleared = once(client, Events.MessageReactionRemoveEmoji);
+  await thumbsUp.remove();
+  expect((await emojiCleared)[0].emoji.name).toBe("👍");
+
+  const allCleared = once(client, Events.MessageReactionRemoveAll);
+  await message.reactions.removeAll();
+  await allCleared;
+  expect(posted.reactions).toEqual([]);
+  mock.assertNoUnhandledRequests();
+});
