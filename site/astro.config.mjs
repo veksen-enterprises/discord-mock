@@ -12,7 +12,12 @@ export default defineConfig({
       description:
         "A fake Discord that a stock discord.js bot logs in to, so a test runs the bot as it ships.",
       expressiveCode: { defaultProps: { wrap: true } },
-      customCss: ["./src/styles/custom.css"],
+      logo: { src: "./src/assets/mark.svg" },
+      customCss: [
+        "@fontsource-variable/archivo/wdth.css",
+        "@fontsource-variable/jetbrains-mono",
+        "./src/styles/custom.css",
+      ],
       social: [
         {
           icon: "github",

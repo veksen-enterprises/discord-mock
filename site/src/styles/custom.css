@@ -1,3 +1,54 @@
+/* Identity: the crash-test target. Yellow #FFC800 and ink #15140F.
+   Starlight's :root is the dark theme and [data-theme='light'] overrides it
+   (@astrojs/starlight style/props.css). */
+:root {
+  --sl-font: "Archivo Variable", system-ui, sans-serif;
+  --sl-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --sl-color-accent-low: #3a2f00;
+  --sl-color-accent: #d9a300;
+  --sl-color-accent-high: #ffc800;
+
+  --sl-color-white: #f7f5ee;
+  --sl-color-gray-1: #e9e6dc;
+  --sl-color-gray-2: #c9c5b8;
+  --sl-color-gray-3: #908b7d;
+  --sl-color-gray-4: #5e5a4f;
+  --sl-color-gray-5: #3a3730;
+  --sl-color-gray-6: #24221d;
+  --sl-color-black: #15140f;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #fff0b3;
+  /* Light mode uses accent for links and the current page's fill (text-accent),
+     under white text. Yellow is 1.55:1 on white; this ochre is 6.4:1. */
+  --sl-color-accent: #7a5a00;
+  --sl-color-accent-high: #3d2d00;
+
+  --sl-color-white: #15140f;
+  --sl-color-gray-1: #24221d;
+  --sl-color-gray-2: #3a3730;
+  --sl-color-gray-3: #5e5a4f;
+  --sl-color-gray-4: #908b7d;
+  --sl-color-gray-5: #c9c5b8;
+  --sl-color-gray-6: #edebe4;
+  --sl-color-gray-7: #f7f6f2;
+  --sl-color-black: #ffffff;
+}
+
+/* The wordmark is Archivo at its widest. */
+.site-title {
+  font-stretch: 125%;
+  font-weight: 800;
+}
+
+/* SiteTitle colours the wordmark with text-accent; in light mode that is the
+   ochre, so set it in ink. */
+:root[data-theme="light"] .site-title {
+  color: var(--sl-color-white);
+}
+
 /* The testing guide renders the skill file, whose own title repeats the page's. */
 .skill > h1:first-child {
   display: none;
