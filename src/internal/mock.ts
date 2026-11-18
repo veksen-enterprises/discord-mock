@@ -1407,7 +1407,8 @@ export class DiscordMock {
         `discordjs-test-kit: the form ${describeModal(modal)} has no field ${unknown.map((l) => `"${l}"`).join(", ")}`,
       );
     for (const { label, input } of fields) {
-      const value = values[label] ?? "";
+      // A field the member leaves alone submits what the bot pre-filled (the text input's value).
+      const value = values[label] ?? input.value ?? "";
       if (input.type !== ComponentType.TextInput)
         throw new Error(
           `discordjs-test-kit: field "${label}" is a component of type ${input.type}; only text inputs are modelled in forms`,
@@ -1433,7 +1434,7 @@ export class DiscordMock {
       type: c.type,
       id: id(c),
       custom_id: c.custom_id,
-      value: values[label] ?? "",
+      value: values[label] ?? c.value ?? "",
     });
     const submitted = (modal.components as any[]).map((top) => {
       if (top.type === ComponentType.ActionRow)

@@ -364,6 +364,8 @@ export class DiscordState extends EventEmitter<{
     id?: string;
     type?: ChannelType;
     autoArchiveDuration?: number;
+    /** Slowmode in seconds; Discord's docs, Start Thread from Message: rate_limit_per_user. */
+    rateLimitPerUser?: number;
     invitable?: boolean;
     /** Tag ids, for a post in a forum. */
     appliedTags?: string[];
@@ -380,7 +382,7 @@ export class DiscordState extends EventEmitter<{
       owner_id: input.ownerId,
       name: input.name,
       last_message_id: null,
-      rate_limit_per_user: 0,
+      rate_limit_per_user: input.rateLimitPerUser ?? 0,
       message_count: 0,
       member_count: 1,
       total_message_sent: 0,

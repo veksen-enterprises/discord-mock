@@ -5,12 +5,16 @@
  */
 import { once } from "node:events";
 import {
+  ActionRowBuilder,
   Client,
   Events,
   GatewayIntentBits,
+  ModalBuilder,
   REST,
   Routes,
   SlashCommandBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
 import { expect, it } from "vitest";
 import { createDiscord, Permission } from "../src/index.js";
@@ -208,4 +212,86 @@ it("gets the thread the bot started from a message, whatever it named it", async
   await expect(discord.thread(questions, ignored)).rejects.toThrow(
     "the bot started no thread from",
   );
+});
+
+it("submits what the bot pre-filled in a form field the member leaves alone", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const general = discord.channel(server, "general");
+  const alice = discord.member(server, "alice");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...discord.clientOptions,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isChatInputCommand())
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId("title")
+          .setTitle("Set thread title")
+          .addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder()
+                .setCustomId("title")
+                .setLabel("Title")
+                .setStyle(TextInputStyle.Short)
+                .setValue("current title"),
+            ),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder()
+                .setCustomId("note")
+                .setLabel("Note")
+                .setStyle(TextInputStyle.Short)
+                .setValue("keep me"),
+            ),
+          ),
+      );
+    if (interaction.isModalSubmit())
+      await interaction.reply(
+        `${interaction.fields.getTextInputValue("title")} / ${interaction.fields.getTextInputValue("note")}`,
+      );
+  });
+  await discord.start(client, {
+    commands: [
+      new SlashCommandBuilder().setName("title").setDescription("t").toJSON(),
+    ],
+  });
+
+  const reply = await alice.run(general, "title", {}, { Title: "new title" });
+
+  expect(reply.content).toBe("new title / keep me");
+});
+
+it("starts a thread from a message with the slowmode the bot asked for", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("help");
+  const questions = discord.channel(server, "questions");
+  const alice = discord.member(server, "alice");
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+    ...discord.clientOptions,
+  });
+  client.on(Events.MessageCreate, async (message) => {
+    if (!message.author.bot)
+      await message.startThread({ name: "q", rateLimitPerUser: 5 });
+  });
+  await discord.start(client, {
+    permissions:
+      Permission.ViewChannel |
+      Permission.SendMessages |
+      Permission.CreatePublicThreads |
+      Permission.ManageThreads,
+  });
+
+  const thread = await discord.thread(
+    questions,
+    alice.post(questions, { content: "?" }),
+  );
+
+  const seen = await client.channels.fetch(thread.id, { force: true });
+  expect(seen?.isThread() && seen.rateLimitPerUser).toBe(5);
 });

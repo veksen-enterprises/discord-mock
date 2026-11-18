@@ -125,6 +125,7 @@ export function registerThreadRoutes(
         name: req.body?.name,
         ownerId: bot,
         autoArchiveDuration: req.body?.auto_archive_duration,
+        rateLimitPerUser: req.body?.rate_limit_per_user ?? undefined,
       });
       announceCreate(thread);
       // Not an edit: edited_timestamp stays as it was.
@@ -175,6 +176,7 @@ export function registerThreadRoutes(
         name: req.body?.name,
         ownerId: bot,
         autoArchiveDuration: req.body?.auto_archive_duration,
+        rateLimitPerUser: req.body?.rate_limit_per_user ?? undefined,
         invitable:
           type === ChannelType.PrivateThread
             ? (req.body?.invitable ?? true)
