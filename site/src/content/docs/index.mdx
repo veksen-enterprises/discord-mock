@@ -5,7 +5,7 @@ description: A fake Discord that a stock discord.js bot logs in to, so a test ru
 
 A fake Discord that a stock discord.js `Client` logs in to, so a test runs the bot as it ships. It runs a real HTTP server (REST) and WebSocket server (Gateway) on `127.0.0.1`, keeps an in-memory model of guilds, channels, members, messages and interactions, and refuses what Discord refuses.
 
-Nothing in discord.js is mocked. No `vi.mock("discord.js")`, no hand-built interactions, no spies on `interaction.reply`. A test builds a World, starts the bot, acts as members and reads what they would see.
+Nothing in discord.js is mocked. No `vi.mock("discord.js")`, no hand-built interactions, no spies on `interaction.reply`. A test builds a server, starts the bot, acts as members and reads what they would see.
 
 ## Install
 

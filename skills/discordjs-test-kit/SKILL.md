@@ -5,7 +5,7 @@ description: Write or fix a test for a discord.js bot with discordjs-test-kit. U
 
 # Testing a discord.js bot with discordjs-test-kit
 
-The bot logs in to a fake Discord over real HTTP and WebSocket. Nothing in discord.js is mocked. A test builds a World, starts the bot, acts as members and reads what the bot did.
+The bot logs in to a fake Discord over real HTTP and WebSocket. Nothing in discord.js is mocked. A test builds a server, starts the bot, acts as members and reads what the bot did.
 
 ## The one seam
 
@@ -50,7 +50,7 @@ it("should record the result when the winner reports", async () => {
 });
 ```
 
-- `createDiscord()` per test. Teardown is automatic and fails the test if the bot hit a route the mock doesn't model (a Gap).
+- `createDiscord()` per test. Teardown is automatic and fails the test if the bot hit a route the kit doesn't model.
 - `start(client, { commands })` registers commands the way the bot's deploy script would: pass the same command JSON. Add `permissions` (from `Permission`; for a flag it lacks, discord.js's `PermissionFlagsBits` works, both are bigints) when the bot needs more than @everyone's. If the bot deploys its own commands instead, skip `commands` and let it: `client.application.id` is set once `start` resolves.
 - Write every test as `// Arrange`, `// Act`, `// Assert`, separated by a blank line. The Act is the one thing the test is about: one member's action, which can take several steps of the same menu. Actions that only set the scene (joining, an earlier challenge) go in Arrange. Assert only after the Act; a second Act is a second test.
 - Name variables for what they are: `challengesChannel`, `reportMenu`, `searchResults`, not `c`, `msg`, `res`.
@@ -105,7 +105,7 @@ A message the bot updates in place is the same object the test holds, so keep on
 
 ## What to test
 
-One test is one journey a user takes: arrange the World, act as members, assert what they see. For each command or flow, cover:
+One test is one journey a user takes: arrange the server, act as members, assert what they see. For each command or flow, cover:
 
 - **The success path**, end to end through the bot's real handlers and, where the bot owns state, its real database. Assert the database too.
 - **Every refusal the bot has**: a member missing a permission, the wrong state ("no pending challenge"), another member pressing someone's button. Each gets its own test, asserting the reply the user reads.
@@ -127,17 +127,17 @@ Stub third parties (an AI model, a music source, a payment API) the way you woul
 
 The mock names messages by their text and lists what exists. Fix the test from the message, or the bot if the message shows the bot is wrong.
 
-| Error says                                        | Meaning                                                                                                                     |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `/x isn't registered. Registered: …`              | Typo in the test, or the bot didn't register it (check `commands`)                                                          |
-| `can't click "x": "…" has buttons A, B`           | Wrong label, or the bot showed a different message                                                                          |
-| `can't pick "x": "…" offers A, B`                 | Wrong option label                                                                                                          |
-| `matches 2 buttons` / `matches 2 options`         | Make the label or RegExp more specific                                                                                      |
-| `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                                                                         |
-| `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`                                                           |
-| `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug                                                            |
-| `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set                                                        |
-| `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`                                                           |
-| `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post                                                             |
-| `unhandled requests: …`                           | The bot used a route the mock doesn't model yet: a Gap, report it                                                           |
-| `AutoMod blocked alice's message: "…"`            | A rule (the bot's or the World's) blocked the post, as on Discord: `expect(() => alice.post(…)).toThrow("AutoMod blocked")` |
+| Error says                                        | Meaning                                                                                                                      |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/x isn't registered. Registered: …`              | Typo in the test, or the bot didn't register it (check `commands`)                                                           |
+| `can't click "x": "…" has buttons A, B`           | Wrong label, or the bot showed a different message                                                                           |
+| `can't pick "x": "…" offers A, B`                 | Wrong option label                                                                                                           |
+| `matches 2 buttons` / `matches 2 options`         | Make the label or RegExp more specific                                                                                       |
+| `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                                                                          |
+| `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`                                                            |
+| `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug                                                             |
+| `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set                                                         |
+| `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`                                                            |
+| `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post                                                              |
+| `unhandled requests: …`                           | The bot used a route the kit doesn't model yet: report it                                                                    |
+| `AutoMod blocked alice's message: "…"`            | A rule (the bot's or the server's) blocked the post, as on Discord: `expect(() => alice.post(…)).toThrow("AutoMod blocked")` |

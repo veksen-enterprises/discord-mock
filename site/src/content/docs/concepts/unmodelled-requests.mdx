@@ -1,11 +1,11 @@
 ---
-title: Gaps and strictness
+title: Unmodelled requests
 description: Why the kit fails a test instead of guessing.
 sidebar:
   order: 4
 ---
 
-A **Gap** is a request the kit doesn't model. It never answers one with a guess: the request fails, and the test fails at teardown, naming the route.
+When the bot sends a request the kit doesn't model, the kit never answers it with a guess: the request fails, and the test fails at teardown, naming the route.
 
 ```
 unhandled requests: GET /guilds/:id/scheduled-events
@@ -15,12 +15,12 @@ The alternative, a lenient default, lets a broken bot's test pass. A test that p
 
 ## Rules
 
-What the kit does model, it enforces: permissions from roles and channel overwrites, intents, message and embed limits, the 3-second interaction deadline, role hierarchy. Each Rule cites where it comes from. A Rule not yet checked against real Discord is marked "inferred" in the README until the nightly contract test covers it.
+What the kit does model, it enforces: permissions from roles and channel overwrites, intents, message and embed limits, the 3-second interaction deadline, role hierarchy. A rule not yet checked against real Discord is marked "inferred" in [Discord rules the kit enforces](/reference/discord-rules/).
 
 ## Reading errors
 
 Errors name things by their text and list what exists, so the fix is usually in the message. The [testing guide](/testing-guide/#reading-errors) has the table.
 
-## When you hit a Gap
+## When you hit one
 
 Report it. Don't route around it with `vi.mock`: the point is that the bot runs as it ships.

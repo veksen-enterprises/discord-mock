@@ -12,6 +12,9 @@ project.
 **Read `GLOSSARY.md` for the ubiquitous language** (Mock, Model, Rule, Gap,
 Override, Actor, Dispatch, Interaction run, …). Use its canonical terms; honor
 its `_Avoid_` lists, in code names too.
+Those terms are for code and contributor docs. The README, the docs site, the skill and
+`src/index.ts`'s JSDoc are read by bot authors: write them in plain words, and don't cite ADRs
+there.
 
 **Read `docs/adr/`** before changing the area an ADR covers. If a change
 contradicts one, say so explicitly rather than silently overriding it.

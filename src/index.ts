@@ -307,8 +307,8 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
 const FIND_TIMEOUT_MS = 2000;
 
 /**
- * A fake Discord for one test. Build the World, `start` your bot, act as members, then read what
- * the bot did. It shuts down when the test ends, and fails the test if the bot hit a Gap.
+ * A fake Discord for one test. Build the server, `start` your bot, act as members, then read what
+ * the bot did. It shuts down when the test ends, and fails the test if the bot sent a request the kit doesn't model.
  */
 class Discord {
   private client?: Client;
@@ -470,7 +470,7 @@ class Discord {
   }
 
   /**
-   * Answers every `method path` request with `response` instead of the Model, until you call the
+   * Answers every `method path` request with `response` instead of the kit's own answer, until you call the
    * function it returns. `:name` segments match anything; a literal id fails only that channel, message
    * or member.
    * @example const recover = discord.fail("GET", "/attachments/:channel/:id/:name", respond.serverError(503));
@@ -579,8 +579,7 @@ class Discord {
    * Takes `permission` from the bot in `channel`, or from `who` (a member, a role, `"bot"` or
    * `"everyone"`): a channel overwrite denying it, announced as CHANNEL_UPDATE, which keeps what
    * the target's overwrite already allowed or denied. Discord then answers the bot there as it
-   * would: 50001 Missing Access without View Channel, else 50013. ADR 0002: a permission error
-   * comes from the Model, not from an Override.
+   * would: 50001 Missing Access without View Channel, else 50013.
    * @example discord.deny(isoChannel, Permission.SendMessages);
    * @example discord.deny(staffChannel, "everyone", Permission.ViewChannel);
    */
