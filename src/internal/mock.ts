@@ -600,8 +600,22 @@ export class DiscordMock {
     members: APIUser[] = [],
   ) {
     const role = this.state.createRole(guild.id, { name, permissions });
-    for (const user of members)
+    // gateway-events#guild-role-create and #guild-member-update: a bot already connected hears
+    // the role (GUILDS) and each member who got it (GUILD_MEMBERS). Without them discord.js keeps
+    // the member's old roles, so GuildMember.permissions misses the new ones.
+    this.gateway.dispatch(
+      GatewayDispatchEvents.GuildRoleCreate,
+      { guild_id: guild.id, role },
+      GatewayIntentBits.Guilds,
+    );
+    for (const user of members) {
       this.state.assignRole(guild.id, user.id, role.id);
+      this.gateway.dispatch(
+        GatewayDispatchEvents.GuildMemberUpdate,
+        { ...guild.members.get(user.id)!, guild_id: guild.id },
+        GatewayIntentBits.GuildMembers,
+      );
+    }
     return role;
   }
 
