@@ -14,6 +14,7 @@ import {
   InteractionType,
   MessageFlags,
   type APIApplicationCommand,
+  type APIAttachment,
   type APIApplicationCommandOption,
   type RESTPostAPIApplicationCommandsJSONBody,
   type APIChannel,
@@ -79,9 +80,16 @@ const realSetTimeout = globalThis.setTimeout;
 const realClearTimeout = globalThis.clearTimeout;
 
 /** What a user posts: text, files, and the message it replies to. */
+/** A file a member uploads: in a post, or as a command's attachment option. */
+export interface Attachment {
+  name: string;
+  data: Uint8Array;
+  contentType: string;
+}
+
 export interface UserMessage {
   content?: string;
-  files?: { name: string; data: Uint8Array; contentType: string }[];
+  files?: Attachment[];
   replyTo?: APIMessage;
 }
 
@@ -1045,6 +1053,10 @@ export class DiscordMock {
       name,
       focused,
     );
+    const attachments = this.uploadAttachmentOptions(
+      options as CommandOption[],
+      channel.id,
+    );
     return this.dispatchInteraction(
       user,
       channel,
@@ -1056,9 +1068,38 @@ export class DiscordMock {
         name: command.name,
         type: command.type,
         options,
-        resolved: resolvedFor(this.state, leaf, input, guild, user.id),
+        resolved: resolvedFor(
+          this.state,
+          leaf,
+          input,
+          guild,
+          user.id,
+          attachments,
+        ),
       },
     );
+  }
+
+  /**
+   * docs.discord.food/interactions/receiving-and-responding: an ATTACHMENT option's value is the
+   * attachment's id, and the attachment itself is in `resolved.attachments`. The file is stored so
+   * the bot can download it, like a posted one.
+   */
+  private uploadAttachmentOptions(
+    options: CommandOption[],
+    channelId: string,
+  ): APIAttachment[] {
+    return options.flatMap((option) => {
+      if (option.options)
+        return this.uploadAttachmentOptions(option.options, channelId);
+      if (option.type !== ApplicationCommandOptionType.Attachment) return [];
+      const attachment = this.state.storeAttachment(
+        channelId,
+        option.value as Attachment,
+      );
+      option.value = attachment.id;
+      return [attachment];
+    });
   }
 
   // Discord's docs, interactions/application-commands#permissions: default_member_permissions
@@ -2662,6 +2703,17 @@ const OPTION_CHECKS: Partial<
   [ApplicationCommandOptionType.Boolean]: (v) => typeof v === "boolean",
   [ApplicationCommandOptionType.User]: (v) => typeof v === "string",
   [ApplicationCommandOptionType.Channel]: (v) => typeof v === "string",
+  [ApplicationCommandOptionType.Role]: (v) => typeof v === "string",
+  [ApplicationCommandOptionType.Mentionable]: (v) => typeof v === "string",
+  [ApplicationCommandOptionType.Attachment]: (v) =>
+    typeof v === "object" && v !== null && "data" in v && "name" in v,
+};
+
+/** An option as the interaction carries it, nested under its subcommand. */
+type CommandOption = {
+  type: number;
+  value?: unknown;
+  options?: CommandOption[];
 };
 
 const SUBCOMMAND_TYPES: ApplicationCommandOptionType[] = [
@@ -2812,6 +2864,7 @@ function resolvedFor(
   input: Record<string, unknown>,
   guild: GuildRecord | undefined,
   invokerId: string,
+  attachments: APIAttachment[] = [],
 ) {
   const idsOf = (type: ApplicationCommandOptionType) =>
     schema
@@ -2828,11 +2881,25 @@ function resolvedFor(
         `discordjs-test-kit: option "${o.name}" only offers channel types ${allowed.join(", ")}`,
       );
   }
-  return resolvedData(state, guild, invokerId, {
-    users: idsOf(ApplicationCommandOptionType.User),
-    roles: [],
+  // A MENTIONABLE option's value is a user's or a role's id; the resolved map it lands in says which.
+  const mentioned = idsOf(ApplicationCommandOptionType.Mentionable);
+  const isRole = (id: string) => guild?.roles.has(id) ?? false;
+  const resolved = resolvedData(state, guild, invokerId, {
+    users: [
+      ...idsOf(ApplicationCommandOptionType.User),
+      ...mentioned.filter((id) => !isRole(id)),
+    ],
+    roles: [
+      ...idsOf(ApplicationCommandOptionType.Role),
+      ...mentioned.filter(isRole),
+    ],
     channels: idsOf(ApplicationCommandOptionType.Channel),
   });
+  if (!attachments.length) return resolved;
+  return {
+    ...resolved,
+    attachments: Object.fromEntries(attachments.map((a) => [a.id, a])),
+  };
 }
 
 /**

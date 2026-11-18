@@ -3,6 +3,7 @@ import {
   ApplicationCommandType,
   ChannelType,
   type APIApplicationCommand,
+  type APIAttachment,
   type APIAutoModerationRule,
   type APIApplicationCommandPermission,
   type APIAuditLogEntry,
@@ -541,6 +542,28 @@ export class DiscordState extends EventEmitter<{
   /** Who reacted with what, keyed by `${messageId}:${emoji}`. */
   readonly reactors = new Map<string, Set<string>>();
 
+  /** Keeps `file`'s bytes for the CDN route and returns the attachment object that points at them. */
+  storeAttachment(
+    channelId: string,
+    file: { name: string; data: Uint8Array; contentType: string },
+  ): APIAttachment {
+    const attachmentId = snowflake();
+    this.files.set(attachmentId, {
+      data: file.data,
+      contentType: file.contentType,
+    });
+    // Real urls point at cdn.discordapp.com and carry signed ex/is/hm params; inferred shape.
+    const url = `${this.cdnUrl}/attachments/${channelId}/${attachmentId}/${encodeURIComponent(file.name)}`;
+    return {
+      id: attachmentId,
+      filename: file.name,
+      size: file.data.byteLength,
+      url,
+      proxy_url: url,
+      content_type: file.contentType,
+    };
+  }
+
   createMessage(input: {
     channelId: string;
     authorId: string;
@@ -573,23 +596,9 @@ export class DiscordState extends EventEmitter<{
     const channel = this.requireChannel(input.channelId);
     // No guild_id: Discord sends it on gateway dispatches only, not in REST message objects.
     const id = input.id ?? snowflake();
-    const attachments = (input.files ?? []).map((file) => {
-      const attachmentId = snowflake();
-      this.files.set(attachmentId, {
-        data: file.data,
-        contentType: file.contentType,
-      });
-      // Real urls point at cdn.discordapp.com and carry signed ex/is/hm params; inferred shape.
-      const url = `${this.cdnUrl}/attachments/${channel.id}/${attachmentId}/${encodeURIComponent(file.name)}`;
-      return {
-        id: attachmentId,
-        filename: file.name,
-        size: file.data.byteLength,
-        url,
-        proxy_url: url,
-        content_type: file.contentType,
-      };
-    });
+    const attachments = (input.files ?? []).map((file) =>
+      this.storeAttachment(channel.id, file),
+    );
     const message: APIMessage = {
       id,
       channel_id: channel.id,

@@ -21,6 +21,7 @@ import {
   readable,
   shown,
   type DiscordMock,
+  type Attachment,
   type InteractionRun,
   type UserMessage,
 } from "./internal/mock.js";
@@ -35,7 +36,7 @@ import {
 export { respond } from "./internal/rest.js";
 export type { RestResponse } from "./internal/rest.js";
 export { Permission };
-export type { UserMessage } from "./internal/mock.js";
+export type { Attachment, UserMessage } from "./internal/mock.js";
 
 declare const kind: unique symbol;
 declare const inGuild: unique symbol;
@@ -99,16 +100,24 @@ export interface Choice {
   value: string | number;
 }
 
-/** What a slash command option can be given: a value, or a handle where the option is a user or channel. */
+/**
+ * What a slash command option can be given: a value; a handle where the option is a user, role or
+ * channel (a member or a role for a mentionable); or a file where it's an attachment.
+ * @example await alice.run(general, "upload", { file: { name: "a.txt", data: new TextEncoder().encode("hi"), contentType: "text/plain" } });
+ */
 export type OptionValue<G extends string = string> =
   | string
   | number
   | boolean
   | Member<G>
+  | Role<G>
   | Category<G>
   | TextChannel<G>
+  | VoiceChannel<G>
+  | StageChannel<G>
   | Forum<G>
-  | Thread<G>;
+  | Thread<G>
+  | Attachment;
 
 /** A user who has joined a guild. The test acts as them. */
 export interface Member<G extends string = string> extends Handle<"member", G> {
@@ -1237,12 +1246,12 @@ class MemberActor {
   }
 }
 
-/** Handles become the ids Discord sends for user and channel options. */
+/** Handles become the ids Discord sends for user, role and channel options; files stay files. */
 function optionIds(options: Record<string, OptionValue>) {
   return Object.fromEntries(
     Object.entries(options).map(([name, value]) => [
       name,
-      typeof value === "object" ? value.id : value,
+      typeof value === "object" && "id" in value ? value.id : value,
     ]),
   );
 }
