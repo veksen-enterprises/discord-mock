@@ -1,6 +1,7 @@
 import { once } from "node:events";
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { createDiscordMock } from "../src/internal/mock.js";
+import { Permission } from "../src/internal/payloads.js";
 
 /** What a scenario needs from either side: raw REST, a guild to work in, and the gateway traffic. */
 export interface Target {
@@ -63,6 +64,11 @@ export async function mockTarget(): Promise<Target> {
   const guild = mock.createGuild("contract");
   mock.createTextChannel(guild, "general");
   mock.createRole(guild, "contract-bot", INVITE_PERMISSIONS, [mock.state.bot]);
+  // The test guild's @everyone lets the bot start public threads: run 7 got 201 for a thread the
+  // invite doesn't grant. The mock's @everyone is narrower, so the bot gets it here.
+  mock.createRole(guild, "everyone-extras", Permission.CreatePublicThreads, [
+    mock.state.bot,
+  ]);
   const dispatches: Target["dispatches"] = [];
   const client = await connect(mock.token, mock.apiUrl, dispatches);
   return {

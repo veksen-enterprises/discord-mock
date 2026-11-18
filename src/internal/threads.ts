@@ -276,10 +276,21 @@ export function registerThreadRoutes(
 
   // gateway-events#thread-create: "When a thread is created, includes an additional newly_created
   // boolean field". GUILDS intent.
+  // The creator also gets THREAD_MEMBER_UPDATE for its own membership: real Discord sent it in
+  // contract run 7 (gateway-events#thread-member-update: "the thread member object for the current
+  // user").
   function announceCreate(thread: APIChannel) {
     gateway.dispatch(
       GatewayDispatchEvents.ThreadCreate,
       { ...thread, newly_created: true },
+      GatewayIntentBits.Guilds,
+    );
+    gateway.dispatch(
+      GatewayDispatchEvents.ThreadMemberUpdate,
+      {
+        ...state.threadMember(thread.id, bot),
+        guild_id: (thread as APIThreadChannel).guild_id,
+      },
       GatewayIntentBits.Guilds,
     );
   }
