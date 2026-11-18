@@ -261,6 +261,22 @@ export class DiscordMock {
     return member;
   }
 
+  /**
+   * `user` leaves `guild` (or is kicked or banned). Discord's docs, gateway-events#guild-member-remove:
+   * GUILD_MEMBER_REMOVE { guild_id, user }, sent only with GUILD_MEMBERS.
+   */
+  removeMember(guild: GuildRecord, user: APIUser) {
+    if (!this.state.guilds.get(guild.id)?.members.delete(user.id))
+      throw new Error(
+        `discord-mock: ${user.username} isn't a member of ${guild.name}`,
+      );
+    this.gateway.dispatch(
+      GatewayDispatchEvents.GuildMemberRemove,
+      { guild_id: guild.id, user },
+      GatewayIntentBits.GuildMembers,
+    );
+  }
+
   private announceChannel(channel: APIChannel) {
     this.gateway.dispatch(
       GatewayDispatchEvents.ChannelCreate,
