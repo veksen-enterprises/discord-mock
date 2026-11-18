@@ -89,6 +89,12 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    * @example alice.post(isoChannel, { content: "ISO Shako" });
    */
   post(channel: TextChannel<G> | Thread<G>, message: UserMessage): Message;
+  /**
+   * Sends the bot a direct message. The bot needs the DirectMessages intent (and Partials.Channel)
+   * to hear it, as on Discord. Read its answer with `discord.find(member, …)`.
+   * @example alice.dm({ content: "!help" }); await discord.find(alice, /commands/);
+   */
+  dm(message: UserMessage): Message;
   /** Opens a post in `forum`: a thread whose first message is `post`. */
   forumPost(
     forum: Forum<G>,
@@ -341,6 +347,14 @@ class MemberActor {
   post(channel: TextChannel | Thread, message: UserMessage): Message {
     return this.actor().sendMessage(
       this.mock.state.requireChannel(channel.id),
+      message,
+    );
+  }
+
+  /** Sends the bot a direct message. Read its answer with `discord.find(member, …)`. */
+  dm(message: UserMessage): Message {
+    return this.actor().sendMessage(
+      this.mock.state.dmChannel(this.id),
       message,
     );
   }

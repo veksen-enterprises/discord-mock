@@ -9,6 +9,7 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  Partials,
   MessageFlags,
   REST,
   Routes,
@@ -72,9 +73,15 @@ export function createBot(
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,
   ],
 ) {
-  const client = new Client({ intents, ...clientOptions });
+  // Partials.Channel: discord.js drops a DM whose channel isn't cached (Action.getChannel).
+  const client = new Client({
+    intents,
+    partials: [Partials.Channel],
+    ...clientOptions,
+  });
   const errors: unknown[] = [];
 
   client.on(Events.MessageCreate, async (message) => {
