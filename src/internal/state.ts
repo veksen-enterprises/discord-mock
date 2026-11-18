@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import {
   ChannelType,
   type APIApplicationCommand,
+  type APIBan,
   type ChannelFlags,
   type GuildMemberFlags,
   type UserFlags,
@@ -21,6 +22,7 @@ export interface GuildRecord {
   ownerId: string;
   roles: Map<string, APIRole>;
   members: Map<string, APIGuildMember>;
+  bans: Map<string, APIBan>;
   channelIds: string[];
 }
 
@@ -98,6 +100,7 @@ export class DiscordState extends EventEmitter<{
         this.createUser({ username: `${input.name}-owner` }).id,
       roles: new Map([[id, everyone]]),
       members: new Map(),
+      bans: new Map(),
       channelIds: [],
     };
     this.guilds.set(id, guild);

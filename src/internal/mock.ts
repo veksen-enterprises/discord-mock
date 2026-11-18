@@ -17,6 +17,7 @@ import {
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
 import { messageLimitError } from "./limits.js";
+import { registerMemberRoutes } from "./members.js";
 import {
   ALL_PERMISSIONS,
   computePermissions,
@@ -1392,6 +1393,7 @@ export class DiscordMock {
       run.emit("change");
       return respond.json(message);
     });
+    registerMemberRoutes(this, authed);
   }
 
   /** VIEW_CHANNEL first: without it "other channel permissions are effectively ignored" (docs.discord.food/topics/permissions). */
