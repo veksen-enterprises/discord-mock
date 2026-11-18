@@ -19,16 +19,18 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
-      - run: npm run build
 
-  # Both consumers' Node versions: sin-bot runs 22, d2armory 24. discord.js runs at the locked
-  # version and at the lowest the peer range allows, so the range is tested, not hoped.
+  # Both consumers' Node versions: sin-bot runs 22, d2armory 24. One more run installs the lowest
+  # discord.js and vitest the peer ranges allow (sin-bot's versions), so the floor is tested.
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [22, 24]
-        discordjs: [locked, 14.26.4]
+        include:
+          - node: 22
+          - node: 24
+          - node: 22
+            floor: discord.js@14.26.4 vitest@4.1.2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +38,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - if: matrix.discordjs != 'locked'
-        run: npm install --no-save discord.js@${{ matrix.discordjs }}
+      - if: matrix.floor
+        run: npm install --no-save ${{ matrix.floor }}
       - run: npm test
