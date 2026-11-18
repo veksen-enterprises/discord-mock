@@ -11,12 +11,20 @@
     "type": "git",
     "url": "git+https://github.com/veksen-enterprises/discord-mock.git"
   },
+  "files": [
+    "dist",
+    "SKILL.md"
+  ],
   "type": "module",
-  "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
@@ -39,7 +47,8 @@
     "vitest": "^5.1.0"
   },
   "peerDependencies": {
-    "discord.js": "^14.20.0"
+    "discord.js": "^14.26.0",
+    "vitest": ">=4"
   },
   "engines": {
     "node": ">=22"

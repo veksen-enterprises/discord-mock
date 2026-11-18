@@ -19,13 +19,16 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
+      - run: npm run build
 
-  # Both consumers' Node versions: sin-bot runs 22, d2armory 24.
+  # Both consumers' Node versions: sin-bot runs 22, d2armory 24. discord.js runs at the locked
+  # version and at the lowest the peer range allows, so the range is tested, not hoped.
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         node: [22, 24]
+        discordjs: [locked, 14.26.4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,4 +36,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - if: matrix.discordjs != 'locked'
+        run: npm install --no-save discord.js@${{ matrix.discordjs }}
       - run: npm test
