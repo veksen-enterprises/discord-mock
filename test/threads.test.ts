@@ -237,3 +237,21 @@ it("refuses a thread name over 100 characters, which discord.js sends as is", as
   expect(error).toMatchObject({ code: 50035 });
   expect(mock.state.channels.has(posted.id)).toBe(false);
 });
+
+it("deletes a thread with Manage Threads, and the bot hears threadDelete", async () => {
+  const { general, channel, alice } = await startInText(
+    SEND | Permission.CreatePublicThreads | Permission.ManageThreads,
+  );
+  const posted = mock.as(alice).sendMessage(general, "help me");
+  const thread = await (
+    await channel.messages.fetch(posted.id)
+  ).startThread({ name: "to delete" });
+  const deleted = once(client, Events.ThreadDelete);
+
+  await thread.delete();
+
+  const [gone] = await deleted;
+  expect(gone.id).toBe(thread.id);
+  expect(gone.parentId).toBe(general.id);
+  expect(mock.state.channels.has(thread.id)).toBe(false);
+});

@@ -1313,14 +1313,33 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const denied = this.checkBotPerms(channel, Permission.ManageChannels);
+        // resources/channel#delete-channel: MANAGE_CHANNELS, "or MANAGE_THREADS if the channel is a
+        // thread". Fires Thread Delete for a thread, whose payload is "just the id, guild_id,
+        // parent_id, and type" (gateway-events#thread-delete).
+        const thread = "thread_metadata" in channel ? channel : undefined;
+        const denied = this.checkBotPerms(
+          channel,
+          thread ? Permission.ManageThreads : Permission.ManageChannels,
+        );
         if (denied) return denied;
         state.deleteChannel(channel.id);
-        this.gateway.dispatch(
-          GatewayDispatchEvents.ChannelDelete,
-          channel,
-          GatewayIntentBits.Guilds,
-        );
+        if (thread)
+          this.gateway.dispatch(
+            GatewayDispatchEvents.ThreadDelete,
+            {
+              id: thread.id,
+              guild_id: thread.guild_id,
+              parent_id: thread.parent_id,
+              type: thread.type,
+            },
+            GatewayIntentBits.Guilds,
+          );
+        else
+          this.gateway.dispatch(
+            GatewayDispatchEvents.ChannelDelete,
+            channel,
+            GatewayIntentBits.Guilds,
+          );
         return respond.json(channel);
       }),
     );
