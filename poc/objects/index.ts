@@ -49,6 +49,13 @@ export class Discord {
     return brand(this.mock.createGuild(name), name);
   }
 
+  /** The member who owns `guild`: they have every permission, so they can run admin commands. */
+  owner(guild: Guild): Member {
+    const user = this.mock.state.requireUser(this.g(guild).ownerId);
+    this.guildOf.set(user.id, guild);
+    return brand(user, user.username);
+  }
+
   category(guild: Guild, name: string): Category {
     return brand(this.mock.createCategory(this.g(guild), name), name);
   }
@@ -75,6 +82,15 @@ export class Discord {
     this.mock.addMember(this.g(guild), user, { nick });
     this.guildOf.set(user.id, guild);
     return brand(user, name);
+  }
+
+  /** `member` sets their server nickname; null goes back to their name. */
+  nickname(member: Member, nick: string | null) {
+    this.mock.setNickname(
+      this.g(this.guildOf.get(member.id)!),
+      this.u(member),
+      nick,
+    );
   }
 
   /** `member` leaves their guild. */
@@ -148,32 +164,50 @@ export class Discord {
   }
 
   /**
-   * `member` runs `/command` in `channel`. Resolves with the reply once it's visible (after any
-   * defer); rejects if the bot never gets there.
+   * `member` runs `/command` in `channel`, typed as a user would ("admin-config set" for a
+   * subcommand). Resolves with the reply once it's visible (after any defer); rejects if the bot
+   * never gets there, or if `member` lacks the command's default permissions.
    */
-  run(
+  async run(
     member: Member,
     channel: TextChannel | Thread,
     command: string,
-    options: Record<string, string | number | boolean> = {},
+    options: Record<
+      string,
+      | string
+      | number
+      | boolean
+      | Member
+      | Category
+      | TextChannel
+      | Forum
+      | Thread
+    > = {},
   ): Promise<Message> {
+    // Handles become the ids Discord sends for user and channel options.
+    const values = Object.fromEntries(
+      Object.entries(options).map(([name, value]) => [
+        name,
+        typeof value === "object" ? value.id : value,
+      ]),
+    );
     return this.mock
       .as(this.u(member))
-      .slashCommand(
-        this.mock.state.requireChannel(channel.id),
-        command,
-        options,
-      )
+      .slashCommand(this.mock.state.requireChannel(channel.id), command, values)
       .reply();
   }
 
   /** `member` presses the button `customId` on `message`. Resolves with the visible response. */
-  click(member: Member, message: Message, customId: string): Promise<Message> {
+  async click(
+    member: Member,
+    message: Message,
+    customId: string,
+  ): Promise<Message> {
     return this.mock.as(this.u(member)).clickButton(message, customId).reply();
   }
 
   /** `member` picks the option labelled `label` from a select menu on `message`. Resolves with the visible response. */
-  select(
+  async select(
     member: Member,
     message: Message,
     label: string | RegExp,
