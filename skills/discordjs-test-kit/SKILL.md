@@ -83,7 +83,7 @@ it("should record the result when the winner reports", async () => {
 | edit or delete their own message                 | `alice.editMessage(message, "fixed")`, `alice.deleteMessage(message)`                                                                               |
 | another bot posts                                | `discord.member(server, "Carl-bot", { bot: true })`: its posts carry `author.bot`                                                                   |
 | deny or allow in one channel                     | `discord.deny(channel, "bot", Permission.SendMessages)` (or a member, a role, `"everyone"`), `discord.allow(…)`                                     |
-| a moderator locks a thread                       | `discord.lock(thread)`                                                                                                                              |
+| a moderator locks a thread                       | `mod.lockThread(thread)`, which needs Manage Threads                                                                                                |
 | change nickname, leave the server                | `alice.setNickname("Al")`, `alice.leaveGuild()`                                                                                                     |
 | change their display name                        | `alice.setDisplayName("Alicia")`: discord.js emits `userUpdate`                                                                                     |
 | override who can use a command                   | `discord.setCommandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                       |

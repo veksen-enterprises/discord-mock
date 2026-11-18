@@ -194,19 +194,35 @@ it("refuses to let a member edit or delete someone else's message", async () => 
   expect(() => bob.deleteMessage(post)).toThrow("only its author can");
 });
 
-it("locks a thread without archiving it", async () => {
+it("locks a thread without archiving it when a moderator with Manage Threads locks it", async () => {
   const { discord, server, alice, client } = await watcher();
   const listings = discord.forum(server, "listings");
   const { thread } = alice.postInForum(listings, {
     title: "wts",
     content: "x",
   });
+  const mod = discord.member(server, "Mod", {
+    permissions: Permission.ManageThreads,
+  });
   const updated = once(client, Events.ThreadUpdate);
 
-  discord.lock(thread);
+  mod.lockThread(thread);
 
   const [, after] = await updated;
   expect(after).toMatchObject({ locked: true, archived: false });
+});
+
+it("refuses to lock a thread for a member without Manage Threads", async () => {
+  const { discord, server, alice } = await watcher();
+  const listings = discord.forum(server, "listings");
+  const { thread } = alice.postInForum(listings, {
+    title: "wts",
+    content: "x",
+  });
+
+  expect(() => alice.lockThread(thread)).toThrow(
+    "alice can't lock wts without Manage Threads",
+  );
 });
 
 it("gets the thread the bot started from a message, whatever it named it", async () => {

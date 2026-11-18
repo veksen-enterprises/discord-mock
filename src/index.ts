@@ -283,6 +283,12 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    */
   renameGuild(name: string): void;
   /**
+   * Locks `thread` without archiving it, which needs Manage Threads in its channel. Once it's
+   * archived, only members with Manage Threads can reopen it. The bot hears `threadUpdate`.
+   * @example mod.lockThread(post.thread); // a bot that tracks locked threads should follow
+   */
+  lockThread(thread: Thread<G>): void;
+  /**
    * Joins `channel`, or moves there from another voice channel. The bot hears `voiceStateUpdate`
    * with GUILD_VOICE_STATES. Needs Connect there, which `@everyone` has unless an overwrite denies it.
    * @example alice.joinVoice(lobby); // a bot that logs voice activity should post
@@ -599,12 +605,6 @@ class Discord {
   endOutage(guild: Guild): void {
     this.markAction();
     this.mock.gateway.endOutage(this.g(guild));
-  }
-
-  /** A moderator locks `thread`: only members with Manage Threads can reopen it once archived. */
-  lock(thread: Thread): void {
-    this.markAction();
-    this.mock.lockThread(this.mock.state.requireChannel(thread.id));
   }
 
   /**
@@ -1148,6 +1148,25 @@ class MemberActor {
   leaveVoice(): void {
     this.markAction();
     this.mock.joinVoice(this.guild(), this.user(), null);
+  }
+
+  lockThread(thread: Thread): void {
+    const record = this.mock.state.requireChannel(thread.id);
+    const parentId = "parent_id" in record ? record.parent_id : undefined;
+    // Modifying a thread needs Manage Threads, except unarchiving an unlocked one:
+    // docs.discord.food/resources/channel#modify-channel. A thread takes its parent's overwrites.
+    const parent = this.mock.state.requireChannel(parentId ?? thread.id);
+    if (
+      !(
+        computePermissions(this.mock.state, this.guild(), this.id, parent) &
+        Permission.ManageThreads
+      )
+    )
+      throw new Error(
+        `discordjs-test-kit: ${this.name} can't lock ${thread.name} without Manage Threads`,
+      );
+    this.markAction();
+    this.mock.lockThread(record);
   }
 
   renameGuild(name: string): void {
