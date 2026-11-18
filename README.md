@@ -25,7 +25,7 @@ npm install --save-dev discordjs-test-kit
 
 Peers: `discord.js` `^14.26.4` and `vitest` `^4.1.2 || ^5.0.0`; CI runs both floors and the locked latest. Node 22 or 24.
 
-Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/SKILL.md`](skills/discordjs-test-kit/SKILL.md). No agent loads skills from `node_modules` by itself: run [`npx skills-npm`](https://github.com/antfu/skills-npm) to link it into your agents' skill folders, or copy the folder into `.claude/skills/`.
+Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/SKILL.md`](skills/discordjs-test-kit/SKILL.md). No agent loads skills from `node_modules` by itself. Link it with [skills-npm](https://github.com/antfu/skills-npm): `npm i -D skills-npm && npx skills-npm setup` symlinks it into `.claude/skills/` (and `.agents/skills/` for other agents) and adds a `prepare` script that relinks after each install. The link points into `node_modules`, so upgrading the kit updates the skill. Or copy the folder into `.claude/skills/` yourself.
 
 ## Writing a test
 
