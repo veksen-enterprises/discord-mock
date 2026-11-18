@@ -9,7 +9,7 @@ export interface RestRequest {
   headers: IncomingMessage["headers"];
   /** Parsed JSON body, or payload_json for multipart. */
   body: any;
-  files: File[];
+  files: UploadedFile[];
 }
 
 export interface RestResponse {
@@ -209,17 +209,21 @@ export class RestRouter {
   }
 }
 
+// FormData's own entry type, not the global File: consumers typecheck this source, and under
+// @types/node the global File (node:buffer) and undici's File don't match.
+type UploadedFile = Exclude<ReturnType<FormData["get"]>, string | null>;
+
 async function parseBody(
   raw: Buffer,
   contentType: string | undefined,
-): Promise<{ body: any; files: File[] }> {
+): Promise<{ body: any; files: UploadedFile[] }> {
   if (!raw.length) return { body: undefined, files: [] };
   if (contentType?.startsWith("multipart/form-data")) {
     const form = await new Response(new Uint8Array(raw), {
       headers: { "content-type": contentType },
     }).formData();
     const files = [...form.values()].filter(
-      (v): v is File => typeof v !== "string",
+      (v): v is UploadedFile => typeof v !== "string",
     );
     const json = form.get("payload_json");
     return { body: typeof json === "string" ? JSON.parse(json) : {}, files };
