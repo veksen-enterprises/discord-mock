@@ -39,5 +39,7 @@ jobs:
           cache: npm
       - run: npm ci
       - if: matrix.floor
-        run: npm install --no-save ${{ matrix.floor }}
+        # npm 10's peer-set resolver crashes on vitest 4's peers (arborist #loadPeerSet,
+        # "reading 'edgesOut'"); the floor job only needs these exact versions present.
+        run: npm install --no-save --legacy-peer-deps ${{ matrix.floor }}
       - run: npm test
