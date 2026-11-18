@@ -66,6 +66,10 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "recipes" } }],
         },
         { label: "Testing guide", slug: "testing-guide" },
+        {
+          label: "Reference",
+          items: [{ autogenerate: { directory: "reference" } }],
+        },
         typeDocSidebarGroup,
       ],
     }),
