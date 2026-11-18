@@ -94,7 +94,7 @@ const realClearTimeout = globalThis.clearTimeout;
 
 /** What a user posts: text, files, and the message it replies to. */
 /** A file a member uploads: in a post, or as a command's attachment option. */
-export interface Attachment {
+export interface FileUpload {
   name: string;
   data: Uint8Array;
   contentType: string;
@@ -102,7 +102,7 @@ export interface Attachment {
 
 export interface UserMessage {
   content?: string;
-  files?: Attachment[];
+  files?: FileUpload[];
   replyTo?: APIMessage;
 }
 
@@ -1210,7 +1210,7 @@ export class DiscordMock {
       if (option.type !== ApplicationCommandOptionType.Attachment) return [];
       const attachment = this.state.storeAttachment(
         channelId,
-        option.value as Attachment,
+        option.value as FileUpload,
       );
       option.value = attachment.id;
       return [attachment];
@@ -3298,8 +3298,8 @@ export type FormValue =
   | boolean
   | { id: string }
   | { id: string }[]
-  | Attachment
-  | Attachment[];
+  | FileUpload
+  | FileUpload[];
 
 /**
  * One field's submitted part, checked the way the Discord app checks it before it lets the member
@@ -3313,7 +3313,7 @@ function submittedField(
   at: string,
   world: {
     pick: (ids: string[], type: ComponentType) => void;
-    upload: (files: Attachment[]) => string[];
+    upload: (files: FileUpload[]) => string[];
   },
 ): Record<string, unknown> {
   const list = <T>(v: T | T[] | undefined): T[] =>
@@ -3414,7 +3414,7 @@ function submittedField(
       return { values };
     }
     case ComponentType.FileUpload: {
-      const files = list(given as Attachment | Attachment[] | undefined);
+      const files = list(given as FileUpload | FileUpload[] | undefined);
       if (files.some((f) => typeof f !== "object" || !("data" in f)))
         throw wrong("files");
       count(files.length, input.min_values ?? 0, input.max_values ?? 10);

@@ -21,7 +21,7 @@ import {
   readable,
   shown,
   type DiscordMock,
-  type Attachment,
+  type FileUpload,
   type InteractionRun,
   type UserMessage,
 } from "./internal/mock.js";
@@ -36,7 +36,7 @@ import {
 export { respond } from "./internal/rest.js";
 export type { RestResponse } from "./internal/rest.js";
 export { Permission };
-export type { Attachment, UserMessage } from "./internal/mock.js";
+export type { FileUpload, UserMessage } from "./internal/mock.js";
 
 declare const kind: unique symbol;
 declare const inGuild: unique symbol;
@@ -101,8 +101,8 @@ export type Form<G extends string = string> = Record<
   | boolean
   | Pickable<G>
   | Pickable<G>[]
-  | Attachment
-  | Attachment[]
+  | FileUpload
+  | FileUpload[]
 >;
 
 /** One autocomplete suggestion: `name` is what the member sees, `value` what the command receives. */
@@ -128,7 +128,7 @@ export type OptionValue<G extends string = string> =
   | StageChannel<G>
   | Forum<G>
   | Thread<G>
-  | Attachment;
+  | FileUpload;
 
 /** A user who has joined a guild. The test acts as them. */
 export interface Member<G extends string = string> extends Handle<"member", G> {
