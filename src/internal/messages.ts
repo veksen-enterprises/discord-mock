@@ -114,39 +114,37 @@ export function registerMessageRoutes(
   // Pin and Unpin Message need PIN_MESSAGES, split from MANAGE_MESSAGES on 2026-02-23
   // (discord-api-docs change-log). 204, fires CHANNEL_PINS_UPDATE. Pinning a pinned message,
   // or unpinning one that isn't, is answered 204 without an event (inferred, not checked).
-  rest.route(
-    "PUT",
-    "/channels/:channelId/messages/pins/:messageId",
-    authed((req) => {
-      const { refused, channel, message } = target(req, Permission.PinMessages);
-      if (refused) return refused;
-      if (message.pinned) return respond.noContent();
-      if (pinsIn(channel).length >= MAX_PINS)
-        return respond.error(
-          400,
-          30003,
-          "Maximum number of pins reached for the channel (250)",
-        );
-      message.pinned = true;
-      pinnedAt.set(message.id, new Date().toISOString());
-      announcePins(channel);
-      return respond.noContent();
-    }),
-  );
-
-  rest.route(
-    "DELETE",
-    "/channels/:channelId/messages/pins/:messageId",
-    authed((req) => {
-      const { refused, channel, message } = target(req, Permission.PinMessages);
-      if (refused) return refused;
-      if (!message.pinned) return respond.noContent();
-      message.pinned = false;
-      pinnedAt.delete(message.id);
-      announcePins(channel);
-      return respond.noContent();
-    }),
-  );
+  const pin = authed((req) => {
+    const { refused, channel, message } = target(req, Permission.PinMessages);
+    if (refused) return refused;
+    if (message.pinned) return respond.noContent();
+    if (pinsIn(channel).length >= MAX_PINS)
+      return respond.error(
+        400,
+        30003,
+        "Maximum number of pins reached for the channel (250)",
+      );
+    message.pinned = true;
+    pinnedAt.set(message.id, new Date().toISOString());
+    announcePins(channel);
+    return respond.noContent();
+  });
+  const unpin = authed((req) => {
+    const { refused, channel, message } = target(req, Permission.PinMessages);
+    if (refused) return refused;
+    if (!message.pinned) return respond.noContent();
+    message.pinned = false;
+    pinnedAt.delete(message.id);
+    announcePins(channel);
+    return respond.noContent();
+  });
+  rest.route("PUT", "/channels/:channelId/messages/pins/:messageId", pin);
+  rest.route("DELETE", "/channels/:channelId/messages/pins/:messageId", unpin);
+  // Pin Message (deprecated) and Unpin Message (deprecated), docs.discord.com resources/message:
+  // "Use Pin Message instead". @discordjs/core 2.x's pinMessage still calls them. The docs give
+  // them no behaviour of their own, so they answer as the current routes (inferred, not checked).
+  rest.route("PUT", "/channels/:channelId/pins/:messageId", pin);
+  rest.route("DELETE", "/channels/:channelId/pins/:messageId", unpin);
 
   // Bulk Delete Messages: guild channels only, MANAGE_MESSAGES, 2 to 100 ids. Ids that don't
   // exist "count towards the minimum and maximum" and are skipped; one older than two weeks, or a

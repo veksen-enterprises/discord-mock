@@ -4,6 +4,7 @@ import {
   DiscordAPIError,
   Events,
   GatewayIntentBits,
+  Routes,
   SnowflakeUtil,
   type TextChannel,
 } from "discord.js";
@@ -72,6 +73,20 @@ it("pins and unpins with Pin Messages, lists pins newest first, and announces ea
   await channel.messages.unpin(second.id);
   const pinned = await channel.messages.fetchPinned();
   expect(pinned.map((m) => m.content)).toEqual(["rules"]);
+  mock.assertNoUnhandledRequests();
+});
+
+it("pins and unpins through the deprecated routes @discordjs/core still calls", async () => {
+  // Arrange
+  const { general, channel, alice } = await start(Permission.PinMessages);
+  const message = mock.as(alice).sendMessage(general, "rules");
+
+  // Act
+  await client.rest.put(Routes.channelPin(channel.id, message.id));
+
+  // Assert
+  const pins = await channel.messages.fetchPins();
+  expect(pins.items.map((p) => p.message.content)).toEqual(["rules"]);
   mock.assertNoUnhandledRequests();
 });
 
