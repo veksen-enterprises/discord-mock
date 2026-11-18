@@ -37,6 +37,8 @@ export class Discord {
   readonly clientOptions: { rest: { api: string } };
   private client?: Client;
 
+  private guildOf = new Map<string, Guild>();
+
   constructor(private mock: DiscordMock) {
     this.clientOptions = mock.clientOptions;
   }
@@ -71,7 +73,16 @@ export class Discord {
   member(guild: Guild, name: string, nick?: string): Member {
     const user = this.mock.createUser(name);
     this.mock.addMember(this.g(guild), user, { nick });
+    this.guildOf.set(user.id, guild);
     return brand(user, name);
+  }
+
+  /** `member` leaves their guild. */
+  leave(member: Member) {
+    this.mock.removeMember(
+      this.g(this.guildOf.get(member.id)!),
+      this.u(member),
+    );
   }
 
   // ---- the bot ----------------------------------------------------------------
