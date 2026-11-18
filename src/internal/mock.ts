@@ -21,6 +21,7 @@ import {
   type APIUser,
 } from "discord-api-types/v10";
 import { reasonOf, recordAudit, registerAuditLogRoutes } from "./audit.js";
+import { moderateMessage, registerAutoModRoutes } from "./automod.js";
 import {
   overridesFor,
   registerCommandPermissionRoutes,
@@ -753,19 +754,38 @@ export class DiscordMock {
     const mentions = [...content.matchAll(/<@!?(\d+)>/g)].flatMap(
       ([, id]) => this.state.users.get(id!) ?? [],
     );
-    const message = this.state.createMessage({
-      channelId: channel.id,
-      authorId: user.id,
-      content,
-      files: input.files,
-      replyTo: input.replyTo?.id,
-      id,
-    });
-    for (const user of mentions)
-      if (!message.mentions.some((u) => u.id === user.id))
-        message.mentions.push(user);
-    this.gateway.dispatchMessage("MESSAGE_CREATE", message);
-    return message;
+    let message: APIMessage | undefined;
+    const post = () => {
+      message = this.state.createMessage({
+        channelId: channel.id,
+        authorId: user.id,
+        content,
+        files: input.files,
+        replyTo: input.replyTo?.id,
+        id,
+      });
+      for (const user of mentions)
+        if (!message.mentions.some((u) => u.id === user.id))
+          message.mentions.push(user);
+      this.gateway.dispatchMessage("MESSAGE_CREATE", message);
+      return message;
+    };
+    const guildId = "guild_id" in channel ? channel.guild_id : undefined;
+    const verdict = guildId
+      ? moderateMessage(
+          this,
+          this.state.requireGuild(guildId),
+          user,
+          channel,
+          content,
+          post,
+        )
+      : (post(), undefined);
+    if (verdict)
+      throw new Error(
+        `discordjs-test-kit: AutoMod blocked ${user.username}'s message${verdict.blocked ? `: "${verdict.blocked}"` : ""}`,
+      );
+    return message!;
   }
 
   private userReacts(user: APIUser, message: APIMessage, emoji: string) {
@@ -2340,6 +2360,7 @@ export class DiscordMock {
     registerVoiceRoutes(this, authed);
     registerScheduledEventRoutes(this, authed);
     registerExpressionRoutes(this, authed);
+    registerAutoModRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 

@@ -3,6 +3,7 @@ import {
   ApplicationCommandType,
   ChannelType,
   type APIApplicationCommand,
+  type APIAutoModerationRule,
   type APIApplicationCommandPermission,
   type APIAuditLogEntry,
   type APIBan,
@@ -96,6 +97,8 @@ export class DiscordState extends EventEmitter<{
   readonly webhooks = new Map<string, WebhookRecord>();
   /** Invites by code. */
   readonly invites = new Map<string, InviteRecord>();
+  /** AutoMod rules by id. */
+  readonly autoModRules = new Map<string, APIAutoModerationRule>();
   /** Guild scheduled events by id. */
   readonly scheduledEvents = new Map<string, APIGuildScheduledEvent>();
 

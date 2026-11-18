@@ -109,16 +109,17 @@ Stub third parties (an AI model, a music source, a payment API) the way you woul
 
 The mock names messages by their text and lists what exists. Fix the test from the message, or the bot if the message shows the bot is wrong.
 
-| Error says                                        | Meaning                                                              |
-| ------------------------------------------------- | -------------------------------------------------------------------- |
-| `/x isn't registered. Registered: …`              | Typo in the test, or the bot didn't register it (check `commands`)   |
-| `can't click "x": "…" has buttons A, B`           | Wrong label, or the bot showed a different message                   |
-| `can't pick "x": "…" offers A, B`                 | Wrong option label                                                   |
-| `matches 2 buttons` / `matches 2 options`         | Make the label or RegExp more specific                               |
-| `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                  |
-| `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`    |
-| `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug     |
-| `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set |
-| `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`    |
-| `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post      |
-| `unhandled requests: …`                           | The bot used a route the mock doesn't model yet: a Gap, report it    |
+| Error says                                        | Meaning                                                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `/x isn't registered. Registered: …`              | Typo in the test, or the bot didn't register it (check `commands`)                                                          |
+| `can't click "x": "…" has buttons A, B`           | Wrong label, or the bot showed a different message                                                                          |
+| `can't pick "x": "…" offers A, B`                 | Wrong option label                                                                                                          |
+| `matches 2 buttons` / `matches 2 options`         | Make the label or RegExp more specific                                                                                      |
+| `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                                                                         |
+| `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`                                                           |
+| `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug                                                            |
+| `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set                                                        |
+| `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`                                                           |
+| `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post                                                             |
+| `unhandled requests: …`                           | The bot used a route the mock doesn't model yet: a Gap, report it                                                           |
+| `AutoMod blocked alice's message: "…"`            | A rule (the bot's or the World's) blocked the post, as on Discord: `expect(() => alice.post(…)).toThrow("AutoMod blocked")` |

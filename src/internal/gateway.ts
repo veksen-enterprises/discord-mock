@@ -264,6 +264,19 @@ export class Gateway {
     }
   }
 
+  /** Like `dispatch`, with the payload built per session from its intents. */
+  dispatchFor(
+    t: string,
+    guildId: string,
+    requiredIntent: number,
+    build: (intents: number) => unknown,
+  ) {
+    if (!this.state.botIn(guildId)) return;
+    for (const session of this.sessions.values())
+      if (session.intents & requiredIntent)
+        this.send(session, t, build(session.intents));
+  }
+
   /**
    * MESSAGE_CREATE/UPDATE with Discord's intent rules (docs.discord.food/gateway/using-gateway#message-content-intent):
    * guild messages need GUILD_MESSAGES, DMs need DIRECT_MESSAGES, and without MESSAGE_CONTENT the
