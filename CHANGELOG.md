@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.2.0)
+## 0.2.0
 
 Breaking: every name now says what the method does, what it returns and whether it waits. Methods that wait for the bot start with `waitFor`. Rename your calls with this table; nothing else in a test changes.
 
@@ -29,6 +29,17 @@ Breaking: every name now says what the method does, what it returns and whether 
 | `discord.fail(…)`                      | `discord.answerWith(…)`                                                                            |
 | `discord.channel(…)`                   | `discord.textChannel(…)`                                                                           |
 | `discord.close()`                      | Removed: the server closes when the test ends                                                      |
+
+New and fixed:
+
+- Slash command options of type role, mentionable, attachment, and voice or stage channel. A file is a `FileUpload`.
+- Forms (modals) with string, user, role, mentionable and channel selects, radio groups, checkbox groups, checkboxes and file uploads.
+- The bot can create voice, category, stage and forum channels, with a parent and permission overwrites.
+- A deferred reply waits while the bot keeps working, and fails after 2s of silence or 10s in all, naming the bot's latest requests.
+- `click` and `select` wait for the bot to go quiet first, so a collector the bot starts after replying hears the click. A deferred update resolves with the message as the bot leaves it.
+- Roles made or given after the bot connects reach it, so `member.permissions` is right.
+- Ephemeral replies stay out of channel history, so a purge deletes only the members' messages.
+- Bots with `zlib-sync` installed can connect (zlib-stream compression); the deprecated pin routes answer for `@discordjs/core` bots; a bot can rewrite its application description.
 
 ## 0.1.1
 
