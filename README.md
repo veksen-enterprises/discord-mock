@@ -55,7 +55,7 @@ To keep the skill loaded in later sessions: `npm i -D skills-npm && npx skills-n
 
 ## Compared with hand-rolled fakes
 
-The same test, the way sin-bot tests its commands today:
+The same test with a hand-rolled fake, as most bots test their commands today:
 
 ```ts
 import type { ChatInputCommandInteraction } from "discord.js";
