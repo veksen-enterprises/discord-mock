@@ -29,6 +29,15 @@ discord.channel(otherServer, "late", ladderCategory);
 // Posting in another server's channel
 // @ts-expect-error
 alice.post(otherChannel, { content: "hi" });
+// Joining a text channel's voice
+// @ts-expect-error
+alice.joinVoice(challengesChannel);
+// Joining another server's voice channel
+// @ts-expect-error
+alice.joinVoice(discord.voiceChannel(otherServer, "lobby"));
+// Running a command in a voice channel's chat isn't modelled
+// @ts-expect-error
+void alice.run(discord.voiceChannel(server, "lobby"), "join");
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.run(challengesChannel, "jion");

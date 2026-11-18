@@ -1,4 +1,5 @@
 import {
+  ChannelType,
   GatewayDispatchEvents,
   GatewayIntentBits,
   type APIBan,
@@ -10,6 +11,7 @@ import { computePermissions, Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
 import { snowflake } from "./snowflake.js";
 import type { GuildRecord } from "./state.js";
+import { setVoiceState, voiceStateOf } from "./voice.js";
 
 // Guild member, ban and role Routes. Sources: discord-api-docs resources/guild (Get/Modify Guild
 // Member, Add/Remove Guild Member Role, Remove Guild Member, Create/Remove/Get Guild Ban, Get Guild
@@ -92,8 +94,7 @@ export function registerMemberRoutes(
       const member = guild.members.get(userId);
       if (!member) return unknownMember();
       const body = (req.body ?? {}) as Record<string, unknown>;
-      for (const key of ["mute", "deaf", "channel_id", "flags"])
-        if (key in body) return rest.gap(`PATCH member ${key}`);
+      if ("flags" in body) return rest.gap("PATCH member flags");
       const self = userId === bot;
 
       if ("nick" in body) {
@@ -137,12 +138,54 @@ export function registerMemberRoutes(
           return respond.invalidFormBody();
       }
 
+      // Voice: mute needs MUTE_MEMBERS, deaf DEAFEN_MEMBERS, channel_id MOVE_MEMBERS plus CONNECT
+      // to the target (null disconnects). Each "will throw a 400 error if the user is not in a
+      // voice channel"; 40032 "Target user is not connected to voice" is the code table's
+      // (pairing inferred, not checked), as is checking permissions first.
+      const voiceFields = {
+        mute: Permission.MuteMembers,
+        deaf: Permission.DeafenMembers,
+        channel_id: Permission.MoveMembers,
+      };
+      const voiceChange = Object.entries(voiceFields).filter(
+        ([key]) => key in body,
+      );
+      if (voiceChange.some(([, needed]) => !botHas(guild, needed)))
+        return respond.missingPermissions();
+      const target = body.channel_id as string | null | undefined;
+      if (target) {
+        const channel = state.channels.get(target);
+        if (
+          !channel ||
+          !("guild_id" in channel) ||
+          channel.guild_id !== guild.id ||
+          channel.type !== ChannelType.GuildVoice
+        )
+          return rest.gap(
+            "moving a member to a channel that isn't a voice channel in the guild",
+          );
+        const denied = mock.checkBotPerms(channel, Permission.Connect);
+        if (denied) return denied;
+      }
+      if (voiceChange.length > 0 && !voiceStateOf(mock, guild, userId))
+        return respond.error(
+          400,
+          40032,
+          "Target user is not connected to voice",
+        );
+
       if ("nick" in body) member.nick = (body.nick as string | null) || null;
       if ("roles" in body)
         member.roles = [...((body.roles as string[] | null) ?? [])];
       if ("communication_disabled_until" in body)
         member.communication_disabled_until =
           (body.communication_disabled_until as string | null) ?? null;
+      if (voiceChange.length > 0)
+        setVoiceState(mock, guild, userId, {
+          channelId: target,
+          mute: body.mute as boolean | undefined,
+          deaf: body.deaf as boolean | undefined,
+        });
       announceUpdate(guild, member);
       return respond.json(member);
     }),

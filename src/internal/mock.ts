@@ -48,6 +48,7 @@ import {
   addMentionedToPrivateThread,
   registerThreadRoutes,
 } from "./threads.js";
+import { registerVoiceRoutes, setVoiceState } from "./voice.js";
 
 export { respond } from "./rest.js";
 export type { RestHandler, RestRequest, RestResponse } from "./rest.js";
@@ -309,6 +310,31 @@ export class DiscordMock {
     );
   }
 
+  /** A voice channel: members join it with `joinVoice`. */
+  createVoiceChannel(guild: GuildRecord, name: string) {
+    return this.announceChannel(
+      this.state.createVoiceChannel(guild.id, { name }),
+    );
+  }
+
+  /**
+   * `user` joins voice channel `channel`, moves to it, or leaves voice with null. They need View
+   * Channel and Connect there, as the Discord app does; a full channel (user_limit) isn't modelled.
+   */
+  joinVoice(guild: GuildRecord, user: APIUser, channel: APIChannel | null) {
+    if (channel) {
+      const perms = computePermissions(this.state, guild, user.id, channel);
+      const needed = Permission.ViewChannel | Permission.Connect;
+      if ((perms & needed) !== needed)
+        throw new Error(
+          `discordjs-test-kit: ${user.username} can't join ${channel.name ?? channel.id} without View Channel and Connect`,
+        );
+    }
+    if (!channel && !this.state.voiceStates.get(guild.id)?.has(user.id))
+      throw new Error(`discordjs-test-kit: ${user.username} isn't in voice`);
+    setVoiceState(this, guild, user.id, { channelId: channel?.id ?? null });
+  }
+
   /** A forum: users post in it with `as(user).forumPost()`. */
   createForum(guild: GuildRecord, name: string) {
     return this.announceChannel(
@@ -421,6 +447,8 @@ export class DiscordMock {
    * GUILD_MEMBER_REMOVE { guild_id, user }, sent only with GUILD_MEMBERS.
    */
   removeMember(guild: GuildRecord, user: APIUser) {
+    // Their voice state goes with them, without an event (inferred, not checked).
+    this.state.voiceStates.get(guild.id)?.delete(user.id);
     if (!this.state.guilds.get(guild.id)?.members.delete(user.id))
       throw new Error(
         `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
@@ -2124,6 +2152,7 @@ export class DiscordMock {
     registerMemberRoutes(this, authed);
     registerGuildRoutes(this, authed);
     registerInviteRoutes(this, authed);
+    registerVoiceRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 

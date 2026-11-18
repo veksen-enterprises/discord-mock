@@ -45,6 +45,8 @@ export type Guild<G extends string = string> = Handle<"guild", G>;
 export type Category<G extends string = string> = Handle<"category", G>;
 /** A text channel. */
 export type TextChannel<G extends string = string> = Handle<"text", G>;
+/** A voice channel: members join it with `member.joinVoice`. */
+export type VoiceChannel<G extends string = string> = Handle<"voice", G>;
 /** A forum: members open posts in it with `member.forumPost`. */
 export type Forum<G extends string = string> = Handle<"forum", G>;
 /** A thread, such as a forum post. */
@@ -174,6 +176,14 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    */
   renameGuild(name: string): void;
   /**
+   * Joins `channel`, or moves there from another voice channel. The bot hears `voiceStateUpdate`
+   * with GUILD_VOICE_STATES. Needs Connect there, which @everyone has unless an overwrite denies it.
+   * @example alice.joinVoice(lobby); // a bot that logs voice activity should post
+   */
+  joinVoice(channel: VoiceChannel<G>): void;
+  /** Leaves voice. */
+  leaveVoice(): void;
+  /**
    * Creates an invite to `channel` and returns its code; the bot hears `inviteCreate` when it has
    * Manage Channels there. Pass the code to `discord.member(…, { invite })` for someone to join.
    * @example const code = alice.invite(general, { maxUses: 1 });
@@ -228,6 +238,13 @@ class Discord {
       this.mock.createTextChannel(this.g(guild), name, { parent }).id,
       name,
     );
+  }
+
+  voiceChannel<G extends string>(
+    guild: Guild<G>,
+    name: string,
+  ): VoiceChannel<G> {
+    return handle(this.mock.createVoiceChannel(this.g(guild), name).id, name);
   }
 
   forum<G extends string>(guild: Guild<G>, name: string): Forum<G> {
@@ -593,6 +610,20 @@ class MemberActor {
       this.user(),
       { max_uses: options.maxUses },
     ).code;
+  }
+
+  joinVoice(channel: VoiceChannel): void {
+    this.markAction();
+    this.mock.joinVoice(
+      this.guild(),
+      this.user(),
+      this.mock.state.requireChannel(channel.id),
+    );
+  }
+
+  leaveVoice(): void {
+    this.markAction();
+    this.mock.joinVoice(this.guild(), this.user(), null);
   }
 
   renameGuild(name: string): void {

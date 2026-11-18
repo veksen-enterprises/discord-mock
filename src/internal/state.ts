@@ -13,6 +13,7 @@ import {
   type APIMessage,
   type APIRole,
   type APIUser,
+  type APIVoiceState,
   type RESTPostAPIApplicationCommandsJSONBody,
 } from "discord-api-types/v10";
 import { snowflake } from "./snowflake.js";
@@ -63,6 +64,8 @@ export class DiscordState extends EventEmitter<{
   cdnUrl = "";
   /** Keyed by guild id or "global", then by `${type}:${name}`: names are unique per type and scope. */
   readonly commands = new Map<string, Map<string, APIApplicationCommand>>();
+  /** Who is in a voice channel, by guild id, then user id. */
+  readonly voiceStates = new Map<string, Map<string, APIVoiceState>>();
   /** Invites by code. */
   readonly invites = new Map<string, InviteRecord>();
 
@@ -104,9 +107,16 @@ export class DiscordState extends EventEmitter<{
       icon: null,
       unicode_emoji: null,
       position: 0,
-      // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS
+      // VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY | USE_APPLICATION_COMMANDS, plus
+      // CONNECT | SPEAK so members can join voice, as in a new Discord server (inferred from the
+      // app's defaults, not checked: the default set isn't documented).
       permissions: String(
-        (1n << 10n) | (1n << 11n) | (1n << 16n) | (1n << 31n),
+        (1n << 10n) |
+          (1n << 11n) |
+          (1n << 16n) |
+          (1n << 31n) |
+          (1n << 20n) |
+          (1n << 21n),
       ),
       managed: false,
       mentionable: false,
@@ -225,6 +235,30 @@ export class DiscordState extends EventEmitter<{
     } satisfies APIChannel;
     this.channels.set(channel.id, channel);
     this.messages.set(channel.id, []);
+    guild.channelIds.push(channel.id);
+    return channel;
+  }
+
+  /** A voice channel (resources/channel#channel-object-example-guild-voice-channel). */
+  createVoiceChannel(guildId: string, input: { name: string }): APIChannel {
+    const guild = this.requireGuild(guildId);
+    const channel = {
+      id: snowflake(),
+      type: ChannelType.GuildVoice,
+      guild_id: guild.id,
+      name: input.name,
+      position: guild.channelIds.length,
+      permission_overwrites: [],
+      parent_id: null,
+      nsfw: false,
+      last_message_id: null,
+      rate_limit_per_user: 0,
+      bitrate: 64000,
+      user_limit: 0,
+      rtc_region: null,
+      flags: 0 as ChannelFlags,
+    } satisfies APIChannel;
+    this.channels.set(channel.id, channel);
     guild.channelIds.push(channel.id);
     return channel;
   }

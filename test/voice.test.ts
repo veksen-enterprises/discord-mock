@@ -1,0 +1,115 @@
+import { once } from "node:events";
+import { Client, Events, GatewayIntentBits } from "discord.js";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
+import { Permission } from "../src/internal/payloads.js";
+
+let mock: DiscordMock;
+let client: Client;
+
+beforeEach(async () => {
+  mock = await createDiscordMock();
+});
+
+afterEach(async () => {
+  await client?.destroy();
+  await mock.close();
+});
+
+function world() {
+  const guild = mock.createGuild("g");
+  const lobby = mock.createVoiceChannel(guild, "lobby");
+  const games = mock.createVoiceChannel(guild, "games");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  return { guild, lobby, games, alice };
+}
+
+async function login() {
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    ...mock.clientOptions,
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+}
+
+/** The next voiceStateUpdate, as [old channel name, new channel name]. */
+async function nextMove() {
+  const [before, after] = await once(client, Events.VoiceStateUpdate);
+  return [before.channel?.name ?? null, after.channel?.name ?? null];
+}
+
+it("tells the bot when a member joins, moves between and leaves voice channels", async () => {
+  const { guild, lobby, games, alice } = world();
+  await login();
+
+  let move = nextMove();
+  mock.joinVoice(guild, alice, lobby);
+  expect(await move).toEqual([null, "lobby"]);
+  move = nextMove();
+  mock.joinVoice(guild, alice, games);
+  expect(await move).toEqual(["lobby", "games"]);
+  move = nextMove();
+  mock.joinVoice(guild, alice, null);
+  expect(await move).toEqual(["games", null]);
+});
+
+it("hands a bot that logs in the members already in voice", async () => {
+  const { guild, lobby, alice } = world();
+  mock.joinVoice(guild, alice, lobby);
+
+  await login();
+
+  const cached = client.guilds.cache.get(guild.id)!;
+  expect(cached.voiceStates.cache.get(alice.id)?.channelId).toBe(lobby.id);
+  expect(cached.members.cache.get(alice.id)?.voice.channel?.name).toBe("lobby");
+});
+
+it("moves, mutes and disconnects a member with Move and Mute Members", async () => {
+  const { guild, lobby, games, alice } = world();
+  mock.grantBot(
+    Permission.MoveMembers | Permission.MuteMembers | Permission.Connect,
+  );
+  mock.joinVoice(guild, alice, lobby);
+  await login();
+  const member = client.guilds.cache
+    .get(guild.id)!
+    .members.cache.get(alice.id)!;
+
+  let move = nextMove();
+  await member.voice.setChannel(games.id);
+  expect(await move).toEqual(["lobby", "games"]);
+  await member.voice.setMute(true);
+  expect(
+    (await member.guild.voiceStates.fetch(alice.id, { force: true }))
+      .serverMute,
+  ).toBe(true);
+  move = nextMove();
+  await member.voice.disconnect();
+  expect(await move).toEqual(["games", null]);
+  await expect(member.voice.setMute(false)).rejects.toMatchObject({
+    code: 40032,
+  });
+  mock.assertNoUnhandledRequests();
+});
+
+it("refuses to move a member without Move Members, and a member can't join without Connect", async () => {
+  const { guild, lobby, games, alice } = world();
+  mock.joinVoice(guild, alice, lobby);
+  await login();
+  const member = client.guilds.cache
+    .get(guild.id)!
+    .members.cache.get(alice.id)!;
+
+  await expect(member.voice.setChannel(games.id)).rejects.toMatchObject({
+    code: 50013,
+  });
+  mock.setOverwrite(
+    games,
+    { id: guild.id, type: 0 },
+    { deny: Permission.Connect },
+  );
+  expect(() => mock.joinVoice(guild, alice, games)).toThrow("Connect");
+});

@@ -1,3 +1,4 @@
+import { Client, Events, GatewayIntentBits } from "discord.js";
 import { expect, it, vi } from "vitest";
 import {
   createDiscord,
@@ -343,4 +344,26 @@ it("counts a join through a member's invite, and refuses a used-up one", async (
   expect(() => discord.member(server, "erin", { invite: once })).toThrow(
     "used up",
   );
+});
+
+it("tells the bot a member joined and left voice", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const lobby = discord.voiceChannel(server, "lobby");
+  const alice = discord.member(server, "alice");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    ...discord.clientOptions,
+  });
+  const seen: (string | null)[] = [];
+  client.on(Events.VoiceStateUpdate, (_, after) =>
+    seen.push(after.channel?.name ?? null),
+  );
+  await discord.start(client);
+
+  alice.joinVoice(lobby);
+  alice.leaveVoice();
+
+  await vi.waitFor(() => expect(seen).toEqual(["lobby", null]));
+  expect(() => alice.leaveVoice()).toThrow("isn't in voice");
 });

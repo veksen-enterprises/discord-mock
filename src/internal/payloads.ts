@@ -95,12 +95,16 @@ export function guildCreatePayload(
   intents: number,
 ) {
   // docs.discord.food/gateway/gateway-events#gateway-guild-object, footnote 1: bots without
-  // GUILD_PRESENCES get only their own member (and users in voice, which the Model has none of).
+  // GUILD_PRESENCES get only their own member and members in voice.
   // With it, a guild under large_threshold (50 by default) sends every member.
+  const voiceStates = [...(state.voiceStates.get(guild.id)?.values() ?? [])];
   const members =
     intents & GatewayIntentBits.GuildPresences
       ? [...guild.members.values()]
-      : [guild.members.get(state.bot.id)!];
+      : [
+          guild.members.get(state.bot.id)!,
+          ...voiceStates.map((v) => guild.members.get(v.user_id)!),
+        ];
   return {
     ...guildPayload(guild),
     joined_at: new Date().toISOString(),
@@ -125,7 +129,8 @@ export function guildCreatePayload(
         !c.thread_metadata?.archived,
     ),
     presences: [],
-    voice_states: [],
+    // "Array of partial voice state objects" without guild_id (gateway-events#guild-create).
+    voice_states: voiceStates.map(({ guild_id: _, ...voice }) => voice),
     stage_instances: [],
     guild_scheduled_events: [],
     soundboard_sounds: [],
