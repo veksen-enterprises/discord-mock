@@ -66,6 +66,8 @@ it("should record the result when the winner reports", async () => {
 | DM the bot                          | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                 |
 | a member with permissions           | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                      |
 | change nickname, leave the server   | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
+| change their display name           | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                      |
+| kick the bot from the server        | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                             |
 | make Discord fail a route           | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |
 | wait for a message                  | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count |
 | check the bot sent nothing more     | `await discord.idle()`, then assert                                                                                               |
@@ -83,7 +85,7 @@ One test is one journey a user takes: arrange the World, act as members, assert 
 - **Discord failing**: `discord.fail(...)` with `respond.serverError(503)` or a rate limit on the route the flow depends on. Assert what the user sees then.
 - **Interactions the bot must answer.** Await every `run`, `click` and `select`. A bot that ignores a press, an unknown button or a rate-limited command fails here with "The application did not respond", which is what the user sees.
 - **Who can see the reply**: an ephemeral reply stays private (another member acting on it is refused), and a public one is in `discord.messages(channel)`.
-- **Gateway events the bot listens to** (a member joins, leaves, changes nickname), including for members who were there before the bot started.
+- **Gateway events the bot listens to** (a member joins, leaves, changes nickname or display name; the bot is kicked), including for members who were there before the bot started.
 
 Stub third parties (an AI model, a music source, a payment API) the way you would anywhere. Never stub Discord or discord.js. Before asserting "exactly one reply" or "no reply", `await discord.idle()`; never a sleep.
 
