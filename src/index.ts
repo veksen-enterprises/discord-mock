@@ -204,6 +204,11 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /** Takes back their vote; the bot hears `messagePollVoteRemove`. */
   unvote(message: Message): void;
   /**
+   * Starts typing in `channel`. The bot hears `typingStart` with GuildMessageTyping.
+   * @example alice.startTyping(general);
+   */
+  startTyping(channel: TextChannel<G> | Thread<G>): void;
+  /**
    * Turns off DMs from server members, as a privacy setting: the bot's DMs to them fail with 50007.
    * @example alice.closeDMs(); await alice.run(general, "remind-me"); // the bot should say it can't DM
    */
@@ -744,6 +749,10 @@ class MemberActor {
 
   unvote(message: Message): void {
     this.actor().removeVote(message);
+  }
+
+  startTyping(channel: TextChannel | Thread): void {
+    this.actor().startTyping(this.mock.state.requireChannel(channel.id));
   }
 
   closeDMs(): void {

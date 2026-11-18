@@ -59,6 +59,7 @@ import {
   addMentionedToPrivateThread,
   registerThreadRoutes,
 } from "./threads.js";
+import { announceTyping, registerTypingRoute } from "./typing.js";
 import { registerVoiceRoutes, setVoiceState } from "./voice.js";
 import { registerWebhookRoutes } from "./webhooks.js";
 
@@ -757,6 +758,11 @@ export class DiscordMock {
       },
       /** Takes back their vote in `message`'s poll. */
       removeVote: (message: APIMessage) => removeVote(this, user, message),
+      /** Starts typing in `channel`: TYPING_START. */
+      startTyping: (channel: APIChannel) => {
+        this.requireMembership(user, channel);
+        announceTyping(this, user, channel);
+      },
     };
   }
 
@@ -2406,6 +2412,7 @@ export class DiscordMock {
     registerExpressionRoutes(this, authed);
     registerAutoModRoutes(this, authed);
     registerPollRoutes(this, authed);
+    registerTypingRoute(this, authed);
     registerThreadRoutes(this, authed);
   }
 
