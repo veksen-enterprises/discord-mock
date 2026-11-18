@@ -19,7 +19,7 @@ export function createBot(clientOptions: Partial<ClientOptions> = {}) {
 }
 ```
 
-If the bot builds its `Client` at module load, extract a factory like this first. Never add test-only branches to bot code.
+If the bot builds its `Client` at module load, extract a factory like this first. If the bot also builds its own `new REST()` (for example to deploy commands), spread `clientOptions.rest` into it too, or its requests go to discord.com. Never add test-only branches to bot code.
 
 ## A test
 
@@ -47,22 +47,22 @@ it("should record the result when the winner reports", async () => {
 ```
 
 - `createDiscord()` per test. Teardown is automatic and fails the test if the bot hit a route the mock doesn't model (a Gap).
-- `start(client, { commands })` registers commands the way the bot's deploy script would: pass the same command JSON. Add `permissions` (from `Permission`) when the bot needs more than @everyone's.
+- `start(client, { commands })` registers commands the way the bot's deploy script would: pass the same command JSON. Add `permissions` (from `Permission`; for a flag it lacks, discord.js's `PermissionFlagsBits` works, both are bigints) when the bot needs more than @everyone's. If the bot deploys its own commands instead, skip `commands` and let it: `client.application.id` is set once `start` resolves.
 - Name variables for what they are: `challengesChannel`, `reportMenu`, `searchResults`, not `c`, `msg`, `res`.
 
 ## One way per action
 
-| To…                                | Write                                                                                                                   |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| run a slash command                | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                           |
-| press a button                     | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                   |
-| pick from a select menu            | `await alice.select(message, "5-2")`                                                                                    |
-| post, open a forum post, react     | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`          |
-| change nickname, leave the server  | `alice.nickname("Al")`, `alice.leave()`                                                                                 |
-| make Discord fail a route          | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                              |
-| wait for a message                 | `await discord.find(channel, /text/)` (or a member, for their DMs); only messages written since the latest action count |
-| wait for anything else, or absence | `await vi.waitFor(() => expect(…).…)`                                                                                   |
-| read what's there now              | `discord.messages(channel)`, `discord.dms(member)`                                                                      |
+| To…                                | Write                                                                                                                             |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| run a slash command                | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                     |
+| press a button                     | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                             |
+| pick from a select menu            | `await alice.select(message, "5-2")`                                                                                              |
+| post, open a forum post, react     | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |
+| change nickname, leave the server  | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
+| make Discord fail a route          | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |
+| wait for a message                 | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count |
+| wait for anything else, or absence | `await vi.waitFor(() => expect(…).…)`                                                                                             |
+| read what's there now              | `discord.messages(channel)`, `discord.dms(member)`                                                                                |
 
 A message the bot updates in place is the same object the test holds, so keep one variable per menu and act on it line by line. When the bot answers with a new message, use the value `click` or `select` returns.
 
@@ -85,6 +85,8 @@ The mock names messages by their text and lists what exists. Fix the test from t
 | `matches 2 buttons` / `matches 2 options`         | Make the label or RegExp more specific                               |
 | `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                  |
 | `can't use /x: it needs permissions …`            | Use `discord.owner(server)` for admin commands                       |
+| `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug     |
 | `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set |
+| `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`    |
 | `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post      |
 | `unhandled requests: …`                           | The bot used a route the mock doesn't model yet: a Gap, report it    |
