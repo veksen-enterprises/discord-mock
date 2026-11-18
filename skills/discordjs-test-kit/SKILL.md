@@ -65,6 +65,7 @@ it("should record the result when the winner reports", async () => {
 | post, open a forum post, react      | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |
 | DM the bot                          | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                 |
 | a member with permissions           | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                      |
+| someone joins through an invite     | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                    |
 | change nickname, leave the server   | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | change their display name           | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                      |
 | kick the bot from the server        | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                             |

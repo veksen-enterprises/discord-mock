@@ -321,3 +321,26 @@ it("renames the guild as its owner, which a member without Manage Server can't",
     expect(client.guilds.cache.get(server.id)!.name).toBe("SIN 2"),
   );
 });
+
+it("counts a join through a member's invite, and refuses a used-up one", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const general = discord.channel(server, "general");
+  const alice = discord.member(server, "alice");
+  const { client } = createBot(discord.clientOptions);
+  await discord.start(client, {
+    commands,
+    permissions: Permission.ManageGuild,
+  });
+  const code = alice.invite(general, { maxUses: 2 });
+
+  discord.member(server, "carol", { invite: code });
+
+  const invites = await client.guilds.cache.get(server.id)!.invites.fetch();
+  expect(invites.get(code)?.uses).toBe(1);
+  const once = alice.invite(general, { maxUses: 1 });
+  discord.member(server, "dave", { invite: once });
+  expect(() => discord.member(server, "erin", { invite: once })).toThrow(
+    "used up",
+  );
+});

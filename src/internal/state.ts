@@ -17,6 +17,19 @@ import {
 } from "discord-api-types/v10";
 import { snowflake } from "./snowflake.js";
 
+/** An invite: Discord's invite object plus its metadata (resources/invite). */
+export interface InviteRecord {
+  code: string;
+  guildId: string;
+  channelId: string;
+  inviterId: string;
+  uses: number;
+  max_uses: number;
+  max_age: number;
+  temporary: boolean;
+  created_at: string;
+}
+
 export interface GuildRecord {
   id: string;
   name: string;
@@ -50,6 +63,8 @@ export class DiscordState extends EventEmitter<{
   cdnUrl = "";
   /** Keyed by guild id or "global", then by `${type}:${name}`: names are unique per type and scope. */
   readonly commands = new Map<string, Map<string, APIApplicationCommand>>();
+  /** Invites by code. */
+  readonly invites = new Map<string, InviteRecord>();
 
   readonly applicationId: string;
   readonly bot: APIUser;

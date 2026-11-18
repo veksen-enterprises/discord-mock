@@ -20,6 +20,7 @@ import {
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
 import { registerGuildRoutes } from "./guilds.js";
+import { deleteInvite, registerInviteRoutes } from "./invites.js";
 import {
   channelEditError,
   choicesLimitError,
@@ -340,6 +341,29 @@ export class DiscordMock {
       { ...member, guild_id: guild.id },
       GatewayIntentBits.GuildMembers,
     );
+    return member;
+  }
+
+  /**
+   * `user` joins through the invite `code`: its uses go up, then GUILD_MEMBER_ADD. An invite that
+   * reaches max_uses is deleted, with INVITE_DELETE (inferred, not checked). Expiry by max_age isn't
+   * modelled.
+   */
+  joinWithInvite(
+    guild: GuildRecord,
+    code: string,
+    user: APIUser,
+    opts: { nick?: string } = {},
+  ) {
+    const invite = this.state.invites.get(code);
+    if (invite?.guildId !== guild.id)
+      throw new Error(
+        `discordjs-test-kit: ${guild.name} has no invite ${code}; it may be used up or deleted`,
+      );
+    invite.uses += 1;
+    const member = this.addMember(guild, user, opts);
+    if (invite.max_uses !== 0 && invite.uses >= invite.max_uses)
+      deleteInvite(this, invite);
     return member;
   }
 
@@ -2099,6 +2123,7 @@ export class DiscordMock {
     });
     registerMemberRoutes(this, authed);
     registerGuildRoutes(this, authed);
+    registerInviteRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 

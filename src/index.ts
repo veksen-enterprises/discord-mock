@@ -6,6 +6,7 @@ import type {
 } from "discord-api-types/v10";
 import type { Client } from "discord.js";
 import { onTestFinished } from "vitest";
+import { createInvite } from "./internal/invites.js";
 import {
   createDiscordMock,
   matches,
@@ -172,6 +173,12 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    * @example discord.owner(server).renameGuild("SIN 2"); // a bot that shows the guild name should follow
    */
   renameGuild(name: string): void;
+  /**
+   * Creates an invite to `channel` and returns its code; the bot hears `inviteCreate` when it has
+   * Manage Channels there. Pass the code to `discord.member(…, { invite })` for someone to join.
+   * @example const code = alice.invite(general, { maxUses: 1 });
+   */
+  invite(channel: TextChannel<G>, options?: { maxUses?: number }): string;
 }
 
 const FIND_TIMEOUT_MS = 2000;
@@ -229,18 +236,25 @@ class Discord {
 
   /**
    * A new user who has joined `guild`. `nickname` is their server nickname. `permissions` gives them
-   * a role holding those permissions, for a moderator or admin who isn't the owner.
+   * a role holding those permissions, for a moderator or admin who isn't the owner. `invite` is the
+   * code they join through, from `Member.invite`: its uses go up, as invite trackers expect.
    * @example const alice = discord.member(server, "Alice");
    * @example const mod = discord.member(server, "Mod", { permissions: Permission.ModerateMembers });
+   * @example const carol = discord.member(server, "Carol", { invite: alice.invite(general) });
    */
   member<G extends string>(
     guild: Guild<G>,
     name: string,
-    options: { nickname?: string; permissions?: bigint } = {},
+    options: { nickname?: string; permissions?: bigint; invite?: string } = {},
   ): Member<G> {
     const user = this.mock.createUser(name);
     const record = this.g(guild);
-    this.mock.addMember(record, user, { nick: options.nickname });
+    if (options.invite === undefined)
+      this.mock.addMember(record, user, { nick: options.nickname });
+    else
+      this.mock.joinWithInvite(record, options.invite, user, {
+        nick: options.nickname,
+      });
     if (options.permissions !== undefined)
       this.mock.createRole(record, `${name}'s role`, options.permissions, [
         user,
@@ -569,6 +583,16 @@ class MemberActor {
   leave(): void {
     this.markAction();
     this.mock.removeMember(this.guild(), this.user());
+  }
+
+  invite(channel: TextChannel, options: { maxUses?: number } = {}): string {
+    this.markAction();
+    return createInvite(
+      this.mock,
+      this.mock.state.requireChannel(channel.id),
+      this.user(),
+      { max_uses: options.maxUses },
+    ).code;
   }
 
   renameGuild(name: string): void {
