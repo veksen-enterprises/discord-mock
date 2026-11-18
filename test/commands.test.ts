@@ -61,7 +61,7 @@ async function start() {
   await client.login(mock.token);
   await ready;
   await client.application!.commands.set([adminConfig.toJSON()]);
-  return { general, category, alice, owner };
+  return { guild, general, category, alice, owner };
 }
 
 it("runs a subcommand with a channel option, resolved for the bot", async () => {
@@ -100,30 +100,30 @@ it("hides a command from members without its default permissions", async () => {
 });
 
 it("creates one command as an upsert, edits it, and deletes it so users can't run it", async () => {
-  const { general, alice } = await start();
+  const { guild, general, alice } = await start();
   const commands = client.application!.commands;
   const ping = { name: "ping", description: "Pings" };
 
-  const created = await commands.create(ping, general.guild_id);
+  const created = await commands.create(ping, guild.id);
   const again = await commands.create(
     { ...ping, description: "Pings again" },
-    general.guild_id,
+    guild.id,
   );
   const edited = await commands.edit(
     created.id,
     { description: "Pings, edited" },
-    general.guild_id,
+    guild.id,
   );
 
   expect(again.id).toBe(created.id);
   expect(edited.description).toBe("Pings, edited");
-  expect((await commands.fetch({ guildId: general.guild_id })).size).toBe(1);
-  await commands.delete(created.id, general.guild_id);
+  expect((await commands.fetch({ guildId: guild.id })).size).toBe(1);
+  await commands.delete(created.id, guild.id);
   expect(() => mock.as(alice).slashCommand(general, "ping")).toThrow(
     "/ping isn't registered",
   );
   expect(
-    await commands.delete(created.id, general.guild_id).catch((e) => e),
+    await commands.delete(created.id, guild.id).catch((e) => e),
   ).toMatchObject({ code: 10063 });
 });
 
