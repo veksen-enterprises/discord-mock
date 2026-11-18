@@ -202,6 +202,11 @@ export async function runScenarios(
     }
     out.unknownInvite = await call("GET", "/invites/contractnope");
     out.botVoiceState = await call("GET", `${guild}/voice-states/@me`);
+    out.listScheduledEvents = await call("GET", `${guild}/scheduled-events`);
+    out.unknownScheduledEvent = await call(
+      "GET",
+      `${guild}/scheduled-events/1`,
+    );
     const commands = `/applications/${target.botId}${guild}/commands`;
     out.listCommandPermissions = await call("GET", `${commands}/permissions`);
     out.appCommandPermissions = await call(

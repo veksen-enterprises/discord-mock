@@ -76,6 +76,8 @@ describe("scenarios against the mock", () => {
       deleteInvite: 200,
       unknownInvite: 404,
       botVoiceState: 404,
+      listScheduledEvents: 200,
+      unknownScheduledEvent: 404,
       listCommandPermissions: 200,
       appCommandPermissions: 404,
       createWebhook: 403,
