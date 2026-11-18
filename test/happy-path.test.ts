@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { Events, GatewayIntentBits, type Client } from "discord.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDiscordMock, type DiscordMock } from "../src/index.js";
 import { createBot, deployCommands } from "./fixtures/bot.js";
 
@@ -133,14 +133,11 @@ describe("a stock discord.js Client against the mock", () => {
   });
 
   it("reports a gateway op the mock doesn't answer as a Gap", async () => {
-    const { guild } = await start([
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMembers,
-    ]);
-    await expect(
-      client.guilds.cache.get(guild.id)!.members.fetch({ time: 100 }),
-    ).rejects.toThrow();
-    expect(() => mock.assertNoUnhandledRequests()).toThrow(/gateway op 8/);
+    await start();
+    client.user!.setPresence({ status: "idle" }); // op 3 Presence Update
+    await vi.waitFor(() =>
+      expect(() => mock.assertNoUnhandledRequests()).toThrow(/gateway op 3/),
+    );
   });
 
   it("rejects commands the bot never registered, and bad options", async () => {

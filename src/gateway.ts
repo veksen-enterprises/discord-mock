@@ -153,14 +153,77 @@ export class Gateway {
           this.send(session, GatewayDispatchEvents.Resumed, null);
           return;
         }
+        case GatewayOpcodes.RequestGuildMembers:
+          if (session) this.requestGuildMembers(session, d);
+          return;
         default:
-          // e.g. op 8 Request Guild Members: real Discord answers it, the Mock can't yet.
           this.options.recordGap(`gateway op ${op}`);
       }
     });
     socket.on("close", () => {
       if (session?.socket === socket) session.socket = null;
     });
+  }
+
+  /**
+   * Op 8, answered with GUILD_MEMBERS_CHUNK, up to 1000 members each. Discord's docs
+   * (events/gateway-events#request-guild-members): one guild_id per request; the whole list
+   * (query "") needs GUILD_MEMBERS; a `query` is a username prefix capped at 100 members;
+   * `user_ids` is capped at 100 and unknown ids come back in `not_found`; presences need
+   * GUILD_PRESENCES, else they're off. What Discord does when a rule is broken is unchecked: a Gap.
+   */
+  private requestGuildMembers(
+    session: Session,
+    d: {
+      guild_id: string | string[];
+      query?: string;
+      limit?: number;
+      presences?: boolean;
+      user_ids?: string | string[];
+      nonce?: string;
+    },
+  ) {
+    if (Array.isArray(d.guild_id) && d.guild_id.length !== 1)
+      return this.options.recordGap("gateway op 8 with several guild_ids");
+    const guildId = Array.isArray(d.guild_id) ? d.guild_id[0]! : d.guild_id;
+    const guild = this.state.guilds.get(guildId);
+    if (!guild)
+      return this.options.recordGap(
+        `gateway op 8 for unknown guild ${guildId}`,
+      );
+    if (d.presences && session.intents & GatewayIntentBits.GuildPresences)
+      return this.options.recordGap("gateway op 8 with presences");
+    const all = [...guild.members.values()];
+    let members: typeof all;
+    let notFound: string[] | undefined;
+    if (d.user_ids !== undefined) {
+      const ids = [d.user_ids].flat().slice(0, 100);
+      members = all.filter((m) => ids.includes(m.user.id));
+      notFound = ids.filter((id) => !guild.members.has(id));
+    } else if (d.query === "") {
+      if (!(session.intents & GatewayIntentBits.GuildMembers))
+        return this.options.recordGap(
+          "gateway op 8 for every member without GUILD_MEMBERS",
+        );
+      members = d.limit ? all.slice(0, d.limit) : all;
+    } else if (d.query !== undefined) {
+      // A case-sensitive prefix match: inferred, not checked against Discord.
+      members = all
+        .filter((m) => m.user.username.startsWith(d.query!))
+        .slice(0, Math.min(d.limit || 100, 100));
+    } else {
+      return this.options.recordGap("gateway op 8 without query or user_ids");
+    }
+    const chunkCount = Math.max(1, Math.ceil(members.length / 1000));
+    for (let index = 0; index < chunkCount; index++)
+      this.send(session, GatewayDispatchEvents.GuildMembersChunk, {
+        guild_id: guild.id,
+        members: members.slice(index * 1000, (index + 1) * 1000),
+        chunk_index: index,
+        chunk_count: chunkCount,
+        ...(notFound?.length && index === 0 ? { not_found: notFound } : {}),
+        ...(d.nonce !== undefined ? { nonce: d.nonce } : {}),
+      });
   }
 
   private send(session: Session, t: string, d: unknown) {
