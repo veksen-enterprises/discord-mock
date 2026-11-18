@@ -159,6 +159,29 @@ export async function runScenarios(
         components: [card],
       },
     );
+    out.sendPoll = await call("POST", `/channels/${channelId}/messages`, {
+      poll: {
+        question: { text: "contract?" },
+        answers: [
+          { poll_media: { text: "yes" } },
+          { poll_media: { text: "no" } },
+        ],
+        duration: 1,
+      },
+    });
+    const pollId = (out.sendPoll as { body?: { id?: string } }).body?.id;
+    if (pollId)
+      out.expirePoll = await call(
+        "POST",
+        `/channels/${channelId}/polls/${pollId}/expire`,
+      );
+    const plainId = (out.sendComponentsV2 as { body?: { id?: string } }).body
+      ?.id;
+    if (plainId)
+      out.expireNonPoll = await call(
+        "POST",
+        `/channels/${channelId}/polls/${plainId}/expire`,
+      );
     out.sendComponentsV2WithContent = await call(
       "POST",
       `/channels/${channelId}/messages`,
