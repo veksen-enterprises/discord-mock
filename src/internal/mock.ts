@@ -212,7 +212,8 @@ export class DiscordMock {
   readonly rest = new RestRouter();
   // Real tokens start with the bot's id in base64, and bots such as Needle decode it to find their
   // application id. Shape inferred from tokens in the wild, not documented.
-  private readonly developerId = snowflake();
+  /** Who owns the application in the developer portal; start's appOwner sets it to a member. */
+  developerId = snowflake();
   readonly token = `${Buffer.from(this.state.applicationId).toString("base64").replace(/=+$/, "")}.${snowflake()}.mock`;
   readonly gateway: Gateway;
   /** The fake voice server bots' voice connections talk to; it starts on the first op 4. */
@@ -302,8 +303,8 @@ export class DiscordMock {
 
   // ---- world building -------------------------------------------------------
 
-  createUser(username: string) {
-    return this.state.createUser({ username });
+  createUser(username: string, opts: { bot?: boolean } = {}) {
+    return this.state.createUser({ username, bot: opts.bot });
   }
 
   // World changes after the bot connected are announced like Discord announces them, so
@@ -383,6 +384,23 @@ export class DiscordMock {
    * Archive `thread`, as Discord does to an inactive one. docs.discord.food/topics/threads:
    * archiving sets archive_timestamp and is announced as THREAD_UPDATE with the full channel.
    */
+  /**
+   * A moderator locks `thread`: it stays open, but only MANAGE_THREADS can unarchive it once
+   * archived (topics/threads). Announced as THREAD_UPDATE with the full channel.
+   */
+  lockThread(thread: APIChannel) {
+    const record = this.state.requireChannel(thread.id);
+    if (!("thread_metadata" in record) || !record.thread_metadata)
+      throw new Error(`discordjs-test-kit: ${thread.id} is not a thread`);
+    record.thread_metadata.locked = true;
+    this.gateway.dispatch(
+      GatewayDispatchEvents.ThreadUpdate,
+      record,
+      GatewayIntentBits.Guilds,
+    );
+    return record;
+  }
+
   archiveThread(thread: APIChannel) {
     const record = this.state.requireChannel(thread.id);
     if (!("thread_metadata" in record) || !record.thread_metadata)
@@ -765,6 +783,12 @@ export class DiscordMock {
           typeof message === "string" ? { content: message } : message,
         ),
       /** Adds a unicode emoji reaction, dispatched as MESSAGE_REACTION_ADD. */
+      /** Deletes their own message, announced as MESSAGE_DELETE. */
+      deleteOwnMessage: (message: APIMessage) =>
+        this.userDeletesMessage(user, message),
+      /** Edits their own message's text, announced as MESSAGE_UPDATE. */
+      editOwnMessage: (message: APIMessage, content: string) =>
+        this.userEditsMessage(user, message, content),
       react: (message: APIMessage, emoji: string) =>
         this.userReacts(user, message, emoji),
       /**
@@ -843,6 +867,43 @@ export class DiscordMock {
         announceTyping(this, user, channel);
       },
     };
+  }
+
+  /** A member deletes their own message, which Discord always allows its author. */
+  private userDeletesMessage(user: APIUser, message: APIMessage) {
+    const channel = this.state.requireChannel(message.channel_id);
+    this.requireMembership(user, channel);
+    if (message.author.id !== user.id)
+      throw new Error(
+        `discordjs-test-kit: ${user.username} can't delete ${shown(message)}: only its author can without Manage Messages`,
+      );
+    this.deleteMessage(message);
+  }
+
+  /**
+   * A member edits their own message's text. Discord's docs, topics/threads: no edits in an
+   * archived thread. Announced as MESSAGE_UPDATE with edited_timestamp set.
+   */
+  private userEditsMessage(
+    user: APIUser,
+    message: APIMessage,
+    content: string,
+  ) {
+    const channel = this.state.requireChannel(message.channel_id);
+    this.requireMembership(user, channel);
+    if (message.author.id !== user.id)
+      throw new Error(
+        `discordjs-test-kit: ${user.username} can't edit ${shown(message)}: it's not theirs`,
+      );
+    if ("thread_metadata" in channel && channel.thread_metadata?.archived)
+      throw new Error(
+        `discordjs-test-kit: ${user.username} can't edit ${shown(message)}: the thread is archived`,
+      );
+    const updated = this.state.updateMessage(channel.id, message.id, {
+      content,
+    });
+    this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+    return updated;
   }
 
   private userSendsMessage(
@@ -1543,7 +1604,8 @@ export class DiscordMock {
           bot_require_code_grant: false,
           owner: {
             id: this.developerId,
-            username: "developer",
+            username:
+              state.users.get(this.developerId)?.username ?? "developer",
             discriminator: "0",
             avatar: null,
           },

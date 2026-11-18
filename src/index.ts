@@ -234,6 +234,10 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   displayName(name: string | null): void;
   /** Leaves the guild. */
   leave(): void;
+  /** Edits their own `message`'s text, announced to the bot as MESSAGE_UPDATE. */
+  edit(message: Message, content: string): void;
+  /** Deletes their own `message`, announced to the bot as MESSAGE_DELETE. */
+  delete(message: Message): void;
   /**
    * Kicks `member` from the Discord app: needs Kick Members and a higher role. The bot sees them
    * leave and, with View Audit Log, the audit log entry naming who did it.
@@ -320,6 +324,15 @@ class Discord {
     mock.state.on("messageUpdate", record);
   }
 
+  /**
+   * The bot token this Discord accepts: give it to a bot that reads its token itself, or to a
+   * deploy script that registers commands before the bot starts. Its first part is the application
+   * id in base64, as a real token's is.
+   */
+  get token(): string {
+    return this.mock.token;
+  }
+
   /** Spread into your bot's `new Client()` options so it connects to this mock. */
   get clientOptions(): { rest: { api: string } } {
     return this.mock.clientOptions;
@@ -383,6 +396,7 @@ class Discord {
    * a role holding those permissions, for a moderator or admin who isn't the owner. `invite` is the
    * code they join through, from `Member.invite`: its uses go up, as invite trackers expect.
    * `inactiveDays` is how long since Discord last saw them, for prune; everyone else was seen now.
+   * `bot: true` makes another bot, whose posts carry `author.bot`.
    * @example const alice = discord.member(server, "Alice");
    * @example const mod = discord.member(server, "Mod", { permissions: Permission.ModerateMembers });
    * @example const carol = discord.member(server, "Carol", { invite: alice.invite(general) });
@@ -395,9 +409,10 @@ class Discord {
       permissions?: bigint;
       invite?: string;
       inactiveDays?: number;
+      bot?: boolean;
     } = {},
   ): Member<G> {
-    const user = this.mock.createUser(name);
+    const user = this.mock.createUser(name, { bot: options.bot });
     const record = this.g(guild);
     if (options.invite === undefined)
       this.mock.addMember(record, user, { nick: options.nickname });
@@ -430,7 +445,8 @@ class Discord {
    * `commands` the way a deploy script would. The client is destroyed when the test ends.
    *
    * `permissions` are what the bot's invite link grants: the bot gets a role with them in every
-   * guild, including one built after `start`. Without it, it has only @everyone's.
+   * guild, including one built after `start`. Without it, it has only @everyone's. `appOwner`
+   * makes a member the application's owner, `client.application.owner`.
    * @example await discord.start(bot.client, { commands, permissions: Permission.SendMessages });
    */
   async start(
@@ -438,10 +454,12 @@ class Discord {
     options: {
       commands?: RESTPostAPIApplicationCommandsJSONBody[];
       permissions?: bigint;
+      appOwner?: Member;
     } = {},
   ): Promise<void> {
     this.client = client;
     this.markAction();
+    if (options.appOwner) this.mock.developerId = options.appOwner.id;
     if (options.permissions !== undefined)
       this.mock.grantBot(options.permissions);
     const ready = once(client, "clientReady");
@@ -459,28 +477,6 @@ class Discord {
    */
   fail(method: string, path: string, response: RestResponse): () => void {
     return this.mock.use(method, path, () => response);
-  }
-
-  /**
-   * Takes `permission` from the bot in `channel`, as a channel overwrite denying it. Discord then
-   * answers the bot there as it would: 50001 Missing Access without View Channel, else 50013.
-   * @example discord.deny(isoChannel, Permission.SendMessages);
-   */
-  deny(channel: TextChannel | Forum, permission: bigint): void {
-    const record = this.mock.state.requireChannel(channel.id);
-    const bot = this.mock.state.bot.id;
-    const current =
-      "permission_overwrites" in record
-        ? record.permission_overwrites?.find((o) => o.id === bot)
-        : undefined;
-    this.mock.setOverwrite(
-      record,
-      { id: bot, type: 1 },
-      {
-        allow: BigInt(current?.allow ?? 0) & ~permission,
-        deny: BigInt(current?.deny ?? 0) | permission,
-      },
-    );
   }
 
   /**
@@ -571,6 +567,92 @@ class Discord {
   endOutage(guild: Guild): void {
     this.markAction();
     this.mock.gateway.endOutage(this.g(guild));
+  }
+
+  /** A moderator locks `thread`: only members with Manage Threads can reopen it once archived. */
+  lock(thread: Thread): void {
+    this.markAction();
+    this.mock.lockThread(this.mock.state.requireChannel(thread.id));
+  }
+
+  /**
+   * Takes `permission` from the bot in `channel`, or from `who` (a member, a role, `"bot"` or
+   * `"everyone"`): a channel overwrite denying it, announced as CHANNEL_UPDATE, which keeps what
+   * the target's overwrite already allowed or denied. Discord then answers the bot there as it
+   * would: 50001 Missing Access without View Channel, else 50013. ADR 0002: a permission error
+   * comes from the Model, not from an Override.
+   * @example discord.deny(isoChannel, Permission.SendMessages);
+   * @example discord.deny(staffChannel, "everyone", Permission.ViewChannel);
+   */
+  deny<G extends string>(
+    channel: TextChannel<G> | Forum<G> | Category<G>,
+    permission: bigint,
+  ): void;
+  deny<G extends string>(
+    channel: TextChannel<G> | Forum<G> | Category<G>,
+    who: Member<NoInfer<G>> | Role<NoInfer<G>> | "bot" | "everyone",
+    permission: bigint,
+  ): void;
+  deny(
+    channel: TextChannel | Forum | Category,
+    whoOrPermission: Member | Role | "bot" | "everyone" | bigint,
+    permission?: bigint,
+  ): void {
+    if (typeof whoOrPermission === "bigint")
+      this.overwrite(channel, "bot", { deny: whoOrPermission });
+    else this.overwrite(channel, whoOrPermission, { deny: permission! });
+  }
+
+  /**
+   * The opposite of `deny`: allows `permission` in `channel` for the bot, or for `who`, despite
+   * roles that don't grant it.
+   * @example discord.allow(staffChannel, mods, Permission.ViewChannel);
+   */
+  allow<G extends string>(
+    channel: TextChannel<G> | Forum<G> | Category<G>,
+    permission: bigint,
+  ): void;
+  allow<G extends string>(
+    channel: TextChannel<G> | Forum<G> | Category<G>,
+    who: Member<NoInfer<G>> | Role<NoInfer<G>> | "bot" | "everyone",
+    permission: bigint,
+  ): void;
+  allow(
+    channel: TextChannel | Forum | Category,
+    whoOrPermission: Member | Role | "bot" | "everyone" | bigint,
+    permission?: bigint,
+  ): void {
+    if (typeof whoOrPermission === "bigint")
+      this.overwrite(channel, "bot", { allow: whoOrPermission });
+    else this.overwrite(channel, whoOrPermission, { allow: permission! });
+  }
+
+  private overwrite(
+    channel: { id: string },
+    who: Member | Role | "bot" | "everyone",
+    perms: { allow?: bigint; deny?: bigint },
+  ) {
+    this.markAction();
+    const record = this.mock.state.requireChannel(channel.id);
+    const guildId = "guild_id" in record ? record.guild_id! : "";
+    const target =
+      who === "everyone"
+        ? { id: guildId, type: 0 as const }
+        : who === "bot"
+          ? { id: this.mock.state.bot.id, type: 1 as const }
+          : who instanceof MemberActor
+            ? { id: who.id, type: 1 as const }
+            : { id: who.id, type: 0 as const };
+    // An overwrite replaces the target's earlier one: keep what it allowed or denied before.
+    const existing = (
+      "permission_overwrites" in record ? record.permission_overwrites : []
+    )?.find((o) => o.id === target.id);
+    const allow = BigInt(existing?.allow ?? 0) & ~(perms.deny ?? 0n);
+    const deny = BigInt(existing?.deny ?? 0) & ~(perms.allow ?? 0n);
+    this.mock.setOverwrite(record, target, {
+      allow: allow | (perms.allow ?? 0n),
+      deny: deny | (perms.deny ?? 0n),
+    });
   }
 
   /** Discord archives `thread` for inactivity: it moves from the active list to the archived one. */
@@ -888,6 +970,14 @@ class MemberActor {
       post,
     );
     return { thread: handle(thread.id, post.title), message };
+  }
+
+  edit(message: Message, content: string): void {
+    this.actor().editOwnMessage(message, content);
+  }
+
+  delete(message: Message): void {
+    this.actor().deleteOwnMessage(message);
   }
 
   react(message: Message, emoji: string): void {
