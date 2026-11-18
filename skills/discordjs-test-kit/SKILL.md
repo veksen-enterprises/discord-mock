@@ -59,6 +59,7 @@ it("should record the result when the winner reports", async () => {
 | check autocomplete suggestions                   | `const choices = await alice.autocomplete(channel, "docs", "query", "Promise.al")`                                                                  |
 | press a button                                   | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                                               |
 | fill the form (modal) the bot opens              | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                                             |
+| reach the thread the bot started from a post     | `const thread = await discord.thread(channel, post)`, whatever the bot named it                                                                     |
 | reach a thread the bot started                   | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`                       |
 | a member who closed their DMs                    | `alice.closeDMs()`: the bot's DMs to them fail with 50007, so test what the bot says instead                                                        |
 | pick from a select menu                          | `await alice.select(message, "5-2")`                                                                                                                |
@@ -74,6 +75,10 @@ it("should record the result when the winner reports", async () => {
 | a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.run(general, "play")`, `await discord.hearBot(lobby)`; the bot's client needs GuildVoiceStates               |
 | create, edit, delete an event                    | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
 | add, rename, delete an emoji or sticker          | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
+| edit or delete their own message                 | `alice.edit(message, "fixed")`, `alice.delete(message)`                                                                                             |
+| another bot posts                                | `discord.member(server, "Carl-bot", { bot: true })`: its posts carry `author.bot`                                                                   |
+| deny or allow in one channel                     | `discord.deny(channel, "bot", Permission.SendMessages)` (or a member, a role, `"everyone"`), `discord.allow(…)`                                     |
+| a moderator locks a thread                       | `discord.lock(thread)`                                                                                                                              |
 | change nickname, leave the server                | `alice.nickname("Al")`, `alice.leave()`                                                                                                             |
 | change their display name                        | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                                        |
 | override who can use a command                   | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |
