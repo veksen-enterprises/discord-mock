@@ -249,7 +249,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   renameGuild(name: string): void;
   /**
    * Joins `channel`, or moves there from another voice channel. The bot hears `voiceStateUpdate`
-   * with GUILD_VOICE_STATES. Needs Connect there, which @everyone has unless an overwrite denies it.
+   * with GUILD_VOICE_STATES. Needs Connect there, which `@everyone` has unless an overwrite denies it.
    * @example alice.joinVoice(lobby); // a bot that logs voice activity should post
    */
   joinVoice(channel: VoiceChannel<G>): void;
