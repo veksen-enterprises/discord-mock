@@ -52,38 +52,39 @@ it("should record the result when the winner reports", async () => {
 
 ## One way per action
 
-| To…                                       | Write                                                                                                                                               |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| run a slash command                       | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                                       |
-| use an app from a context menu            | `await alice.runApp(channel, bob, "View Profile")` (or a message for a message app)                                                                 |
-| check autocomplete suggestions            | `const choices = await alice.autocomplete(channel, "docs", "query", "Promise.al")`                                                                  |
-| press a button                            | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                                               |
-| fill the form (modal) the bot opens       | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                                             |
-| reach a thread the bot started            | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`                       |
-| a member who closed their DMs             | `alice.closeDMs()`: the bot's DMs to them fail with 50007, so test what the bot says instead                                                        |
-| pick from a select menu                   | `await alice.select(message, "5-2")`                                                                                                                |
-| pick members, roles or channels           | `await alice.select(setupPanel, [bob, discord.role(server, "mods")])`                                                                               |
-| post, open a forum post, react            | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content, tags: ["Bug"] })`, `alice.react(message, "✅")`                       |
-| vote in a poll, take the vote back        | `alice.vote(poll, "Pizza")`, `alice.unvote(poll)`                                                                                                   |
-| a member starts typing                    | `alice.startTyping(general)`: the bot hears `typingStart`                                                                                           |
-| DM the bot                                | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                                   |
-| a member with permissions                 | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                                        |
-| someone joins through an invite           | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
-| join, move, leave voice                   | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
-| create, edit, delete an event             | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
-| add, rename, delete an emoji or sticker   | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
-| change nickname, leave the server         | `alice.nickname("Al")`, `alice.leave()`                                                                                                             |
-| change their display name                 | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                                        |
-| override who can use a command            | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |
-| a moderator kicks or bans someone         | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                                              |
-| kick the bot from the server              | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
-| rename the server                         | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                                            |
-| a bot that logs through a `WebhookClient` | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                                             |
-| make Discord fail a route                 | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                                          |
-| wait for a message                        | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count                   |
-| check the bot sent nothing more           | `await discord.idle()`, then assert                                                                                                                 |
-| wait for anything else, or absence        | `await vi.waitFor(() => expect(…).…)`                                                                                                               |
-| read what's there now                     | `discord.messages(channel)`, `discord.dms(member)`                                                                                                  |
+| To…                                              | Write                                                                                                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| run a slash command                              | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                                       |
+| use an app from a context menu                   | `await alice.runApp(channel, bob, "View Profile")` (or a message for a message app)                                                                 |
+| check autocomplete suggestions                   | `const choices = await alice.autocomplete(channel, "docs", "query", "Promise.al")`                                                                  |
+| press a button                                   | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                                               |
+| fill the form (modal) the bot opens              | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                                             |
+| reach a thread the bot started                   | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`                       |
+| a member who closed their DMs                    | `alice.closeDMs()`: the bot's DMs to them fail with 50007, so test what the bot says instead                                                        |
+| pick from a select menu                          | `await alice.select(message, "5-2")`                                                                                                                |
+| pick members, roles or channels                  | `await alice.select(setupPanel, [bob, discord.role(server, "mods")])`                                                                               |
+| post, open a forum post, react                   | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content, tags: ["Bug"] })`, `alice.react(message, "✅")`                       |
+| vote in a poll, take the vote back               | `alice.vote(poll, "Pizza")`, `alice.unvote(poll)`                                                                                                   |
+| a member starts typing                           | `alice.startTyping(general)`: the bot hears `typingStart`                                                                                           |
+| DM the bot                                       | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                                   |
+| a member with permissions                        | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                                        |
+| a member Discord hasn't seen for a while (prune) | `discord.member(server, "Ghost", { inactiveDays: 40 })`                                                                                             |
+| someone joins through an invite                  | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
+| join, move, leave voice                          | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
+| create, edit, delete an event                    | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
+| add, rename, delete an emoji or sticker          | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
+| change nickname, leave the server                | `alice.nickname("Al")`, `alice.leave()`                                                                                                             |
+| change their display name                        | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                                        |
+| override who can use a command                   | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |
+| a moderator kicks or bans someone                | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                                              |
+| kick the bot from the server                     | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
+| rename the server                                | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                                            |
+| a bot that logs through a `WebhookClient`        | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                                             |
+| make Discord fail a route                        | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                                          |
+| wait for a message                               | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count                   |
+| check the bot sent nothing more                  | `await discord.idle()`, then assert                                                                                                                 |
+| wait for anything else, or absence               | `await vi.waitFor(() => expect(…).…)`                                                                                                               |
+| read what's there now                            | `discord.messages(channel)`, `discord.dms(member)`                                                                                                  |
 
 A message the bot updates in place is the same object the test holds, so keep one variable per menu and act on it line by line. When the bot answers with a new message, use the value `click` or `select` returns.
 

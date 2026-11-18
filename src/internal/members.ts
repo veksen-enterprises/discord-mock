@@ -12,7 +12,12 @@ import {
 import { reasonOf, recordAudit } from "./audit.js";
 import type { DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
-import { respond, type RestHandler, type RestRequest } from "./rest.js";
+import {
+  respond,
+  type RestHandler,
+  type RestRequest,
+  type RestResponse,
+} from "./rest.js";
 import { snowflake } from "./snowflake.js";
 import type { GuildRecord } from "./state.js";
 import { setVoiceState, voiceStateOf } from "./voice.js";
@@ -474,6 +479,91 @@ export function registerMemberRoutes(
         role_id: role.id,
       });
       return respond.noContent();
+    }),
+  );
+
+  // Prune (resources/guild#get-guild-prune-count, #begin-guild-prune): Manage Server and Kick
+  // Members; `days` 1-30, 7 by default; members with no roles, or only roles in `include_roles`,
+  // who haven't been seen for `days`. Begin Prune fires GUILD_MEMBER_REMOVE for each, and `pruned`
+  // is null when compute_prune_count is false. Inferred, not checked: "seen" is the member's
+  // `inactiveDays` from the World (everyone else was seen just now), 50035 for days out of range,
+  // and one MEMBER_PRUNE audit log entry. The PRUNE_REQUIRES_ADMIN feature isn't modelled, and a
+  // role at or above the bot's in `include_roles` is a Gap.
+  const prunable = (guild: GuildRecord, days: number, include: string[]) => {
+    const since = Date.now() - days * 86_400_000;
+    return [...guild.members.values()].filter(
+      (m) =>
+        m.roles.every((id) => include.includes(id)) &&
+        (guild.lastSeen.get(m.user.id) ?? Date.now()) <= since,
+    );
+  };
+  const pruneRequest = (
+    req: RestRequest,
+    days: unknown,
+    include: string[],
+    run: (guild: GuildRecord, days: number, include: string[]) => RestResponse,
+  ) => {
+    const guild = guildOf(req);
+    if (!guild) return respond.error(404, 10004, "Unknown Guild");
+    if (!botHas(guild, Permission.ManageGuild | Permission.KickMembers))
+      return respond.missingPermissions();
+    const n = days === undefined ? 7 : Number(days);
+    if (!Number.isInteger(n) || n < 1 || n > 30)
+      return respond.invalidFormBody();
+    if (
+      include.some(
+        (id) =>
+          guild.ownerId !== bot &&
+          (guild.roles.get(id)?.position ?? 0) >= highest(guild, bot),
+      )
+    )
+      return rest.gap("pruning a role at or above the bot's");
+    return run(guild, n, include);
+  };
+  rest.route(
+    "GET",
+    "/guilds/:guildId/prune",
+    authed((req) =>
+      pruneRequest(
+        req,
+        req.query.get("days") ?? undefined,
+        req.query.get("include_roles")?.split(",").filter(Boolean) ?? [],
+        (guild, days, include) =>
+          respond.json({ pruned: prunable(guild, days, include).length }),
+      ),
+    ),
+  );
+  rest.route(
+    "POST",
+    "/guilds/:guildId/prune",
+    authed((req) => {
+      const body = (req.body ?? {}) as {
+        days?: unknown;
+        include_roles?: string[];
+        compute_prune_count?: boolean;
+      };
+      return pruneRequest(
+        req,
+        body.days,
+        body.include_roles ?? [],
+        (guild, days, include) => {
+          const pruned = prunable(guild, days, include);
+          for (const m of pruned) mock.removeMember(guild, m.user);
+          recordAudit(mock, guild, {
+            action_type: AuditLogEvent.MemberPrune,
+            user_id: bot,
+            target_id: null,
+            options: {
+              delete_member_days: String(days),
+              members_removed: String(pruned.length),
+            },
+            reason: reasonOf(req),
+          });
+          return respond.json({
+            pruned: body.compute_prune_count === false ? null : pruned.length,
+          });
+        },
+      );
     }),
   );
 }

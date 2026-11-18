@@ -364,6 +364,7 @@ class Discord {
    * A new user who has joined `guild`. `nickname` is their server nickname. `permissions` gives them
    * a role holding those permissions, for a moderator or admin who isn't the owner. `invite` is the
    * code they join through, from `Member.invite`: its uses go up, as invite trackers expect.
+   * `inactiveDays` is how long since Discord last saw them, for prune; everyone else was seen now.
    * @example const alice = discord.member(server, "Alice");
    * @example const mod = discord.member(server, "Mod", { permissions: Permission.ModerateMembers });
    * @example const carol = discord.member(server, "Carol", { invite: alice.invite(general) });
@@ -371,7 +372,12 @@ class Discord {
   member<G extends string>(
     guild: Guild<G>,
     name: string,
-    options: { nickname?: string; permissions?: bigint; invite?: string } = {},
+    options: {
+      nickname?: string;
+      permissions?: bigint;
+      invite?: string;
+      inactiveDays?: number;
+    } = {},
   ): Member<G> {
     const user = this.mock.createUser(name);
     const record = this.g(guild);
@@ -385,6 +391,11 @@ class Discord {
       this.mock.createRole(record, `${name}'s role`, options.permissions, [
         user,
       ]);
+    if (options.inactiveDays !== undefined)
+      record.lastSeen.set(
+        user.id,
+        Date.now() - options.inactiveDays * 86_400_000,
+      );
     return this.actorFor(guild, user);
   }
 
