@@ -309,6 +309,16 @@ export function registerMemberRoutes(
     );
   const ROLE_FIELDS = ["name", "permissions", "colors", "hoist", "mentionable"];
 
+  // docs.discord.food/resources/guild#list-guild-roles: every role. "User must be a member of the guild."
+  rest.route(
+    "GET",
+    "/guilds/:guildId/roles",
+    authed((req) => {
+      const guild = guildOf(req);
+      return guild ? respond.json([...guild.roles.values()]) : unknownGuild();
+    }),
+  );
+
   // Create Guild Role: "All JSON params are optional"; name defaults to "new role", permissions to
   // @everyone's. Fires GUILD_ROLE_CREATE. Where the new role sits isn't documented: the mock puts
   // it at position 1, just above @everyone, as Discord's app shows new roles (inferred, not checked).

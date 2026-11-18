@@ -182,3 +182,16 @@ it("deletes a channel overwrite, and the bot hears the channel update", async ()
     (await refusal(channel.permissionOverwrites.delete(member))).code,
   ).toBe(10009);
 });
+
+it("lists every role, including one made since the bot connected", async () => {
+  const { guild, record } = await start(0n);
+  const added = mock.createRole(record, "late", 0n);
+
+  const roles = await guild.roles.fetch();
+
+  expect(roles.map((r) => r.name).sort()).toEqual(
+    ["@everyone", "admins", "bot", "late"].sort(),
+  );
+  expect(guild.roles.cache.has(added.id)).toBe(true);
+  mock.assertNoUnhandledRequests();
+});
