@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createDiscord } from "../src/index.js";
 import { commands, createBot } from "./fixtures/bot.js";
 
@@ -35,7 +35,7 @@ it("names the channel and its last messages when find gives up", async () => {
   alice.post(generalChannel, { content: "hello" });
 
   await expect(discord.find(generalChannel, /goodbye/)).rejects.toThrow(
-    'no message in #general matched /goodbye/ within 2s. Last 1: "hello"',
+    'no message in #general written since the last action matched /goodbye/ within 2s. Last 1: "hello"',
   );
 });
 
@@ -59,4 +59,28 @@ it("applies a nickname change and a leave to the member", async () => {
   await expect(bob.run(generalChannel, "echo", { text: "hi" })).rejects.toThrow(
     "bob isn't a member of SIN",
   );
+});
+
+it("ignores a matching message the bot wrote before the latest action", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+  alice.post(generalChannel, { content: "!ping" });
+  await discord.find(generalChannel, "pong");
+
+  alice.post(generalChannel, { content: "hello" });
+
+  await expect(discord.find(generalChannel, "pong")).rejects.toThrow(
+    "no message in #general written since the last action",
+  );
+});
+
+it("still gives up when the test has frozen Date", async () => {
+  const { discord, generalChannel } = await startBot();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    await expect(discord.find(generalChannel, "never")).rejects.toThrow(
+      "It has no messages",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });

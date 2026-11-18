@@ -575,9 +575,11 @@ export class DiscordMock {
       throw new Error(
         `discord-mock: button ${buttonLabel(button)} on ${shown(message)} is disabled`,
       );
+    // docs.discord.food/resources/components#button-object: a link button (style 5) opens its
+    // URL and a premium button (style 6) opens a purchase; neither sends the bot an interaction.
     if (button.custom_id === undefined)
       throw new Error(
-        `discord-mock: button ${buttonLabel(button)} opens a URL; the bot gets no interaction`,
+        `discord-mock: button ${buttonLabel(button)} ${button.style === 6 ? "opens a purchase" : "opens a URL"}; the bot gets no interaction`,
       );
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
@@ -1488,8 +1490,16 @@ export function shown(message: APIMessage): string {
   return JSON.stringify(text.length > 40 ? `${text.slice(0, 39)}…` : text);
 }
 
+/** Every component on `message`, nested ones included (rows, and Components V2 containers and accessories). */
 function componentsIn(message: APIMessage): any[] {
-  return (message.components ?? []).flatMap((row: any) => row.components ?? []);
+  const found: any[] = [];
+  const walk = (component: any) => {
+    found.push(component);
+    for (const child of component.components ?? []) walk(child);
+    if (component.accessory) walk(component.accessory);
+  };
+  for (const component of message.components ?? []) walk(component);
+  return found;
 }
 
 function buttonLabel(button: any): string {
@@ -1497,10 +1507,10 @@ function buttonLabel(button: any): string {
 }
 
 function matches(text: string | undefined, want: string | RegExp) {
-  return (
-    text !== undefined &&
-    (typeof want === "string" ? text === want : want.test(text))
-  );
+  if (text === undefined) return false;
+  if (typeof want === "string") return text === want;
+  want.lastIndex = 0; // a /g RegExp would otherwise resume from its last match
+  return want.test(text);
 }
 
 function quote(label: string | RegExp) {

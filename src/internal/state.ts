@@ -351,6 +351,15 @@ export class DiscordState extends EventEmitter<{
   /** Who reacted with what, keyed by `${messageId}:${emoji}`. */
   readonly reactors = new Map<string, Set<string>>();
 
+  /** Counts message creates and edits, so a test can ask what was written after a point. */
+  writes = 0;
+  private readonly lastWrite = new WeakMap<APIMessage, number>();
+
+  /** The `writes` count when `message` was last created or edited. */
+  lastWriteOf(message: APIMessage): number {
+    return this.lastWrite.get(message) ?? 0;
+  }
+
   createMessage(input: {
     channelId: string;
     authorId: string;
@@ -473,6 +482,7 @@ export class DiscordState extends EventEmitter<{
         message.mentions.push(author);
     }
     this.messages.get(channel.id)!.push(message);
+    this.lastWrite.set(message, ++this.writes);
     // docs.discord.food/topics/threads: message_count and total_message_sent count MESSAGE_CREATEs.
     if ("thread_metadata" in channel) {
       const counts = channel as {
@@ -503,6 +513,7 @@ export class DiscordState extends EventEmitter<{
     Object.assign(message, patch, {
       edited_timestamp: new Date().toISOString(),
     });
+    this.lastWrite.set(message, ++this.writes);
     this.emit("messageUpdate", message);
     return message;
   }

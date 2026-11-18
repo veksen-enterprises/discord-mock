@@ -4,6 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   Client,
+  ContainerBuilder,
   Events,
   GatewayIntentBits,
   MessageFlags,
@@ -174,5 +175,46 @@ it("names what a message offers when the test asks for a button or option it doe
   );
   const pressed = await actor.clickButton(menu, "🔄").reply();
   expect(pressed.content).toBe("pressed retry");
+  mock.assertNoUnhandledRequests();
+});
+
+it("presses a button inside a Components V2 container", async () => {
+  const guild = mock.createGuild("ladder");
+  const general = mock.createTextChannel(guild, "general");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isChatInputCommand())
+      await interaction.reply({
+        flags: MessageFlags.IsComponentsV2,
+        components: [
+          new ContainerBuilder().addActionRowComponents(
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId("join")
+                .setLabel("Join")
+                .setStyle(ButtonStyle.Primary),
+            ),
+          ),
+        ],
+      });
+    if (interaction.isButton())
+      await interaction.reply({ content: `pressed ${interaction.customId}` });
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  await client.application!.commands.set([
+    { name: "panel", description: "Show the panel" },
+  ]);
+
+  const panel = await mock.as(alice).slashCommand(general, "panel").reply();
+  const pressed = await mock.as(alice).clickButton(panel, "Join").reply();
+
+  expect(pressed.content).toBe("pressed join");
   mock.assertNoUnhandledRequests();
 });

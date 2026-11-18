@@ -25,7 +25,7 @@ As a git dependency pinned to a commit; `prepare` builds it on install.
 npm install --save-dev "github:veksen-enterprises/discord-mock#<commit>"
 ```
 
-Peers: `discord.js` `^14.26.0` (CI runs 14.26.4 and the locked latest) and `vitest` `>=4`. Node 22 or 24.
+Peers: `discord.js` `^14.26.4` and `vitest` `^4.1.2 || ^5.0.0`; CI runs both floors and the locked latest. Node 22 or 24.
 
 Agents writing tests: read [`SKILL.md`](SKILL.md), shipped in the package.
 
@@ -33,22 +33,22 @@ Agents writing tests: read [`SKILL.md`](SKILL.md), shipped in the package.
 
 `Discord` builds the World, starts the bot, injects failures and reads what happened. A `Member` acts. Each action has one way to write it.
 
-| `Discord`                                    | Returns             | Notes                                                                 |
-| -------------------------------------------- | ------------------- | --------------------------------------------------------------------- |
-| `createDiscord()`                            | `Promise<Discord>`  | One per test, on its own port                                         |
-| `guild(name)`                                | `Guild<N>`          |                                                                       |
-| `category(guild, name)`                      | `Category<N>`       |                                                                       |
-| `channel(guild, name, category?)`            | `TextChannel<N>`    |                                                                       |
-| `forum(guild, name)`                         | `Forum<N>`          |                                                                       |
-| `member(guild, name, nick?)`                 | `Member<N>`         | A new user who joined `guild`                                         |
-| `owner(guild)`                               | `Member<N>`         | Has every permission                                                  |
-| `start(client, { commands?, permissions? })` | `Promise<void>`     | `permissions`: what the bot's invite grants; default @everyone's only |
-| `fail(method, path, response)`               | `void`              | Overrides a Route, e.g. `respond.serverError(503)`                    |
-| `archive(thread)`                            | `void`              | Discord archives it for inactivity                                    |
-| `messages(channel)`                          | `Message[]`         | Oldest first, live objects                                            |
-| `dms(member)`                                | `Message[]`         | The bot's DMs with `member`                                           |
-| `find(where, text)`                          | `Promise<Message>`  | Waits for a matching message, up to 2 s                               |
-| `clientOptions`                              | `{ rest: { api } }` | Spread into the bot's `Client` options                                |
+| `Discord`                                    | Returns             | Notes                                                                       |
+| -------------------------------------------- | ------------------- | --------------------------------------------------------------------------- |
+| `createDiscord()`                            | `Promise<Discord>`  | One per test, on its own port                                               |
+| `guild(name)`                                | `Guild<N>`          |                                                                             |
+| `category(guild, name)`                      | `Category<N>`       |                                                                             |
+| `channel(guild, name, category?)`            | `TextChannel<N>`    |                                                                             |
+| `forum(guild, name)`                         | `Forum<N>`          |                                                                             |
+| `member(guild, name, nick?)`                 | `Member<N>`         | A new user who joined `guild`                                               |
+| `owner(guild)`                               | `Member<N>`         | Has every permission                                                        |
+| `start(client, { commands?, permissions? })` | `Promise<void>`     | `permissions`: what the bot's invite grants, in guilds built before `start` |
+| `fail(method, path, response)`               | `void`              | Overrides a Route, e.g. `respond.serverError(503)`                          |
+| `archive(thread)`                            | `void`              | Discord archives it for inactivity                                          |
+| `messages(channel)`                          | `Message[]`         | Oldest first, live objects                                                  |
+| `dms(member)`                                | `Message[]`         | The bot's DMs with `member`                                                 |
+| `find(where, text)`                          | `Promise<Message>`  | Waits for a match written since the latest action, up to 2 s                |
+| `clientOptions`                              | `{ rest: { api } }` | Spread into the bot's `Client` options                                      |
 
 | `Member`                            | Returns               | Notes                                                    |
 | ----------------------------------- | --------------------- | -------------------------------------------------------- |
@@ -63,7 +63,7 @@ Agents writing tests: read [`SKILL.md`](SKILL.md), shipped in the package.
 
 `label` is an exact string or a RegExp, and must match exactly one button or option. `Message` is discord-api-types' `APIMessage`, and it's live: when the bot updates a message in place, the object the test holds shows it. `click` and `select` return the message visible afterwards, which is a new one only when the bot answers with a new message.
 
-**Waiting.** `find(where, text)` resolves with the newest message in a channel, thread or member's DMs whose text contains `text` (or matches a RegExp); the text is the content plus each embed's title, description, fields and footer. It rejects after 2 s, showing the last messages. Absence ("Bob is off the board") is `vi.waitFor`.
+**Waiting.** `find(where, text)` resolves with the newest message in a channel, thread or member's DMs that the bot created or edited since the latest action (a member's action, `start` or `archive`), and whose text contains `text` (or matches a RegExp). The text is the content plus each embed's title, description, fields and footer. A board that already said "Bob" before the action doesn't count, so a bot that never reposts fails. It rejects after 2 s, showing the last messages, and counts polls rather than reading `Date`, so a test that fakes `Date` still gets the error. Absence ("Bob is off the board") is `vi.waitFor`.
 
 **Errors name what's there.** A failed action names messages by their text and lists what exists: `alice can't click "Cancel": "Pick a score" has buttons Confirm, 🔄, Rules`; `/reprot isn't registered. Registered: /report`.
 

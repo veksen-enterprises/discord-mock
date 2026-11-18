@@ -100,6 +100,9 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
 
 const FIND_TIMEOUT_MS = 2000;
 const FIND_INTERVAL_MS = 20;
+// Counted in polls, not read from Date.now(): tests fake Date to move a bot's clock, and a frozen
+// Date would never reach the deadline.
+const FIND_POLLS = FIND_TIMEOUT_MS / FIND_INTERVAL_MS;
 
 /**
  * A fake Discord for one test. Build the World, `start` your bot, act as members, then read what
@@ -109,6 +112,11 @@ class Discord {
   /** Spread into your bot's `new Client()` options so it connects to this mock. */
   readonly clientOptions: { rest: { api: string } };
   private client?: Client;
+  /** The Model's write count when the latest action started: `find` only sees writes after it. */
+  private actionMark = 0;
+  private readonly markAction = () => {
+    this.actionMark = this.mock.state.writes;
+  };
 
   constructor(private readonly mock: DiscordMock) {
     this.clientOptions = mock.clientOptions;
@@ -153,7 +161,13 @@ class Discord {
   ): Member<G> {
     const user = this.mock.createUser(name);
     this.mock.addMember(this.g(guild), user, { nick });
-    return new MemberActor(this.mock, guild.id, user.id, name) as never;
+    return new MemberActor(
+      this.mock,
+      this.markAction,
+      guild.id,
+      user.id,
+      name,
+    ) as never;
   }
 
   /** The member who owns `guild`. They have every permission, so they can run admin commands. */
@@ -161,6 +175,7 @@ class Discord {
     const user = this.mock.state.requireUser(this.g(guild).ownerId);
     return new MemberActor(
       this.mock,
+      this.markAction,
       guild.id,
       user.id,
       user.username,
@@ -172,7 +187,7 @@ class Discord {
    * `commands` the way a deploy script would. The client is destroyed when the test ends.
    *
    * `permissions` are what the bot's invite link grants: the bot gets a role with them in every
-   * guild. Without it the bot has only @everyone's.
+   * guild built before `start`. Without it, or in a guild built later, it has only @everyone's.
    * @example await discord.start(bot.client, { commands, permissions: Permission.SendMessages });
    */
   async start(
@@ -183,6 +198,7 @@ class Discord {
     } = {},
   ): Promise<void> {
     this.client = client;
+    this.markAction();
     if (options.permissions !== undefined)
       for (const guild of this.mock.state.guilds.values())
         this.mock.createRole(guild, "bot", options.permissions, [
@@ -205,6 +221,7 @@ class Discord {
 
   /** Discord archives `thread` for inactivity: it moves from the active list to the archived one. */
   archive(thread: Thread): void {
+    this.markAction();
     this.mock.archiveThread(this.mock.state.requireChannel(thread.id));
   }
 
@@ -219,10 +236,11 @@ class Discord {
   }
 
   /**
-   * Waits for a message in `where` (a channel, a thread, or a member's DMs with the bot) whose
-   * text contains `text`, or matches it when it's a RegExp. The text is the content plus each
-   * embed's title, description, fields and footer. Resolves with the newest match; rejects after
-   * 2 seconds, showing the last messages. To wait for something to disappear, use `vi.waitFor`.
+   * Waits for a message the bot created or edited since the latest action (a member's action,
+   * `start` or `archive`) in `where`: a channel, a thread, or a member's DMs with the bot. Its text
+   * must contain `text`, or match it when it's a RegExp; the text is the content plus each embed's
+   * title, description, fields and footer. Resolves with the newest match; rejects after 2 seconds,
+   * showing the last messages. To wait for something to disappear, use `vi.waitFor`.
    * @example await discord.find(leaderboardChannel, /Bobby/);
    */
   async find(
@@ -233,16 +251,20 @@ class Discord {
     const channelId = isMember
       ? this.mock.state.dmChannel(where.id).id
       : where.id;
-    const deadline = Date.now() + FIND_TIMEOUT_MS;
-    for (;;) {
+    const mark = this.actionMark;
+    for (let poll = 0; ; poll++) {
       const all = this.mock.messagesIn(channelId);
-      const match = all.findLast((m) => matchesText(readable(m), text));
+      const match = all.findLast(
+        (m) =>
+          this.mock.state.lastWriteOf(m) > mark &&
+          matchesText(readable(m), text),
+      );
       if (match) return match;
-      if (Date.now() >= deadline) {
+      if (poll >= FIND_POLLS) {
         const place = isMember ? `${where.name}'s DMs` : `#${where.name}`;
         const last = all.slice(-3).map(shown);
         throw new Error(
-          `discord-mock: no message in ${place} matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
+          `discord-mock: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
         );
       }
       await new Promise((r) => setTimeout(r, FIND_INTERVAL_MS));
@@ -269,6 +291,7 @@ export type { Discord };
 class MemberActor {
   constructor(
     private readonly mock: DiscordMock,
+    private readonly markAction: () => void,
     private readonly guildId: string,
     readonly id: string,
     readonly name: string,
@@ -322,14 +345,17 @@ class MemberActor {
   }
 
   nickname(nick: string | null): void {
+    this.markAction();
     this.mock.setNickname(this.guild(), this.user(), nick);
   }
 
   leave(): void {
+    this.markAction();
     this.mock.removeMember(this.guild(), this.user());
   }
 
   private actor() {
+    this.markAction();
     return this.mock.as(this.user());
   }
   private user() {
@@ -361,7 +387,9 @@ function readable(message: Message): string {
 }
 
 function matchesText(text: string, want: string | RegExp) {
-  return typeof want === "string" ? text.includes(want) : want.test(text);
+  if (typeof want === "string") return text.includes(want);
+  want.lastIndex = 0; // a /g RegExp would otherwise resume from its last match
+  return want.test(text);
 }
 
 function quote(text: string | RegExp) {
