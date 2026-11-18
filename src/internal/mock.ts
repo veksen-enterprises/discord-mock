@@ -709,6 +709,18 @@ export class DiscordMock {
   }
 
   /**
+   * The messages the channel routes show the bot. An ephemeral message "is only visible to the user
+   * who invoked the interaction" (resources/message#message-object-message-flags), so it isn't in
+   * the channel's history; the bot reaches it only through its interaction's webhook. Inferred, not
+   * checked against Discord.
+   */
+  historyIn(channel: APIChannel | string): APIMessage[] {
+    return this.messagesIn(channel).filter(
+      (m) => !((m.flags ?? 0) & MessageFlags.Ephemeral),
+    );
+  }
+
+  /**
    * Resolves once the bot has had no REST request open and been sent no Dispatch for `quietMs`.
    * A heuristic: a bot that thinks longer than `quietMs` before its first request looks idle.
    */
@@ -2037,7 +2049,7 @@ export class DiscordMock {
             (replyTo ? Permission.ReadMessageHistory : 0n),
         );
         if (denied) return denied;
-        if (replyTo && !this.messagesIn(channel).some((m) => m.id === replyTo))
+        if (replyTo && !this.historyIn(channel).some((m) => m.id === replyTo))
           return rest.gap(`reply to unknown message ${replyTo}`);
         const overLimit = messageLimitError(req.body);
         if (overLimit) return overLimit;
@@ -2111,7 +2123,7 @@ export class DiscordMock {
         const limit = Number(req.query.get("limit") ?? 50);
         const before = req.query.get("before");
         const after = req.query.get("after");
-        let list = [...this.messagesIn(channel)].reverse(); // newest first, as Discord returns
+        let list = [...this.historyIn(channel)].reverse(); // newest first, as Discord returns
         if (before) list = list.filter((m) => BigInt(m.id) < BigInt(before));
         if (after)
           list = list
@@ -2127,7 +2139,7 @@ export class DiscordMock {
       "PATCH",
       "/channels/:channelId/messages/:messageId",
       authed((req) => {
-        const message = this.messagesIn(req.params.channelId!).find(
+        const message = this.historyIn(req.params.channelId!).find(
           (m) => m.id === req.params.messageId,
         );
         if (!message) return respond.unknownMessage();
@@ -2158,7 +2170,7 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const message = this.messagesIn(channel).find(
+        const message = this.historyIn(channel).find(
           (m) => m.id === req.params.messageId,
         );
         if (!message) return respond.unknownMessage();
@@ -2194,7 +2206,7 @@ export class DiscordMock {
           Permission.ReadMessageHistory,
         );
         if (denied) return denied;
-        const message = this.messagesIn(channel).find(
+        const message = this.historyIn(channel).find(
           (m) => m.id === req.params.messageId,
         );
         return message ? respond.json(message) : respond.unknownMessage();
@@ -2209,7 +2221,7 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const message = this.messagesIn(channel).find(
+        const message = this.historyIn(channel).find(
           (m) => m.id === req.params.messageId,
         );
         if (!message) return respond.unknownMessage();
@@ -2233,7 +2245,7 @@ export class DiscordMock {
       authed((req) => {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
-        const message = this.messagesIn(channel).find(
+        const message = this.historyIn(channel).find(
           (m) => m.id === req.params.messageId,
         );
         if (!message) return respond.unknownMessage();

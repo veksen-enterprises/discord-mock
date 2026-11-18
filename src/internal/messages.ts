@@ -44,14 +44,14 @@ export function registerMessageRoutes(
     const denied = mock.checkBotPerms(channel, needed);
     if (denied) return { refused: denied };
     const message = mock
-      .messagesIn(channel)
+      .historyIn(channel)
       .find((m) => m.id === req.params.messageId);
     if (!message) return { refused: respond.unknownMessage() };
     return { channel, message };
   };
   const pinsIn = (channel: APIChannel) =>
     mock
-      .messagesIn(channel)
+      .historyIn(channel)
       .filter((m) => m.pinned)
       .sort((a, b) => pinnedAt.get(b.id)!.localeCompare(pinnedAt.get(a.id)!));
   const withoutReactions = (m: APIMessage) => ({ ...m, reactions: undefined });
@@ -181,7 +181,7 @@ export function registerMessageRoutes(
           "A message provided was too old to bulk delete",
         );
       const deleted = mock
-        .messagesIn(channel)
+        .historyIn(channel)
         .filter((m) => ids.includes(m.id))
         .map((m) => {
           state.deleteMessage(channel.id, m.id);
