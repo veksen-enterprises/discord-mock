@@ -23,4 +23,4 @@ Mock features needed: message attachments (the bot downloads `attachment.url` wi
 
 1. Pick one real flow per bot and make it pass end to end: sin-bot `/join` → leaderboard repost; d2armory image post → ingest → reaction. This drives the feature list above in priority order instead of building the API surface speculatively.
 2. Add the bot-side injection changes in each repo (small, listed above).
-3. Distribution: git dependency first (`"discordjs-test-kit": "github:veksen-enterprises/discordjs-test-kit"`), npm publish once the API settles.
+3. Distribution: install from npm, `npm install -D discordjs-test-kit` (ADR 0006).

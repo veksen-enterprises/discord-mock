@@ -15,7 +15,7 @@ idea of Discord, not with Discord.
 ## Purpose
 
 - First consumers: sin-bot and the d2armory bot. Scope follows what they use.
-- A craft project. Whether it becomes a public package is an open question.
+- A craft project, published on npm (ADR 0006).
 
 ## Guiding principle: test the bot as it ships
 
@@ -73,8 +73,6 @@ They pull against each other. When they conflict, name the trade-off.
   same scenarios against a private test guild and diffs the shapes. Needs a
   bot token as a CI secret, a guild, and a schedule. Without it, fidelity is
   "modelled from the docs", never "checked".
-- **Public package.** Publish to npm, or stay a git dependency for JP's bots?
-  Publishing commits us to an API and to discord.js version support.
 - **Other libraries.** The mock speaks Discord's protocol, not discord.js's
   API, so any library could connect to it. Do we test that, or stay
   discord.js-only?
