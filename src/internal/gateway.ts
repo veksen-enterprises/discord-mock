@@ -34,6 +34,8 @@ export interface GatewayOptions {
   recordGap: (what: string) => void;
   /** Called on every Dispatch, so the Mock can tell when the bot has something to react to. */
   onDispatch?: () => void;
+  /** Op 4 from the bot; `reply` dispatches to the session that sent it alone. */
+  onVoiceStateUpdate?: (d: any, reply: (t: string, d: unknown) => void) => void;
 }
 
 export class Gateway {
@@ -174,6 +176,16 @@ export class Gateway {
         // shows a presence, so it is accepted and dropped. The 5 per 20s limit isn't modelled.
         // Inferred, not checked against Discord.
         case GatewayOpcodes.PresenceUpdate:
+          return;
+        // topics/voice-connections#retrieving-voice-server-information: the bot joins, moves or
+        // leaves voice; Discord answers with VOICE_STATE_UPDATE and VOICE_SERVER_UPDATE.
+        case GatewayOpcodes.VoiceStateUpdate:
+          if (session && this.options.onVoiceStateUpdate) {
+            const to = session;
+            this.options.onVoiceStateUpdate(d, (t, data) =>
+              this.send(to, t, data),
+            );
+          } else this.options.recordGap(`gateway op ${op}`);
           return;
         default:
           this.options.recordGap(`gateway op ${op}`);

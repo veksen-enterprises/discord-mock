@@ -56,6 +56,15 @@ alice.createEvent("x", challengesChannel, new Date());
 // Renaming another server's emoji
 // @ts-expect-error
 alice.renameExpression(carol.addEmoji("pog"), "x");
+// Listening for the bot in a text channel
+// @ts-expect-error
+void discord.hearBot(challengesChannel);
+// A stage in another server
+// @ts-expect-error
+alice.startStage(discord.stageChannel(otherServer, "hall"), "Q&A");
+// Starting a stage in a voice channel
+// @ts-expect-error
+alice.startStage(discord.voiceChannel(server, "lobby"), "Q&A");
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.run(challengesChannel, "jion");

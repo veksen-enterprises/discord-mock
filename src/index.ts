@@ -568,6 +568,65 @@ class Discord {
     return handle(found.id, found.name ?? "");
   }
 
+  /**
+   * Waits for the bot to play sound in `channel` over a voice connection (@discordjs/voice, or
+   * anything that speaks Discord's voice protocol): silence frames don't count. Rejects after 2
+   * seconds, saying where the bot's voice connection is. Its client needs the GuildVoiceStates
+   * intent, as on Discord.
+   * @example await alice.run(general, "play", { song: "intro" }); await discord.hearBot(lobby);
+   */
+  async hearBot(channel: VoiceChannel | StageChannel): Promise<void> {
+    const server = this.mock.voiceServer;
+    const playing = () =>
+      [...server.sessions.values()].some(
+        (s) => s.channelId === channel.id && s.soundPackets > 0,
+      );
+    if (playing()) return;
+    const heard = await new Promise<boolean>((resolve) => {
+      const listen = () => {
+        if (!playing()) return;
+        clearTimeout(timer);
+        server.off("sound", listen);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        server.off("sound", listen);
+        resolve(false);
+      }, FIND_TIMEOUT_MS);
+      server.on("sound", listen);
+    });
+    if (heard) return;
+    const record = this.mock.state.requireChannel(channel.id);
+    const session = server.sessions.get(
+      "guild_id" in record ? (record.guild_id ?? "") : "",
+    );
+    const refused = server.refusals.get(
+      "guild_id" in record ? (record.guild_id ?? "") : "",
+    );
+    const where = refused
+      ? `the voice server closed the bot's connection with ${refused}`
+      : !session
+        ? "the bot has no voice connection in that server"
+        : session.channelId !== channel.id
+          ? `the bot is in ${this.mock.state.requireChannel(session.channelId).name}`
+          : !session.secretKey
+            ? "the bot's voice connection never got ready"
+            : "the bot is connected there but sent no sound";
+    throw new Error(
+      `discordjs-test-kit: didn't hear the bot in ${channel.name} within ${FIND_TIMEOUT_MS / 1000}s: ${where}`,
+    );
+  }
+
+  /** The voice or stage channel the bot is in, in `guild`, or null. */
+  botVoiceChannel(guild: Guild): VoiceChannel | StageChannel | null {
+    const voice = this.mock.state.voiceStates
+      .get(guild.id)
+      ?.get(this.mock.state.bot.id);
+    if (!voice?.channel_id) return null;
+    const channel = this.mock.state.requireChannel(voice.channel_id);
+    return handle(channel.id, channel.name ?? "");
+  }
+
   /** Every message in `channel`, oldest first. To wait for one, use `find`. */
   messages(channel: TextChannel | Thread): Message[] {
     return this.mock.messagesIn(channel.id);

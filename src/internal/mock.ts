@@ -61,7 +61,12 @@ import {
   registerThreadRoutes,
 } from "./threads.js";
 import { announceTyping, registerTypingRoute } from "./typing.js";
-import { registerVoiceRoutes, setVoiceState } from "./voice.js";
+import { VoiceServer } from "./voice-server.js";
+import {
+  botVoiceStateUpdate,
+  registerVoiceRoutes,
+  setVoiceState,
+} from "./voice.js";
 import { registerWebhookRoutes } from "./webhooks.js";
 
 export { respond } from "./rest.js";
@@ -210,6 +215,8 @@ export class DiscordMock {
   private readonly developerId = snowflake();
   readonly token = `${Buffer.from(this.state.applicationId).toString("base64").replace(/=+$/, "")}.${snowflake()}.mock`;
   readonly gateway: Gateway;
+  /** The fake voice server bots' voice connections talk to; it starts on the first op 4. */
+  readonly voiceServer = new VoiceServer((what) => void this.rest.gap(what));
   private server: Server;
   private interactions = new Map<string, InteractionRun>();
   /** REST requests the bot has open. With `activity`, tells when the bot has gone quiet. */
@@ -229,6 +236,10 @@ export class DiscordMock {
           GatewayIntentBits.MessageContent,
       recordGap: (what) => void this.rest.gap(what),
       onDispatch: () => this.activity.emit("change"),
+      onVoiceStateUpdate: (d, reply) =>
+        void botVoiceStateUpdate(this, d, reply).catch((error: Error) =>
+          this.rest.gap(error.message),
+        ),
     });
     this.server = createServer((req, res) => {
       this.inFlight++;
@@ -264,6 +275,7 @@ export class DiscordMock {
   }
 
   async close() {
+    this.voiceServer.close();
     this.gateway.close();
     this.server.closeAllConnections();
     await new Promise((resolve) => this.server.close(resolve));
@@ -537,6 +549,8 @@ export class DiscordMock {
       GatewayIntentBits.Guilds,
     );
     guild.members.delete(bot.id);
+    this.voiceServer.end(guild.id);
+    this.state.voiceStates.get(guild.id)?.delete(bot.id);
   }
 
   private announceChannel(channel: APIChannel) {

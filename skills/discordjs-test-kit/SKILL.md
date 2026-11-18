@@ -71,6 +71,7 @@ it("should record the result when the winner reports", async () => {
 | a member Discord hasn't seen for a while (prune) | `discord.member(server, "Ghost", { inactiveDays: 40 })`                                                                                             |
 | someone joins through an invite                  | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
 | join, move, leave voice                          | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
+| a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.run(general, "play")`, `await discord.hearBot(lobby)`; the bot's client needs GuildVoiceStates               |
 | create, edit, delete an event                    | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
 | add, rename, delete an emoji or sticker          | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
 | change nickname, leave the server                | `alice.nickname("Al")`, `alice.leave()`                                                                                                             |
