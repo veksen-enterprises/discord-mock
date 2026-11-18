@@ -499,6 +499,18 @@ export class DiscordMock {
     );
   }
 
+  // Discord's docs, resources/message#message-object-message-flags: an EPHEMERAL message "is only
+  // visible to the user who invoked the Interaction", so nobody else can use its components.
+  private requireVisibleTo(user: APIUser, message: APIMessage) {
+    if (
+      (message.flags ?? 0) & MessageFlags.Ephemeral &&
+      message.interaction_metadata?.user.id !== user.id
+    )
+      throw new Error(
+        `discord-mock: ${user.username} can't see message ${message.id}: it's ephemeral to ${message.interaction_metadata?.user.username}`,
+      );
+  }
+
   private userClicksButton(
     user: APIUser,
     message: APIMessage,
@@ -515,6 +527,7 @@ export class DiscordMock {
       );
     if (button.disabled)
       throw new Error(`discord-mock: button "${customId}" is disabled`);
+    this.requireVisibleTo(user, message);
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
       user,
@@ -556,6 +569,7 @@ export class DiscordMock {
       throw new Error(
         `discord-mock: select "${select.custom_id}" needs ${select.min_values} picks; multi-select is not modelled`,
       );
+    this.requireVisibleTo(user, message);
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
       user,
