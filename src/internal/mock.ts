@@ -381,6 +381,29 @@ export class DiscordMock {
     );
   }
 
+  /**
+   * The bot leaves `guild`, or its admins kick it. docs.discord.food/resources/guild#leave-guild:
+   * "Fires a Guild Delete and a Guild Member Remove Gateway event"; gateway-events#guild-delete:
+   * without `unavailable`, "the user was removed from the guild". After that the bot hears
+   * nothing from the guild. That its own session gets the member remove too is inferred, not checked.
+   */
+  removeBot(guild: GuildRecord) {
+    const bot = this.state.bot;
+    if (!this.state.botIn(guild.id))
+      throw new Error(`discordjs-test-kit: the bot isn't in ${guild.name}`);
+    this.gateway.dispatch(
+      GatewayDispatchEvents.GuildMemberRemove,
+      { guild_id: guild.id, user: bot },
+      GatewayIntentBits.GuildMembers,
+    );
+    this.gateway.dispatch(
+      GatewayDispatchEvents.GuildDelete,
+      { id: guild.id },
+      GatewayIntentBits.Guilds,
+    );
+    guild.members.delete(bot.id);
+  }
+
   private announceChannel(channel: APIChannel) {
     this.gateway.dispatch(
       GatewayDispatchEvents.ChannelCreate,
@@ -1033,6 +1056,10 @@ export class DiscordMock {
     message?: APIMessage,
   ) {
     const { guild, member } = this.requireMembership(user, channel) ?? {};
+    if (guild && !this.state.botIn(guild.id))
+      throw new Error(
+        `discordjs-test-kit: the bot isn't in ${guild.name} any more (it left or was kicked), so ${user.username} can't use its commands there`,
+      );
     const run = new InteractionRun(
       this,
       snowflake(),
@@ -1085,6 +1112,11 @@ export class DiscordMock {
       (req) => {
         if (req.headers.authorization !== `Bot ${this.token}`)
           return respond.unauthorized();
+        // A guild the bot left or was kicked from. 50001 is what a channel there answers
+        // (no VIEW_CHANNEL); that a guild route answers it too is inferred, not checked.
+        const guildId = req.params.guildId;
+        if (guildId && state.guilds.has(guildId) && !state.botIn(guildId))
+          return respond.missingAccess();
         return handler(req);
       };
 

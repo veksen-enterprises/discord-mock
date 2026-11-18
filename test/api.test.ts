@@ -15,7 +15,7 @@ async function startBot() {
   const alice = discord.member(server, "alice");
   const bob = discord.member(server, "bob", { nickname: "Bobby" });
   await discord.start(createBot(discord.clientOptions).client, { commands });
-  return { discord, generalChannel, alice, bob };
+  return { discord, server, generalChannel, alice, bob };
 }
 
 it("shows the bot's in-place update on the message the test already holds", async () => {
@@ -295,4 +295,14 @@ it("shows the bot's suggestions while a member types, then runs the command with
   await expect(
     alice.autocomplete(generalChannel, "echo", "text", "hi"),
   ).rejects.toThrow('option "text" doesn\'t have autocomplete');
+});
+
+it("stops members using the bot's commands once it's kicked", async () => {
+  const { discord, server, generalChannel, alice } = await startBot();
+
+  discord.kickBot(server);
+
+  await expect(
+    alice.run(generalChannel, "echo", { text: "hi" }),
+  ).rejects.toThrow("the bot isn't in SIN any more");
 });

@@ -56,6 +56,21 @@ export function registerMemberRoutes(
       GatewayIntentBits.GuildMembers,
     );
 
+  // docs.discord.food/resources/guild#leave-guild: 204. An owner can't leave without handing the
+  // guild over; what Discord answers then is unchecked, so it's a Gap.
+  rest.route(
+    "DELETE",
+    "/users/@me/guilds/:guildId",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      if (guild.ownerId === bot)
+        return rest.gap("the bot leaving a guild it owns");
+      mock.removeBot(guild);
+      return respond.noContent();
+    }),
+  );
+
   rest.route(
     "GET",
     "/guilds/:guildId/members/:userId",

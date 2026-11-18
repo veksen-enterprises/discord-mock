@@ -692,6 +692,10 @@ export class DiscordState extends EventEmitter<{
     if (!user) throw new Error(`discordjs-test-kit: unknown user ${id}`);
     return user;
   }
+  /** Whether the bot is still in guild `id`: it can leave, or be kicked. */
+  botIn(id: string): boolean {
+    return !!this.guilds.get(id)?.members.has(this.bot.id);
+  }
   requireGuild(id: string): GuildRecord {
     const guild = this.guilds.get(id);
     if (!guild) throw new Error(`discordjs-test-kit: unknown guild ${id}`);

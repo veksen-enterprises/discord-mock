@@ -121,3 +121,50 @@ it("emits userUpdate in discord.js when a member changes their display name", as
   expect(after.displayName).toBe("Caroline");
   expect(guild.members.cache.get(carol.id)!.displayName).toBe("Caroline");
 });
+
+it("leaves a guild: guildDelete, then nothing more from it", async () => {
+  const guild = await start([
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
+  ]);
+  const record = mock.state.requireGuild(guild.id);
+  const channel = mock.createTextChannel(record, "general");
+  const deleted = once(client, Events.GuildDelete);
+  const heard = vi.fn();
+  client.on(Events.MessageCreate, heard);
+
+  await guild.leave();
+
+  const [gone] = await deleted;
+  expect(gone.id).toBe(guild.id);
+  expect(client.guilds.cache.has(guild.id)).toBe(false);
+  mock.as(mock.state.requireUser(record.ownerId)).sendMessage(channel, {
+    content: "still there?",
+  });
+  await mock.waitForIdle();
+  expect(heard).not.toHaveBeenCalled();
+  await expect(
+    client.rest.get(`/guilds/${guild.id}/members/${record.ownerId}`),
+  ).rejects.toThrow("Missing Access");
+  mock.assertNoUnhandledRequests();
+});
+
+it("tells a bot it was kicked, and leaves the guild out when it reconnects", async () => {
+  const guild = await start([GatewayIntentBits.Guilds]);
+  const record = mock.state.requireGuild(guild.id);
+  const deleted = once(client, Events.GuildDelete);
+
+  mock.removeBot(record);
+
+  await deleted;
+  await client.destroy();
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  expect(client.guilds.cache.has(guild.id)).toBe(false);
+});

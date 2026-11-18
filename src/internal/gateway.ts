@@ -112,7 +112,9 @@ export class Gateway {
             missed: [],
           };
           this.sessions.set(session.id, session);
-          const guilds = [...this.state.guilds.values()];
+          const guilds = [...this.state.guilds.values()].filter((g) =>
+            this.state.botIn(g.id),
+          );
           this.send(session, GatewayDispatchEvents.Ready, {
             v: 10,
             // READY's user is the full bot user: flags and account fields, no public_flags.
@@ -252,8 +254,10 @@ export class Gateway {
       );
   }
 
-  /** Dispatch to every session whose intents allow it. */
+  /** Dispatch to every session whose intents allow it. Nothing from a guild the bot isn't in. */
   dispatch(t: string, d: unknown, requiredIntent?: number) {
+    const guildId = (d as { guild_id?: string } | undefined)?.guild_id;
+    if (guildId && !this.state.botIn(guildId)) return;
     for (const session of this.sessions.values()) {
       if (requiredIntent && !(session.intents & requiredIntent)) continue;
       this.send(session, t, d);
@@ -273,6 +277,7 @@ export class Gateway {
     const channel = this.state.requireChannel(message.channel_id);
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
     const inGuild = !!guildId;
+    if (inGuild && !this.state.botIn(guildId)) return;
     const required = inGuild
       ? GatewayIntentBits.GuildMessages
       : GatewayIntentBits.DirectMessages;

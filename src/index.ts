@@ -286,6 +286,16 @@ class Discord {
     this.mock.use(method, path, () => response);
   }
 
+  /**
+   * The admins of `guild` kick the bot. It gets `guildDelete` and hears nothing from the guild
+   * after, as on Discord; its members can no longer use its commands there.
+   * @example discord.kickBot(server); // a bot that cleans up its settings on guildDelete should
+   */
+  kickBot(guild: Guild): void {
+    this.markAction();
+    this.mock.removeBot(this.g(guild));
+  }
+
   /** Discord archives `thread` for inactivity: it moves from the active list to the archived one. */
   archive(thread: Thread): void {
     this.markAction();
