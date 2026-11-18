@@ -17,6 +17,7 @@ import {
   type APIGuildScheduledEvent,
   type APIMessage,
   type APIRole,
+  type APIStageInstance,
   type APISticker,
   type APIUser,
   type APIVoiceState,
@@ -76,6 +77,8 @@ export class DiscordState extends EventEmitter<{
   readonly guilds = new Map<string, GuildRecord>();
   /** Guilds in an outage: the bot hears nothing from them (gateway-events#guild-delete). */
   readonly outages = new Set<string>();
+  /** Live stages, by stage channel id (resources/stage-instance). */
+  readonly stageInstances = new Map<string, APIStageInstance>();
   readonly channels = new Map<string, APIChannel>();
   readonly messages = new Map<string, APIMessage[]>();
   /** Users who turned off DMs from server members, so the bot can't message them. */
@@ -282,11 +285,14 @@ export class DiscordState extends EventEmitter<{
   }
 
   /** A voice channel (resources/channel#channel-object-example-guild-voice-channel). */
-  createVoiceChannel(guildId: string, input: { name: string }): APIChannel {
+  createVoiceChannel(
+    guildId: string,
+    input: { name: string; stage?: boolean },
+  ): APIChannel {
     const guild = this.requireGuild(guildId);
     const channel = {
       id: snowflake(),
-      type: ChannelType.GuildVoice,
+      type: input.stage ? ChannelType.GuildStageVoice : ChannelType.GuildVoice,
       guild_id: guild.id,
       name: input.name,
       position: guild.channelIds.length,

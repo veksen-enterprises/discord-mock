@@ -59,6 +59,8 @@ export type Category<G extends string = string> = Handle<"category", G>;
 export type TextChannel<G extends string = string> = Handle<"text", G>;
 /** A voice channel: members join it with `member.joinVoice`. */
 export type VoiceChannel<G extends string = string> = Handle<"voice", G>;
+/** A stage channel, made with `discord.stageChannel`. */
+export type StageChannel<G extends string = string> = Handle<"stage", G>;
 /** A forum: members open posts in it with `member.forumPost`. */
 export type Forum<G extends string = string> = Handle<"forum", G>;
 /** A thread, such as a forum post. */
@@ -204,6 +206,14 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /** Takes back their vote; the bot hears `messagePollVoteRemove`. */
   unvote(message: Message): void;
   /**
+   * Makes `stage` live with `topic`. They need Manage Channels, Mute Members and Move Members there;
+   * the bot hears `stageInstanceCreate`.
+   * @example mod.startStage(townHall, "Q&A");
+   */
+  startStage(stage: StageChannel<G>, topic: string): void;
+  /** Ends the live stage; the bot hears `stageInstanceDelete`. */
+  endStage(stage: StageChannel<G>): void;
+  /**
    * Starts typing in `channel`. The bot hears `typingStart` with GuildMessageTyping.
    * @example alice.startTyping(general);
    */
@@ -344,6 +354,14 @@ class Discord {
     name: string,
   ): VoiceChannel<G> {
     return handle(this.mock.createVoiceChannel(this.g(guild), name).id, name);
+  }
+
+  /** A stage channel in `guild`, which a moderator makes live with `startStage`. */
+  stageChannel<G extends string>(
+    guild: Guild<G>,
+    name: string,
+  ): StageChannel<G> {
+    return handle(this.mock.createStageChannel(this.g(guild), name).id, name);
   }
 
   /** A role in `guild` with no permissions, for members to pick in a role select. */
@@ -776,6 +794,14 @@ class MemberActor {
 
   unvote(message: Message): void {
     this.actor().removeVote(message);
+  }
+
+  startStage(stage: StageChannel, topic: string): void {
+    this.actor().startStage(this.mock.state.requireChannel(stage.id), topic);
+  }
+
+  endStage(stage: StageChannel): void {
+    this.actor().endStage(this.mock.state.requireChannel(stage.id));
   }
 
   startTyping(channel: TextChannel | Thread): void {

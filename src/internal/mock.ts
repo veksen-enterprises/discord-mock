@@ -54,6 +54,7 @@ import {
 } from "./rest.js";
 import { registerScheduledEventRoutes } from "./scheduled-events.js";
 import { snowflake } from "./snowflake.js";
+import { endStage, registerStageRoutes, startStage } from "./stages.js";
 import { DiscordState, type GuildRecord } from "./state.js";
 import {
   addMentionedToPrivateThread,
@@ -327,6 +328,13 @@ export class DiscordMock {
   createVoiceChannel(guild: GuildRecord, name: string) {
     return this.announceChannel(
       this.state.createVoiceChannel(guild.id, { name }),
+    );
+  }
+
+  /** A stage channel: a voice channel members can make live with a topic. */
+  createStageChannel(guild: GuildRecord, name: string) {
+    return this.announceChannel(
+      this.state.createVoiceChannel(guild.id, { name, stage: true }),
     );
   }
 
@@ -802,6 +810,11 @@ export class DiscordMock {
       },
       /** Takes back their vote in `message`'s poll. */
       removeVote: (message: APIMessage) => removeVote(this, user, message),
+      /** Makes stage channel `channel` live with `topic`, as one of its moderators. */
+      startStage: (channel: APIChannel, topic: string) =>
+        startStage(this, user, channel, topic),
+      /** Ends the live stage in `channel`, as one of its moderators. */
+      endStage: (channel: APIChannel) => endStage(this, user, channel),
       /** Starts typing in `channel`: TYPING_START. */
       startTyping: (channel: APIChannel) => {
         this.requireMembership(user, channel);
@@ -2459,6 +2472,7 @@ export class DiscordMock {
     registerAutoModRoutes(this, authed);
     registerPollRoutes(this, authed);
     registerTypingRoute(this, authed);
+    registerStageRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 
