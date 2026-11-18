@@ -94,7 +94,7 @@ Each bug was planted in [`examples/challenge/bot.ts`](examples/challenge/bot.ts)
 
 ## Not modelled yet
 
-- Most of Discord's API. A request the kit doesn't model fails the test and names the route.
+- About half of Discord's API: 112 of 228 REST routes and 54 of 79 gateway events. A request the kit doesn't model fails the test and names the route.
 - Gateway compression. If `zlib-sync` is installed, discord.js asks for it and the bot reconnects in a loop until the test times out.
 - Partials, and form fields other than text inputs.
 
