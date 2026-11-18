@@ -167,12 +167,9 @@ export function registerMessageRoutes(
       const ids: unknown = req.body?.messages;
       if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string"))
         return respond.invalidFormBody();
-      if (ids.length < 2 || ids.length > 100)
-        return respond.error(
-          400,
-          50016,
-          "Provided too few or too many messages to delete. Must provide at least 2 and fewer than 100 messages to delete",
-        );
+      // Contract run 11: one id is 400 + 50035, not 50016 as the code table suggests. Over 100 is
+      // taken to be the same (inferred, not checked).
+      if (ids.length < 2 || ids.length > 100) return respond.invalidFormBody();
       // Which code a duplicate gets isn't documented: 50035 is inferred, not checked.
       if (new Set(ids).size !== ids.length) return respond.invalidFormBody();
       if (ids.some((id) => Date.now() - createdAt(id) > TWO_WEEKS_MS))
