@@ -449,3 +449,28 @@ it("picks roles in a role select by handle, and refuses a member there", async (
 
   expect(picked.content).toBe("ranked,casual");
 });
+
+it("tells a bot with the intent about a member's event, which an ordinary member can't create", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const lobby = discord.voiceChannel(server, "lobby");
+  const alice = discord.member(server, "alice");
+  const host = discord.member(server, "host", {
+    permissions: Permission.CreateEvents,
+  });
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildScheduledEvents],
+    ...discord.clientOptions,
+  });
+  const heard: string[] = [];
+  client.on(Events.GuildScheduledEventCreate, (e) => heard.push(e.name));
+  await discord.start(client, { commands: [] });
+
+  expect(() => alice.createEvent("x", "the park", new Date())).toThrow(
+    "Create Events",
+  );
+  host.createEvent("Raid night", lobby, new Date("2026-12-01T20:00Z"));
+  await discord.idle();
+
+  expect(heard).toEqual(["Raid night"]);
+});

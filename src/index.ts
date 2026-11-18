@@ -21,6 +21,11 @@ import {
 } from "./internal/mock.js";
 import { computePermissions, Permission } from "./internal/payloads.js";
 import type { RestResponse } from "./internal/rest.js";
+import {
+  createScheduledEvent,
+  deleteScheduledEvent,
+  editScheduledEvent,
+} from "./internal/scheduled-events.js";
 
 export { respond } from "./internal/rest.js";
 export type { RestResponse } from "./internal/rest.js";
@@ -55,6 +60,8 @@ export type Forum<G extends string = string> = Handle<"forum", G>;
 export type Thread<G extends string = string> = Handle<"thread", G>;
 /** A role. Members pick it in a role select. */
 export type Role<G extends string = string> = Handle<"role", G>;
+/** A scheduled event, which members create with `member.createEvent`. */
+export type ScheduledEvent<G extends string = string> = Handle<"event", G>;
 /** What a member can pick in a user, role, mentionable or channel select. */
 export type Pickable<G extends string = string> =
   | Member<G>
@@ -221,6 +228,28 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    * @example const code = alice.invite(general, { maxUses: 1 });
    */
   invite(channel: TextChannel<G>, options?: { maxUses?: number }): string;
+  /**
+   * Creates a scheduled event starting at `start`, in voice channel `where` or at a place outside
+   * Discord named by the string. Needs Create Events (and View Channel and Connect in the channel).
+   * The bot hears `guildScheduledEventCreate` with GUILD_SCHEDULED_EVENTS. A place event ends an
+   * hour after it starts.
+   * @example const raid = alice.createEvent("Raid night", lobby, new Date("2026-12-01T20:00Z"));
+   */
+  createEvent(
+    name: string,
+    where: VoiceChannel<G> | string,
+    start: Date,
+  ): ScheduledEvent<G>;
+  /**
+   * Changes an event's name, description or start; the bot hears `guildScheduledEventUpdate`.
+   * Someone else's event needs Manage Events.
+   */
+  editEvent(
+    event: ScheduledEvent<G>,
+    changes: { name?: string; description?: string; start?: Date },
+  ): void;
+  /** Deletes an event; the bot hears `guildScheduledEventDelete`. Like `editEvent`. */
+  deleteEvent(event: ScheduledEvent<G>): void;
 }
 
 const FIND_TIMEOUT_MS = 2000;
@@ -750,6 +779,54 @@ class MemberActor {
       );
     this.markAction();
     this.mock.renameGuild(guild, name);
+  }
+
+  createEvent(
+    name: string,
+    where: VoiceChannel | string,
+    start: Date,
+  ): ScheduledEvent {
+    this.markAction();
+    const event = createScheduledEvent(this.mock, this.guild(), this.user(), {
+      name,
+      start,
+      place:
+        typeof where === "string"
+          ? { location: where }
+          : { channel: this.mock.state.requireChannel(where.id) },
+    });
+    return handle(event.id, name);
+  }
+
+  editEvent(
+    event: ScheduledEvent,
+    changes: { name?: string; description?: string; start?: Date },
+  ): void {
+    this.markAction();
+    editScheduledEvent(
+      this.mock,
+      this.guild(),
+      this.user(),
+      this.eventOf(event),
+      changes,
+    );
+  }
+
+  deleteEvent(event: ScheduledEvent): void {
+    this.markAction();
+    deleteScheduledEvent(
+      this.mock,
+      this.guild(),
+      this.user(),
+      this.eventOf(event),
+    );
+  }
+
+  private eventOf(event: ScheduledEvent) {
+    const found = this.mock.state.scheduledEvents.get(event.id);
+    if (!found)
+      throw new Error(`discordjs-test-kit: event ${event.name} was deleted`);
+    return found;
   }
 
   private actor() {

@@ -132,7 +132,9 @@ export function guildCreatePayload(
     // "Array of partial voice state objects" without guild_id (gateway-events#guild-create).
     voice_states: voiceStates.map(({ guild_id: _, ...voice }) => voice),
     stage_instances: [],
-    guild_scheduled_events: [],
+    guild_scheduled_events: [...state.scheduledEvents.values()].filter(
+      (event) => event.guild_id === guild.id,
+    ),
     soundboard_sounds: [],
   };
 }

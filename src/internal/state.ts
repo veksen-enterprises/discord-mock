@@ -12,6 +12,7 @@ import {
   type RoleFlags,
   type APIChannel,
   type APIGuildMember,
+  type APIGuildScheduledEvent,
   type APIMessage,
   type APIRole,
   type APIUser,
@@ -89,6 +90,8 @@ export class DiscordState extends EventEmitter<{
   readonly webhooks = new Map<string, WebhookRecord>();
   /** Invites by code. */
   readonly invites = new Map<string, InviteRecord>();
+  /** Guild scheduled events by id. */
+  readonly scheduledEvents = new Map<string, APIGuildScheduledEvent>();
 
   readonly applicationId: string;
   readonly bot: APIUser;

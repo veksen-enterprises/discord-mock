@@ -47,6 +47,12 @@ void alice.select({} as never, discord.role(otherServer, "mods"));
 // Mixing labels and picks in one select
 // @ts-expect-error
 void alice.select({} as never, ["5-2", discord.role(server, "mods")]);
+// An event in another server's voice channel
+// @ts-expect-error
+alice.createEvent("x", discord.voiceChannel(otherServer, "lobby"), new Date());
+// An event in a text channel
+// @ts-expect-error
+alice.createEvent("x", challengesChannel, new Date());
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.run(challengesChannel, "jion");

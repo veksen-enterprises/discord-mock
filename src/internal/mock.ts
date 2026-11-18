@@ -49,6 +49,7 @@ import {
   type RestHandler,
   type RestRequest,
 } from "./rest.js";
+import { registerScheduledEventRoutes } from "./scheduled-events.js";
 import { snowflake } from "./snowflake.js";
 import { DiscordState, type GuildRecord } from "./state.js";
 import {
@@ -2336,6 +2337,7 @@ export class DiscordMock {
     registerGuildRoutes(this, authed);
     registerInviteRoutes(this, authed);
     registerVoiceRoutes(this, authed);
+    registerScheduledEventRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 
