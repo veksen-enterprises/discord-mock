@@ -30,6 +30,11 @@ export { respond } from "./rest.js";
 export type { RestHandler, RestRequest, RestResponse } from "./rest.js";
 export { Permission } from "./payloads.js";
 
+// Captured at import, before a test can fake timers: a wait must still time out after a test
+// calls vi.useFakeTimers() to move the bot's clock.
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+
 /** What a user posts: text, files, and the message it replies to. */
 export interface UserMessage {
   content?: string;
@@ -88,7 +93,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
         cleanup();
         resolve(this);
       };
-      const timer = setTimeout(() => {
+      const timer = realSetTimeout(() => {
         cleanup();
         reject(
           new Error(
@@ -97,7 +102,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
         );
       }, timeoutMs);
       const cleanup = () => {
-        clearTimeout(timer);
+        realClearTimeout(timer);
         this.off("change", check);
       };
       this.on("change", check);
@@ -319,6 +324,12 @@ export class DiscordMock {
     return role;
   }
 
+  /** What the bot's invite link grants: a "bot" role with `permissions` in every guild built so far. */
+  grantBot(permissions: bigint) {
+    for (const guild of this.state.guilds.values())
+      this.createRole(guild, "bot", permissions, [this.state.bot]);
+  }
+
   /** Deny (or allow) permissions for a role/member in a channel, as a channel overwrite. */
   setOverwrite(
     channel: APIChannel,
@@ -354,7 +365,7 @@ export class DiscordMock {
     );
   }
 
-  /** Next message matching `predicate` (including ones already sent since `since`). */
+  /** The next message created or edited that matches `predicate`. */
   waitForMessage(
     predicate: (m: APIMessage) => boolean,
     opts: { timeoutMs?: number } = {},
@@ -365,7 +376,7 @@ export class DiscordMock {
         cleanup();
         resolve(m);
       };
-      const timer = setTimeout(() => {
+      const timer = realSetTimeout(() => {
         cleanup();
         reject(
           new Error(
@@ -374,10 +385,12 @@ export class DiscordMock {
         );
       }, opts.timeoutMs ?? 2_000);
       const cleanup = () => {
-        clearTimeout(timer);
+        realClearTimeout(timer);
         this.state.off("messageCreate", onMessage);
+        this.state.off("messageUpdate", onMessage);
       };
       this.state.on("messageCreate", onMessage);
+      this.state.on("messageUpdate", onMessage);
     });
   }
 
@@ -1488,12 +1501,24 @@ function resolvedFor(
   };
 }
 
-/** Names a message by what a user sees in it, for error messages. */
+/** The text a user reads in a message: its content, then each embed's text. */
+export function readable(message: APIMessage): string {
+  return [
+    message.content,
+    ...(message.embeds ?? []).flatMap((embed) => [
+      embed.title,
+      embed.description,
+      ...(embed.fields ?? []).flatMap((field) => [field.name, field.value]),
+      embed.footer?.text,
+    ]),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Names a message by the start of what a user reads in it, for error messages. */
 export function shown(message: APIMessage): string {
-  const text =
-    message.content ||
-    message.embeds?.[0]?.title ||
-    message.embeds?.[0]?.description;
+  const text = readable(message).split("\n")[0];
   if (!text) return "a message with no text";
   return JSON.stringify(text.length > 40 ? `${text.slice(0, 39)}…` : text);
 }
@@ -1514,13 +1539,19 @@ function buttonLabel(button: any): string {
   return button.label ?? button.emoji?.name ?? "(no label)";
 }
 
-function matches(text: string | undefined, want: string | RegExp) {
+/** `text` equals `want` (or contains it, with `partial`), or matches it when it's a RegExp. */
+export function matches(
+  text: string | undefined,
+  want: string | RegExp,
+  { partial = false } = {},
+) {
   if (text === undefined) return false;
-  if (typeof want === "string") return text === want;
+  if (typeof want === "string")
+    return partial ? text.includes(want) : text === want;
   want.lastIndex = 0; // a /g RegExp would otherwise resume from its last match
   return want.test(text);
 }
 
-function quote(label: string | RegExp) {
+export function quote(label: string | RegExp) {
   return typeof label === "string" ? JSON.stringify(label) : String(label);
 }

@@ -73,9 +73,9 @@ it("ignores a matching message the bot wrote before the latest action", async ()
   );
 });
 
-it("still gives up when the test has frozen Date", async () => {
+it("still gives up when the test has faked timers and Date", async () => {
   const { discord, generalChannel } = await startBot();
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers();
   try {
     await expect(discord.find(generalChannel, "never")).rejects.toThrow(
       "It has no messages",

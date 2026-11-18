@@ -1,12 +1,16 @@
 import { once } from "node:events";
 import type {
   APIMessage,
+  APIUser,
   RESTPostAPIApplicationCommandsJSONBody,
 } from "discord-api-types/v10";
 import type { Client } from "discord.js";
 import { onTestFinished } from "vitest";
 import {
   createDiscordMock,
+  matches,
+  quote,
+  readable,
   shown,
   type DiscordMock,
   type UserMessage,
@@ -99,27 +103,26 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
 }
 
 const FIND_TIMEOUT_MS = 2000;
-const FIND_INTERVAL_MS = 20;
-// Counted in polls, not read from Date.now(): tests fake Date to move a bot's clock, and a frozen
-// Date would never reach the deadline.
-const FIND_POLLS = FIND_TIMEOUT_MS / FIND_INTERVAL_MS;
 
 /**
  * A fake Discord for one test. Build the World, `start` your bot, act as members, then read what
  * the bot did. It shuts down when the test ends, and fails the test if the bot hit a Gap.
  */
 class Discord {
-  /** Spread into your bot's `new Client()` options so it connects to this mock. */
-  readonly clientOptions: { rest: { api: string } };
   private client?: Client;
-  /** The Model's write count when the latest action started: `find` only sees writes after it. */
-  private actionMark = 0;
-  private readonly markAction = () => {
-    this.actionMark = this.mock.state.writes;
-  };
+  /** Messages created or edited since the latest action: the ones `find` looks at. */
+  private readonly written = new Set<Message>();
+  private readonly markAction = () => this.written.clear();
 
   constructor(private readonly mock: DiscordMock) {
-    this.clientOptions = mock.clientOptions;
+    const record = (message: Message) => this.written.add(message);
+    mock.state.on("messageCreate", record);
+    mock.state.on("messageUpdate", record);
+  }
+
+  /** Spread into your bot's `new Client()` options so it connects to this mock. */
+  get clientOptions(): { rest: { api: string } } {
+    return this.mock.clientOptions;
   }
 
   /** @example const server = discord.guild("SIN"); */
@@ -161,25 +164,15 @@ class Discord {
   ): Member<G> {
     const user = this.mock.createUser(name);
     this.mock.addMember(this.g(guild), user, { nick });
-    return new MemberActor(
-      this.mock,
-      this.markAction,
-      guild.id,
-      user.id,
-      name,
-    ) as never;
+    return this.actorFor(guild, user);
   }
 
   /** The member who owns `guild`. They have every permission, so they can run admin commands. */
   owner<G extends string>(guild: Guild<G>): Member<G> {
-    const user = this.mock.state.requireUser(this.g(guild).ownerId);
-    return new MemberActor(
-      this.mock,
-      this.markAction,
-      guild.id,
-      user.id,
-      user.username,
-    ) as never;
+    return this.actorFor(
+      guild,
+      this.mock.state.requireUser(this.g(guild).ownerId),
+    );
   }
 
   /**
@@ -200,10 +193,7 @@ class Discord {
     this.client = client;
     this.markAction();
     if (options.permissions !== undefined)
-      for (const guild of this.mock.state.guilds.values())
-        this.mock.createRole(guild, "bot", options.permissions, [
-          this.mock.state.bot,
-        ]);
+      this.mock.grantBot(options.permissions);
     const ready = once(client, "clientReady");
     await client.login(this.mock.token);
     await ready;
@@ -251,23 +241,23 @@ class Discord {
     const channelId = isMember
       ? this.mock.state.dmChannel(where.id).id
       : where.id;
-    const mark = this.actionMark;
-    for (let poll = 0; ; poll++) {
-      const all = this.mock.messagesIn(channelId);
-      const match = all.findLast(
-        (m) =>
-          this.mock.state.lastWriteOf(m) > mark &&
-          matchesText(readable(m), text),
+    const wanted = (m: Message) =>
+      m.channel_id === channelId &&
+      matches(readable(m), text, { partial: true });
+    const match = this.mock
+      .messagesIn(channelId)
+      .findLast((m) => this.written.has(m) && wanted(m));
+    if (match) return match;
+    try {
+      return await this.mock.waitForMessage(wanted, {
+        timeoutMs: FIND_TIMEOUT_MS,
+      });
+    } catch {
+      const place = isMember ? `${where.name}'s DMs` : `#${where.name}`;
+      const last = this.mock.messagesIn(channelId).slice(-3).map(shown);
+      throw new Error(
+        `discordjs-test-kit: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
       );
-      if (match) return match;
-      if (poll >= FIND_POLLS) {
-        const place = isMember ? `${where.name}'s DMs` : `#${where.name}`;
-        const last = all.slice(-3).map(shown);
-        throw new Error(
-          `discordjs-test-kit: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
-        );
-      }
-      await new Promise((r) => setTimeout(r, FIND_INTERVAL_MS));
     }
   }
 
@@ -283,6 +273,19 @@ class Discord {
 
   private g(guild: Guild) {
     return this.mock.state.requireGuild(guild.id);
+  }
+
+  private actorFor<G extends string>(
+    guild: Guild<G>,
+    user: APIUser,
+  ): Member<G> {
+    return new MemberActor(
+      this.mock,
+      this.markAction,
+      guild.id,
+      user.id,
+      user.username,
+    ) as never;
   }
 }
 
@@ -369,31 +372,6 @@ class MemberActor {
 /** Handles exist only in types; at run time they're the entity's id and name. */
 function handle<T>(id: string, name: string): T {
   return { id, name } as T;
-}
-
-/** The text a user reads in a message: its content, then each embed's text. */
-function readable(message: Message): string {
-  return [
-    message.content,
-    ...(message.embeds ?? []).flatMap((embed) => [
-      embed.title,
-      embed.description,
-      ...(embed.fields ?? []).flatMap((field) => [field.name, field.value]),
-      embed.footer?.text,
-    ]),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function matchesText(text: string, want: string | RegExp) {
-  if (typeof want === "string") return text.includes(want);
-  want.lastIndex = 0; // a /g RegExp would otherwise resume from its last match
-  return want.test(text);
-}
-
-function quote(text: string | RegExp) {
-  return typeof text === "string" ? JSON.stringify(text) : String(text);
 }
 
 /**
