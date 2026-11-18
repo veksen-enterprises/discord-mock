@@ -83,7 +83,7 @@ describe("a stock discord.js Client against the mock", () => {
   it("handles a button press that updates the message", async () => {
     const { general, alice } = await start();
     const panel = await mock.as(alice).slashCommand(general, "panel").reply();
-    const click = mock.as(alice).clickButton(panel, "count");
+    const click = mock.as(alice).clickButton(panel, "+1");
     await click.waitUntil((r) => r.state === "replied");
     expect(
       mock.messagesIn(general).find((m) => m.id === panel.id)?.content,

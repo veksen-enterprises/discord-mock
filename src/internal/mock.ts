@@ -402,8 +402,9 @@ export class DiscordMock {
         name: string,
         options: Record<string, unknown> = {},
       ) => this.userRunsCommand(user, channel, name, options),
-      clickButton: (message: APIMessage, customId: string) =>
-        this.userClicksButton(user, message, customId),
+      /** Presses the button labelled `label` (or showing that emoji, when it has no label). */
+      clickButton: (message: APIMessage, label: string | RegExp) =>
+        this.userClicksButton(user, message, label),
       /** Picks the option labelled `label` from the string select on `message` that offers it. */
       selectOption: (message: APIMessage, label: string | RegExp) =>
         this.userSelectsOption(user, message, label),
@@ -497,8 +498,11 @@ export class DiscordMock {
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
     const command = this.state.findCommand(guildId, commandName!);
     if (!command) {
+      const registered = this.state
+        .commandsVisibleIn(guildId)
+        .map((c) => `/${c.name}`);
       throw new Error(
-        `discord-mock: /${commandName} isn't registered (bot never PUT it to /applications/.../commands)`,
+        `discord-mock: /${commandName} isn't registered. ${registered.length ? `Registered: ${registered.join(", ")}` : "The bot registered no commands (it never PUT any to /applications/.../commands)"}`,
       );
     }
     const guild = guildId ? this.state.requireGuild(guildId) : undefined;
@@ -543,33 +547,44 @@ export class DiscordMock {
       message.interaction_metadata?.user.id !== user.id
     )
       throw new Error(
-        `discord-mock: ${user.username} can't see message ${message.id}: it's ephemeral to ${message.interaction_metadata?.user.username}`,
+        `discord-mock: ${user.username} can't see ${shown(message)}: it's ephemeral, only ${message.interaction_metadata?.user.username} can`,
       );
   }
 
+  // A user finds a button by what it shows: its label, or its emoji when it has none. A link
+  // button has no custom_id (docs.discord.food/resources/components#button-object): it opens a
+  // URL in the client and sends the bot nothing.
   private userClicksButton(
     user: APIUser,
     message: APIMessage,
-    customId: string,
+    label: string | RegExp,
   ) {
-    const button = (message.components ?? [])
-      .flatMap((row: any) => row.components ?? [])
-      .find(
-        (c: any) => c.type === ComponentType.Button && c.custom_id === customId,
-      );
-    if (!button)
-      throw new Error(
-        `discord-mock: message ${message.id} has no button "${customId}"`,
-      );
-    if (button.disabled)
-      throw new Error(`discord-mock: button "${customId}" is disabled`);
     this.requireVisibleTo(user, message);
+    const buttons = componentsIn(message).filter(
+      (c: any) => c.type === ComponentType.Button,
+    );
+    const found = buttons.filter((b: any) => matches(buttonLabel(b), label));
+    if (found.length !== 1)
+      throw new Error(
+        found.length
+          ? `discord-mock: ${quote(label)} matches ${found.length} buttons on ${shown(message)}: ${found.map(buttonLabel).join(", ")}`
+          : `discord-mock: ${user.username} can't click ${quote(label)}: ${shown(message)} has ${buttons.length ? `buttons ${buttons.map(buttonLabel).join(", ")}` : "no buttons"}`,
+      );
+    const button = found[0]!;
+    if (button.disabled)
+      throw new Error(
+        `discord-mock: button ${buttonLabel(button)} on ${shown(message)} is disabled`,
+      );
+    if (button.custom_id === undefined)
+      throw new Error(
+        `discord-mock: button ${buttonLabel(button)} opens a URL; the bot gets no interaction`,
+      );
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
       user,
       channel,
       InteractionType.MessageComponent,
-      { custom_id: customId, component_type: ComponentType.Button },
+      { custom_id: button.custom_id, component_type: ComponentType.Button },
       message,
     );
   }
@@ -584,28 +599,28 @@ export class DiscordMock {
     message: APIMessage,
     label: string | RegExp,
   ) {
-    const matches = (message.components ?? [])
-      .flatMap((row: any) => row.components ?? [])
+    this.requireVisibleTo(user, message);
+    const offered = componentsIn(message)
       .filter((c: any) => c.type === ComponentType.StringSelect)
       .flatMap((select: any) =>
-        (select.options ?? [])
-          .filter((o: any) =>
-            typeof label === "string" ? o.label === label : label.test(o.label),
-          )
-          .map((option: any) => ({ select, option })),
+        (select.options ?? []).map((option: any) => ({ select, option })),
       );
-    if (matches.length !== 1)
+    const found = offered.filter(({ option }) => matches(option.label, label));
+    if (found.length !== 1)
       throw new Error(
-        `discord-mock: message ${message.id} has ${matches.length} select options labelled ${String(label)}, expected 1`,
+        found.length
+          ? `discord-mock: ${quote(label)} matches ${found.length} options in ${shown(message)}: ${found.map(({ option }) => option.label).join(", ")}`
+          : `discord-mock: ${user.username} can't pick ${quote(label)}: ${shown(message)} ${offered.length ? `offers ${offered.map(({ option }) => option.label).join(", ")}` : "has no select menu"}`,
       );
-    const { select, option } = matches[0]!;
+    const { select, option } = found[0]!;
     if (select.disabled)
-      throw new Error(`discord-mock: select "${select.custom_id}" is disabled`);
+      throw new Error(
+        `discord-mock: the select menu on ${shown(message)} is disabled`,
+      );
     if ((select.min_values ?? 1) > 1)
       throw new Error(
-        `discord-mock: select "${select.custom_id}" needs ${select.min_values} picks; multi-select is not modelled`,
+        `discord-mock: the select menu on ${shown(message)} needs ${select.min_values} picks; multi-select is not modelled`,
       );
-    this.requireVisibleTo(user, message);
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
       user,
@@ -1341,7 +1356,9 @@ function commandOptions(
   const [next, ...rest] = path;
   const sub = subcommands.find((o) => o.name === next);
   if (!sub)
-    throw new Error(`discord-mock: /${command}: no subcommand "${next}"`);
+    throw new Error(
+      `discord-mock: /${command} has no subcommand "${next}". It has: ${subcommands.map((o) => o.name).join(", ")}`,
+    );
   const nested = commandOptions(
     ("options" in sub ? sub.options : undefined) ?? [],
     rest,
@@ -1362,7 +1379,9 @@ function buildOptions(
 ) {
   for (const key of Object.keys(input)) {
     if (!schema.some((o) => o.name === key))
-      throw new Error(`discord-mock: /${command} has no option "${key}"`);
+      throw new Error(
+        `discord-mock: /${command} has no option "${key}". ${schema.length ? `It has: ${schema.map((o) => o.name).join(", ")}` : "It takes no options"}`,
+      );
   }
   return schema.flatMap((opt) => {
     const value = input[opt.name];
@@ -1385,7 +1404,7 @@ function buildOptions(
     const choices = "choices" in opt ? opt.choices : undefined;
     if (choices?.length && !choices.some((c) => c.value === value)) {
       throw new Error(
-        `discord-mock: /${command} option "${opt.name}" must be one of its choices`,
+        `discord-mock: /${command} option "${opt.name}" must be one of: ${choices.map((c) => c.name).join(", ")}`,
       );
     }
     return [{ name: opt.name, type: opt.type, value }];
@@ -1457,4 +1476,33 @@ function resolvedFor(
     ...(members.length ? { members: Object.fromEntries(members) } : {}),
     ...(channels.length ? { channels: Object.fromEntries(channels) } : {}),
   };
+}
+
+/** Names a message by what a user sees in it, for error messages. */
+export function shown(message: APIMessage): string {
+  const text =
+    message.content ||
+    message.embeds?.[0]?.title ||
+    message.embeds?.[0]?.description;
+  if (!text) return "a message with no text";
+  return JSON.stringify(text.length > 40 ? `${text.slice(0, 39)}…` : text);
+}
+
+function componentsIn(message: APIMessage): any[] {
+  return (message.components ?? []).flatMap((row: any) => row.components ?? []);
+}
+
+function buttonLabel(button: any): string {
+  return button.label ?? button.emoji?.name ?? "(no label)";
+}
+
+function matches(text: string | undefined, want: string | RegExp) {
+  return (
+    text !== undefined &&
+    (typeof want === "string" ? text === want : want.test(text))
+  );
+}
+
+function quote(label: string | RegExp) {
+  return typeof label === "string" ? JSON.stringify(label) : String(label);
 }

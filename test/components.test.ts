@@ -1,6 +1,8 @@
 import { once } from "node:events";
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Client,
   Events,
   GatewayIntentBits,
@@ -100,5 +102,77 @@ it("doesn't let another user pick from an ephemeral menu they can't see", async 
 
   const menu = await mock.as(alice).slashCommand(general, "challenge").reply();
 
-  expect(() => mock.as(bob).selectOption(menu, "Bob")).toThrow(/can't see/);
+  expect(() => mock.as(bob).selectOption(menu, "Bob")).toThrow(
+    "bob can't see a message with no text: it's ephemeral, only alice can",
+  );
+});
+
+it("names what a message offers when the test asks for a button or option it doesn't have", async () => {
+  const guild = mock.createGuild("ladder");
+  const general = mock.createTextChannel(guild, "general");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isChatInputCommand())
+      await interaction.reply({
+        content: "Pick a score",
+        components: [
+          new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("score")
+              .addOptions(
+                { label: "5-0", value: "50" },
+                { label: "5-2", value: "52" },
+              ),
+          ),
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setCustomId("confirm")
+              .setLabel("Confirm")
+              .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+              .setCustomId("retry")
+              .setEmoji({ name: "🔄" })
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setURL("https://example.com/rules")
+              .setLabel("Rules")
+              .setStyle(ButtonStyle.Link),
+          ),
+        ],
+      });
+    if (interaction.isButton())
+      await interaction.update({ content: `pressed ${interaction.customId}` });
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  await client.application!.commands.set([
+    { name: "report", description: "Report a score" },
+  ]);
+  const actor = mock.as(alice);
+
+  expect(() => actor.slashCommand(general, "reprot")).toThrow(
+    "/reprot isn't registered. Registered: /report",
+  );
+  const menu = await actor.slashCommand(general, "report").reply();
+  expect(() => actor.selectOption(menu, "5-1")).toThrow(
+    'alice can\'t pick "5-1": "Pick a score" offers 5-0, 5-2',
+  );
+  expect(() => actor.selectOption(menu, /5/)).toThrow(
+    '/5/ matches 2 options in "Pick a score": 5-0, 5-2',
+  );
+  expect(() => actor.clickButton(menu, "Cancel")).toThrow(
+    'alice can\'t click "Cancel": "Pick a score" has buttons Confirm, 🔄, Rules',
+  );
+  expect(() => actor.clickButton(menu, "Rules")).toThrow(
+    "button Rules opens a URL; the bot gets no interaction",
+  );
+  const pressed = await actor.clickButton(menu, "🔄").reply();
+  expect(pressed.content).toBe("pressed retry");
+  mock.assertNoUnhandledRequests();
 });

@@ -543,6 +543,14 @@ export class DiscordState extends EventEmitter<{
     );
   }
 
+  /** The slash commands a user can type in `guildId` (or a DM): the guild's, then the global ones. */
+  commandsVisibleIn(guildId: string | undefined): APIApplicationCommand[] {
+    return [
+      ...((guildId && this.commands.get(guildId)?.values()) || []),
+      ...(this.commands.get("global")?.values() ?? []),
+    ].filter((command) => command.type === 1);
+  }
+
   requireUser(id: string): APIUser {
     const user = this.users.get(id);
     if (!user) throw new Error(`discord-mock: unknown user ${id}`);
