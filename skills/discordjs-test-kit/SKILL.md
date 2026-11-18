@@ -61,6 +61,7 @@ it("should record the result when the winner reports", async () => {
 | change nickname, leave the server  | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | make Discord fail a route          | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |
 | wait for a message                 | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count |
+| check the bot sent nothing more    | `await discord.idle()`, then assert                                                                                               |
 | wait for anything else, or absence | `await vi.waitFor(() => expect(…).…)`                                                                                             |
 | read what's there now              | `discord.messages(channel)`, `discord.dms(member)`                                                                                |
 
@@ -77,7 +78,7 @@ One test is one journey a user takes: arrange the World, act as members, assert 
 - **Who can see the reply**: an ephemeral reply stays private (another member acting on it is refused), and a public one is in `discord.messages(channel)`.
 - **Gateway events the bot listens to** (a member joins, leaves, changes nickname), including for members who were there before the bot started.
 
-Stub third parties (an AI model, a music source, a payment API) the way you would anywhere. Never stub Discord or discord.js. Wait for absence with `vi.waitFor`, never a sleep.
+Stub third parties (an AI model, a music source, a payment API) the way you would anywhere. Never stub Discord or discord.js. Before asserting "exactly one reply" or "no reply", `await discord.idle()`; never a sleep.
 
 ## Red lines
 

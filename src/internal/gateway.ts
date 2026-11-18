@@ -32,6 +32,8 @@ export interface GatewayOptions {
   privilegedIntents: number;
   /** Records something the bot asked for that the Mock doesn't model, so the test fails on it. */
   recordGap: (what: string) => void;
+  /** Called on every Dispatch, so the Mock can tell when the bot has something to react to. */
+  onDispatch?: () => void;
 }
 
 export class Gateway {
@@ -235,6 +237,7 @@ export class Gateway {
 
   private send(session: Session, t: string, d: unknown) {
     const payload = { op: GatewayOpcodes.Dispatch, t, s: ++session.seq, d };
+    this.options.onDispatch?.();
     if (session.socket) session.socket.send(JSON.stringify(payload));
     else session.missed.push(payload);
   }

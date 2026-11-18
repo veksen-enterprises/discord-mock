@@ -38,6 +38,22 @@ it("doesn't take the member's own message for the bot's", async () => {
   expect((await discord.find(generalChannel, /p.ng/)).content).toBe("pong");
 });
 
+it("waits until the bot has gone quiet, so a check for exactly one reply holds", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+  alice.post(generalChannel, { content: "!ping" });
+  await discord.find(generalChannel, "pong");
+  alice.post(generalChannel, { content: "!ping" });
+
+  await discord.idle();
+
+  expect(discord.messages(generalChannel).map((m) => m.content)).toEqual([
+    "!ping",
+    "pong",
+    "!ping",
+    "pong",
+  ]);
+});
+
 it("names the channel and its last messages when find gives up", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "hello" });

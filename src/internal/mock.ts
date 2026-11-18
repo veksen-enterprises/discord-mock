@@ -143,6 +143,9 @@ export class DiscordMock {
   readonly gateway: Gateway;
   private server: Server;
   private interactions = new Map<string, InteractionRun>();
+  /** REST requests the bot has open. With `activity`, tells when the bot has gone quiet. */
+  private inFlight = 0;
+  private readonly activity = new EventEmitter<{ change: [] }>();
   readonly interactionDeadlineMs: number;
   apiUrl = "";
 
@@ -156,8 +159,15 @@ export class DiscordMock {
           GatewayIntentBits.GuildPresences |
           GatewayIntentBits.MessageContent,
       recordGap: (what) => void this.rest.gap(what),
+      onDispatch: () => this.activity.emit("change"),
     });
     this.server = createServer((req, res) => {
+      this.inFlight++;
+      this.activity.emit("change");
+      res.on("close", () => {
+        this.inFlight--;
+        this.activity.emit("change");
+      });
       this.rest.handle(req, res, /^\/api(\/v\d+)?/).catch((error) => {
         res.writeHead(500).end(String(error));
       });
@@ -376,6 +386,44 @@ export class DiscordMock {
         typeof channel === "string" ? channel : channel.id,
       ) ?? []
     );
+  }
+
+  /**
+   * Resolves once the bot has had no REST request open and been sent no Dispatch for `quietMs`.
+   * A heuristic: a bot that thinks longer than `quietMs` before its first request looks idle.
+   */
+  waitForIdle(
+    opts: { quietMs?: number; timeoutMs?: number } = {},
+  ): Promise<void> {
+    const { quietMs = 100, timeoutMs = 2_000 } = opts;
+    return new Promise((resolve, reject) => {
+      let quiet: ReturnType<typeof setTimeout> | undefined;
+      const restart = () => {
+        realClearTimeout(quiet);
+        quiet =
+          this.inFlight === 0
+            ? realSetTimeout(() => {
+                cleanup();
+                resolve();
+              }, quietMs)
+            : undefined;
+      };
+      const deadline = realSetTimeout(() => {
+        cleanup();
+        reject(
+          new Error(
+            `discordjs-test-kit: the bot was still busy after ${timeoutMs / 1000}s (${this.inFlight} requests open)`,
+          ),
+        );
+      }, timeoutMs);
+      const cleanup = () => {
+        realClearTimeout(quiet);
+        realClearTimeout(deadline);
+        this.activity.off("change", restart);
+      };
+      this.activity.on("change", restart);
+      restart();
+    });
   }
 
   /** The next message created or edited that matches `predicate`. */

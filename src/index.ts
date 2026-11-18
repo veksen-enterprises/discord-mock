@@ -232,7 +232,8 @@ class Discord {
    * `start` or `archive`) in `where`: a channel, a thread, or a member's DMs with the bot. Its text
    * must contain `text`, or match it when it's a RegExp; the text is the content plus each embed's
    * title, description, fields and footer. Resolves with the newest match already written, else the
-   * first one to land; rejects after 2 seconds, showing the last messages. To wait for something to disappear, use `vi.waitFor`.
+   * first one to land; rejects after 2 seconds, showing the last messages. To check the bot did
+   * nothing more, or nothing at all, `await discord.idle()` first.
    * @example await discord.find(leaderboardChannel, /Bobby/);
    */
   async find(
@@ -261,6 +262,16 @@ class Discord {
         `discordjs-test-kit: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
       );
     }
+  }
+
+  /**
+   * Waits until the bot has gone quiet: no request to Discord open and nothing new for it for 100ms.
+   * Use it before asserting the bot sent exactly one reply, or none. A bot that works longer than
+   * 100ms before its first request looks done, so wait on `find` for what it should send.
+   * @example alice.post(generalChannel, { content: "hello" }); await discord.idle(); expect(discord.messages(generalChannel)).toHaveLength(1);
+   */
+  idle(): Promise<void> {
+    return this.mock.waitForIdle();
   }
 
   /** Called when the test finishes. */
