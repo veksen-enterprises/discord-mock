@@ -574,12 +574,56 @@ export class DiscordMock {
       allow: String(perms.allow ?? 0n),
       deny: String(perms.deny ?? 0n),
     };
-    const i = overwrites.findIndex((o) => o.id === target.id);
-    if (i === -1) overwrites.push(next);
-    else overwrites[i] = next;
+    this.syncThreadsOnAccess(channel, () => {
+      const i = overwrites.findIndex((o) => o.id === target.id);
+      if (i === -1) overwrites.push(next);
+      else overwrites[i] = next;
+      this.gateway.dispatch(
+        GatewayDispatchEvents.ChannelUpdate,
+        channel,
+        GatewayIntentBits.Guilds,
+      );
+    });
+  }
+
+  /**
+   * Runs `change`; if the bot can see `channel` only after it, sends THREAD_LIST_SYNC with the
+   * channel's active threads the bot can reach and its own thread members (gateway-events
+   * #thread-list-sync: "Sent when the current user gains access to a channel"). Only overwrite
+   * changes run through here: access gained through a role isn't synced yet.
+   */
+  private syncThreadsOnAccess(channel: APIChannel, change: () => void) {
+    const guildId = "guild_id" in channel ? channel.guild_id : undefined;
+    const sees = () => !this.checkBotPerms(channel, 0n);
+    const before = sees();
+    change();
+    if (!guildId || before || !sees()) return;
+    const guild = this.state.requireGuild(guildId);
+    const bot = this.state.bot.id;
+    const manages =
+      (computePermissions(this.state, guild, bot, channel) &
+        Permission.ManageThreads) !==
+      0n;
+    const threads = [...this.state.channels.values()].filter(
+      (t) =>
+        "parent_id" in t &&
+        t.parent_id === channel.id &&
+        "thread_metadata" in t &&
+        !t.thread_metadata?.archived &&
+        (t.type !== ChannelType.PrivateThread ||
+          manages ||
+          this.state.threadMember(t.id, bot)),
+    );
     this.gateway.dispatch(
-      GatewayDispatchEvents.ChannelUpdate,
-      channel,
+      GatewayDispatchEvents.ThreadListSync,
+      {
+        guild_id: guildId,
+        channel_ids: [channel.id],
+        threads,
+        members: threads.flatMap(
+          (t) => this.state.threadMember(t.id, bot) ?? [],
+        ),
+      },
       GatewayIntentBits.Guilds,
     );
   }
@@ -1812,12 +1856,14 @@ export class DiscordMock {
         const i =
           overwrites?.findIndex((o) => o.id === req.params.overwriteId) ?? -1;
         if (i === -1) return respond.error(404, 10009, "Unknown Overwrite");
-        overwrites!.splice(i, 1);
-        this.gateway.dispatch(
-          GatewayDispatchEvents.ChannelUpdate,
-          channel,
-          GatewayIntentBits.Guilds,
-        );
+        this.syncThreadsOnAccess(channel, () => {
+          overwrites!.splice(i, 1);
+          this.gateway.dispatch(
+            GatewayDispatchEvents.ChannelUpdate,
+            channel,
+            GatewayIntentBits.Guilds,
+          );
+        });
         return respond.noContent();
       }),
     );
