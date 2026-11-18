@@ -4,18 +4,30 @@ A fake Discord that a stock discord.js `Client` logs in to, so a test runs the b
 
 ```ts
 import { createDiscord } from "discordjs-test-kit";
+import { expect, it } from "vitest";
+import { commands, createBot, type Store } from "./bot";
 
-const discord = await createDiscord(); // torn down when the test ends; fails it on a Gap
-const server = discord.guild("SIN");
-const challengesChannel = discord.channel(server, "challenges");
-const alice = discord.member(server, "Alice");
-const bot = createBot(discord.clientOptions); // the only change a bot needs
-await discord.start(bot.client, { commands });
+it("adds a member to the ladder when they run /join", async () => {
+  // Arrange: a server with a ladder channel, a member, and the bot logged in
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const category = discord.category(server, "Test Ladder");
+  const challenges = discord.channel(server, "challenges", category);
+  const alice = discord.member(server, "Alice", { nickname: "Bravo" });
+  const store: Store = new Map([["Test Ladder", new Map()]]);
+  const bot = createBot(store, discord.clientOptions);
+  await discord.start(bot.client, { commands });
 
-const reportMenu = await alice.run(challengesChannel, "report");
-await alice.select(reportMenu, "5-2"); // the bot updates the same message in place
-expect(reportMenu.embeds.at(-1)?.title).toBe("Match Reported!");
+  // Act
+  const reply = await alice.run(challenges, "join");
+
+  // Assert
+  expect(reply.embeds[0]?.title).toBe("Joined the Ladder!");
+  expect(store.get("Test Ladder")?.get(alice.id)).toBe("Bravo");
+});
 ```
+
+`createBot` spreads `discord.clientOptions` into its `new Client(...)`. That is the only change a bot needs. This example runs as [`test/docs/readme.test.ts`](test/docs/readme.test.ts), against the bot in [`examples/ladder/`](examples/ladder).
 
 ## Install
 
@@ -124,6 +136,7 @@ import { createMockChatInputCommandInteraction } from "../test/discord-utils";
 // ^ importing this runs its top-level vi.mock("discord.js"): every builder in this file is a stub
 
 it("should add the member to the ladder", async () => {
+  // Arrange
   const interaction = createMockChatInputCommandInteraction({
     displayName: "Bravo",
   });
@@ -135,8 +148,10 @@ it("should add the member to the ladder", async () => {
     withError: vi.fn(),
   });
 
+  // Act
   await executeJoin(interaction, store);
 
+  // Assert
   expect(interaction.deferReply).toHaveBeenCalled();
   expect(store.get("Test Ladder")?.get("123456789")).toBe("Bravo");
   expect(replyModule.reply(interaction).withSuccess).toHaveBeenCalledWith({
@@ -151,22 +166,27 @@ The test checks that `executeJoin` called what it was written to call. The ladde
 ### After: the bot logs in to the mock
 
 ```ts
-const discord = await createDiscord();
-const server = discord.guild("SIN");
-const ladderCategory = discord.category(server, "Test Ladder");
-const challengesChannel = discord.channel(server, "challenges", ladderCategory);
-const alice = discord.member(server, "alice", { nickname: "Bravo" });
-const bot = createBot(store, discord.clientOptions); // the bot's only test seam
-await discord.start(bot.client, { commands });
+it("adds a member to the ladder when they run /join", async () => {
+  // Arrange: a server with a ladder channel, a member, and the bot logged in
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const category = discord.category(server, "Test Ladder");
+  const challenges = discord.channel(server, "challenges", category);
+  const alice = discord.member(server, "Alice", { nickname: "Bravo" });
+  const store: Store = new Map([["Test Ladder", new Map()]]);
+  const bot = createBot(store, discord.clientOptions);
+  await discord.start(bot.client, { commands });
 
-const reply = await alice.run(challengesChannel, "join");
+  // Act
+  const reply = await alice.run(challenges, "join");
 
-expect(reply.flags! & MessageFlags.Ephemeral).toBe(MessageFlags.Ephemeral);
-expect(reply.embeds[0]).toMatchObject({ title: "Joined the Ladder!" });
-expect(store.get("Test Ladder")?.get(alice.id)).toBe("Bravo");
+  // Assert
+  expect(reply.embeds[0]?.title).toBe("Joined the Ladder!");
+  expect(store.get("Test Ladder")?.get(alice.id)).toBe("Bravo");
+});
 ```
 
-No `vi.mock`, no spies, no casts. Alice runs `/join` in a channel, and the test reads the message Discord would show her.
+No `vi.mock`, no spies, no casts. This is the test at the top of this page: Alice runs `/join` in a channel, and the test reads the message Discord would show her and the ladder the bot stored.
 
 ### Three bugs, both suites
 
