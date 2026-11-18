@@ -58,7 +58,7 @@ alice.createEvent("x", challengesChannel, new Date());
 alice.renameExpression(carol.addEmoji("pog"), "x");
 // Listening for the bot in a text channel
 // @ts-expect-error
-void discord.hearBot(challengesChannel);
+void discord.waitForSound(challengesChannel);
 // A stage in another server
 // @ts-expect-error
 alice.startStage(discord.stageChannel(otherServer, "hall"), "Q&A");

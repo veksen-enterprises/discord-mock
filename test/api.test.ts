@@ -40,7 +40,9 @@ it("finds a message the bot posts after the action returns", async () => {
 
   alice.post(generalChannel, { content: "!ping" });
 
-  expect((await discord.find(generalChannel, "pong")).content).toBe("pong");
+  expect((await discord.waitForMessage(generalChannel, "pong")).content).toBe(
+    "pong",
+  );
 });
 
 it("doesn't take the member's own message for the bot's", async () => {
@@ -48,16 +50,18 @@ it("doesn't take the member's own message for the bot's", async () => {
 
   alice.post(generalChannel, { content: "!ping" });
 
-  expect((await discord.find(generalChannel, /p.ng/)).content).toBe("pong");
+  expect((await discord.waitForMessage(generalChannel, /p.ng/)).content).toBe(
+    "pong",
+  );
 });
 
 it("waits until the bot has gone quiet, so a check for exactly one reply holds", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "!ping" });
-  await discord.find(generalChannel, "pong");
+  await discord.waitForMessage(generalChannel, "pong");
   alice.post(generalChannel, { content: "!ping" });
 
-  await discord.idle();
+  await discord.waitForIdle();
 
   expect(discord.messages(generalChannel).map((m) => m.content)).toEqual([
     "!ping",
@@ -89,7 +93,7 @@ it("lets a member DM the bot and finds the answer in their DMs", async () => {
 
   alice.dm({ content: "!ping" });
 
-  expect((await discord.find(alice, "pong")).content).toBe("pong");
+  expect((await discord.waitForDM(alice, "pong")).content).toBe("pong");
 });
 
 it("lets the bot DM a member, and refuses with 50007 once they close their DMs", async () => {
@@ -109,7 +113,9 @@ it("names the channel and its last messages when find gives up", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "hello" });
 
-  await expect(discord.find(generalChannel, /goodbye/)).rejects.toThrow(
+  await expect(
+    discord.waitForMessage(generalChannel, /goodbye/),
+  ).rejects.toThrow(
     'no message in #general written since the last action matched /goodbye/ within 2s. Last 1: "hello"',
   );
 });
@@ -118,9 +124,9 @@ it("quotes a message's first non-empty line when find gives up", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "\nhello" });
 
-  await expect(discord.find(generalChannel, /goodbye/)).rejects.toThrow(
-    'Last 1: "hello"',
-  );
+  await expect(
+    discord.waitForMessage(generalChannel, /goodbye/),
+  ).rejects.toThrow('Last 1: "hello"');
 });
 
 it("passes a member handle as a user option, under their server nickname", async () => {
@@ -158,11 +164,11 @@ it("shows a member's new display name where they have no nickname", async () => 
 it("ignores a matching message the bot wrote before the latest action", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "!ping" });
-  await discord.find(generalChannel, "pong");
+  await discord.waitForMessage(generalChannel, "pong");
 
   alice.post(generalChannel, { content: "hello" });
 
-  await expect(discord.find(generalChannel, "pong")).rejects.toThrow(
+  await expect(discord.waitForMessage(generalChannel, "pong")).rejects.toThrow(
     "no message in #general written since the last action",
   );
 });
@@ -171,9 +177,9 @@ it("still gives up when the test has faked timers and Date", async () => {
   const { discord, generalChannel } = await startBot();
   vi.useFakeTimers();
   try {
-    await expect(discord.find(generalChannel, "never")).rejects.toThrow(
-      "It has no messages",
-    );
+    await expect(
+      discord.waitForMessage(generalChannel, "never"),
+    ).rejects.toThrow("It has no messages");
   } finally {
     vi.useRealTimers();
   }
@@ -470,7 +476,7 @@ it("tells a bot with the intent about a member's event, which an ordinary member
     "Create Events",
   );
   host.createEvent("Raid night", lobby, new Date("2026-12-01T20:00Z"));
-  await discord.idle();
+  await discord.waitForIdle();
 
   expect(heard).toEqual(["Raid night"]);
 });
@@ -494,7 +500,7 @@ it("tells a bot that logs expressions about a moderator's new emoji, which a mem
   expect(() => alice.addEmoji("pog")).toThrow("Create Expressions");
   const pog = mod.addEmoji("pog");
   mod.renameExpression(pog, "poggers");
-  await discord.idle();
+  await discord.waitForIdle();
 
   expect(heard).toEqual(["pog", "poggers"]);
 });

@@ -205,8 +205,8 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   post(channel: TextChannel<G> | Thread<G>, message: UserMessage): Message;
   /**
    * Sends the bot a direct message. The bot needs the DirectMessages intent (and Partials.Channel)
-   * to hear it, as on Discord. Read its answer with `discord.find(member, …)`.
-   * @example alice.dm({ content: "!help" }); await discord.find(alice, /commands/);
+   * to hear it, as on Discord. Read its answer with `discord.waitForDM(member, …)`.
+   * @example alice.dm({ content: "!help" }); await discord.waitForDM(alice, /commands/);
    */
   dm(message: UserMessage): Message;
   /** Opens a post in `forum`: a thread whose first message is `post`, with the forum's tags named in `tags`. */
@@ -332,7 +332,7 @@ const FIND_TIMEOUT_MS = 2000;
  */
 class Discord {
   private client?: Client;
-  /** Messages the bot created or edited since the latest action: the ones `find` looks at. */
+  /** Messages the bot created or edited since the latest action: the ones `waitForMessage` and `waitForDM` look at. */
   private readonly written = new Set<Message>();
   private readonly markAction = () => this.written.clear();
 
@@ -681,22 +681,16 @@ class Discord {
   }
 
   /**
-   * The thread the bot started from `message` in `channel`, once it starts it: waits up to 2
-   * seconds. A thread started from a message shares its id, so this finds it whatever its name.
-   * @example const thread = await discord.thread(helpChannel, alice.post(helpChannel, { content: "help?" }));
+   * Waits up to 2 seconds for the bot to start a thread from `message`, and resolves with it. A
+   * thread started from a message shares its id, so this finds it whatever its name.
+   * @example const thread = await discord.waitForThreadFrom(alice.post(helpChannel, { content: "help?" }));
    */
-  async thread<G extends string>(
-    channel: TextChannel<G>,
-    message: Message,
-  ): Promise<Thread<G>> {
-    if (message.channel_id !== channel.id)
-      throw new Error(
-        `discordjs-test-kit: ${shown(message)} isn't in #${channel.name}`,
-      );
+  async waitForThreadFrom(message: Message): Promise<Thread> {
+    const channel = this.mock.state.requireChannel(message.channel_id);
     const started = () => {
       const thread = this.mock.state.channels.get(message.id);
       return thread && "thread_metadata" in thread
-        ? handle<Thread<G>>(thread.id, thread.name ?? "")
+        ? handle<Thread>(thread.id, thread.name ?? "")
         : undefined;
     };
     const now = started();
@@ -718,9 +712,9 @@ class Discord {
    * Waits for a thread in `channel` whose name contains `name` (or matches it when it's a RegExp):
    * one the bot started, from a message or not. Resolves with the newest match; rejects after 2
    * seconds, naming the threads there.
-   * @example const ticket = await discord.findThread(supportChannel, "ticket-alice");
+   * @example const ticket = await discord.waitForThread(supportChannel, "ticket-alice");
    */
-  async findThread(
+  async waitForThread(
     channel: TextChannel,
     name: string | RegExp,
   ): Promise<Thread> {
@@ -755,9 +749,9 @@ class Discord {
    * anything that speaks Discord's voice protocol): silence frames don't count. Rejects after 2
    * seconds, saying where the bot's voice connection is. Its client needs the GuildVoiceStates
    * intent, as on Discord.
-   * @example await alice.run(general, "play", { song: "intro" }); await discord.hearBot(lobby);
+   * @example await alice.runCommand(general, "play", { song: "intro" }); await discord.waitForSound(lobby);
    */
-  async hearBot(channel: VoiceChannel | StageChannel): Promise<void> {
+  async waitForSound(channel: VoiceChannel | StageChannel): Promise<void> {
     const server = this.mock.voiceServer;
     const playing = () =>
       [...server.sessions.values()].some(
@@ -809,33 +803,49 @@ class Discord {
     return handle(channel.id, channel.name ?? "");
   }
 
-  /** Every message in `channel`, oldest first. To wait for one, use `find`. */
+  /** Every message in `channel`, oldest first. To wait for one, use `waitForMessage`. */
   messages(channel: TextChannel | Thread): Message[] {
     return this.mock.messagesIn(channel.id);
   }
 
-  /** The bot's DMs with `member`, oldest first. */
+  /** The bot's DMs with `member`, oldest first. To wait for one, use `waitForDM`. */
   dms(member: Member): Message[] {
     return this.mock.messagesIn(this.mock.state.dmChannel(member.id).id);
   }
 
   /**
-   * Waits for a message the bot created or edited since the latest action (a member's action,
-   * `start` or `archive`) in `where`: a channel, a thread, or a member's DMs with the bot. Its text
-   * must contain `text`, or match it when it's a RegExp; the text is the content plus each embed's
-   * title, description, fields and footer. Resolves with the newest match already written, else the
-   * first one to land; rejects after 2 seconds, showing the last messages. To check the bot did
-   * nothing more, or nothing at all, `await discord.idle()` first.
-   * @example await discord.find(leaderboardChannel, /Bobby/);
+   * Waits for a message the bot created or edited in `channel` (or a thread) since the latest
+   * action (a member's action, `start` or `autoArchive`). Its text must contain `text`, or match it
+   * when it's a RegExp; the text is the content plus each embed's title, description, fields and
+   * footer. Resolves with the newest match already written, else the first one to land; rejects
+   * after 2 seconds, showing the last messages. To check the bot did nothing more, or nothing at
+   * all, `await discord.waitForIdle()` first.
+   * @example await discord.waitForMessage(leaderboardChannel, /Bobby/);
    */
-  async find(
-    where: TextChannel | Thread | Member,
+  waitForMessage(
+    channel: TextChannel | Thread,
     text: string | RegExp,
   ): Promise<Message> {
-    const isMember = where instanceof MemberActor;
-    const channelId = isMember
-      ? this.mock.state.dmChannel(where.id).id
-      : where.id;
+    return this.waitForWritten(channel.id, `#${channel.name}`, text);
+  }
+
+  /**
+   * Waits for a direct message the bot sent `member`, like `waitForMessage` does in a channel.
+   * @example alice.dm({ content: "!help" }); await discord.waitForDM(alice, /commands/);
+   */
+  waitForDM(member: Member, text: string | RegExp): Promise<Message> {
+    return this.waitForWritten(
+      this.mock.state.dmChannel(member.id).id,
+      `${member.name}'s DMs`,
+      text,
+    );
+  }
+
+  private async waitForWritten(
+    channelId: string,
+    place: string,
+    text: string | RegExp,
+  ): Promise<Message> {
     const wanted = (m: Message) =>
       m.channel_id === channelId &&
       matches(readable(m), text, { partial: true });
@@ -848,7 +858,6 @@ class Discord {
         timeoutMs: FIND_TIMEOUT_MS,
       });
     } catch {
-      const place = isMember ? `${where.name}'s DMs` : `#${where.name}`;
       const last = this.mock.messagesIn(channelId).slice(-3).map(shown);
       throw new Error(
         `discordjs-test-kit: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
@@ -859,10 +868,10 @@ class Discord {
   /**
    * Waits until the bot has gone quiet: no request to Discord open and nothing new for it for 100ms.
    * Use it before asserting the bot sent exactly one reply, or none. A bot that works longer than
-   * 100ms before its first request looks done, so wait on `find` for what it should send.
-   * @example alice.post(generalChannel, { content: "hello" }); await discord.idle(); expect(discord.messages(generalChannel)).toHaveLength(1);
+   * 100ms before its first request looks done, so wait on `waitForMessage` for what it should send.
+   * @example alice.post(generalChannel, { content: "hello" }); await discord.waitForIdle(); expect(discord.messages(generalChannel)).toHaveLength(1);
    */
-  idle(): Promise<void> {
+  waitForIdle(): Promise<void> {
     return this.mock.waitForIdle();
   }
 
@@ -1017,7 +1026,7 @@ class MemberActor {
     );
   }
 
-  /** Sends the bot a direct message. Read its answer with `discord.find(member, …)`. */
+  /** Sends the bot a direct message. Read its answer with `discord.waitForDM(member, …)`. */
   dm(message: UserMessage): Message {
     return this.actor().sendMessage(
       this.mock.state.dmChannel(this.id),

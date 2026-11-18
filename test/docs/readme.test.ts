@@ -20,6 +20,6 @@ it("DMs the player you challenge", async () => {
 
   // Assert
   expect(reply.content).toBe("Challenge sent to Bob.");
-  const dm = await discord.find(bob, "challenged you");
+  const dm = await discord.waitForDM(bob, "challenged you");
   expect(dm.content).toBe("Alice challenged you.");
 });

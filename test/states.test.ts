@@ -70,7 +70,7 @@ it(
     await discord.reconnect();
     alice.post(generalChannel, { content: "!ping" });
 
-    await discord.find(generalChannel, "pong");
+    await discord.waitForMessage(generalChannel, "pong");
     expect(
       discord.messages(generalChannel).filter((m) => m.content === "pong"),
     ).toHaveLength(1);

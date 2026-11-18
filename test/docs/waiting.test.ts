@@ -12,8 +12,8 @@ it("answers !ping once, and nothing else", async () => {
 
   // Act
   alice.post(generalChannel, { content: "!ping" });
-  await discord.find(generalChannel, "pong");
-  await discord.idle();
+  await discord.waitForMessage(generalChannel, "pong");
+  await discord.waitForIdle();
 
   // Assert
   expect(discord.messages(generalChannel).map((m) => m.content)).toEqual([

@@ -222,12 +222,12 @@ it("gets the thread the bot started from a message, whatever it named it", async
   });
 
   const post = alice.post(questions, { content: "my order is late" });
-  const thread = await discord.thread(questions, post);
+  const thread = await discord.waitForThreadFrom(post);
   const unthreaded = discord.member(server, "bob", { bot: true });
   const ignored = unthreaded.post(questions, { content: "bot post" });
 
   expect(thread).toMatchObject({ id: post.id, name: "Ticket #1" });
-  await expect(discord.thread(questions, ignored)).rejects.toThrow(
+  await expect(discord.waitForThreadFrom(ignored)).rejects.toThrow(
     "the bot started no thread from",
   );
 });
@@ -305,8 +305,7 @@ it("starts a thread from a message with the slowmode the bot asked for", async (
       Permission.ManageThreads,
   });
 
-  const thread = await discord.thread(
-    questions,
+  const thread = await discord.waitForThreadFrom(
     alice.post(questions, { content: "?" }),
   );
 

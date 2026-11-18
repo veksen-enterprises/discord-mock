@@ -176,11 +176,11 @@ it("finds the thread the bot started, and the bot's message in it", async () => 
   });
 
   alice.post(helpChannel, { content: "my bot won't start" });
-  const thread = await discord.findThread(helpChannel, "help for alice");
+  const thread = await discord.waitForThread(helpChannel, "help for alice");
 
-  expect((await discord.find(thread, "How can I help?")).channel_id).toBe(
-    thread.id,
-  );
+  expect(
+    (await discord.waitForMessage(thread, "How can I help?")).channel_id,
+  ).toBe(thread.id);
 });
 
 it("unarchives a thread the bot posts in, but refuses a locked one without Manage Threads", async () => {

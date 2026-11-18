@@ -45,7 +45,7 @@ it("lets a moderator who joined after the bot connected keep their invite", asyn
 
   // Act
   mod.post(general, { content: "join discord.gg/partner" });
-  await discord.idle();
+  await discord.waitForIdle();
 
   // Assert
   expect(discord.messages(general).map((m) => m.content)).toEqual([
@@ -65,7 +65,7 @@ it("still deletes the invite of a member without Manage Server", async () => {
 
   // Act
   alice.post(general, { content: "join discord.gg/spam" });
-  await discord.idle();
+  await discord.waitForIdle();
 
   // Assert
   expect(discord.messages(general)).toEqual([]);

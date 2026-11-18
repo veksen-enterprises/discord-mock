@@ -59,7 +59,7 @@ it("hears a music bot play in the member's voice channel", async () => {
 
   alice.joinVoice(lobby);
   await alice.run(general, "play");
-  await discord.hearBot(lobby);
+  await discord.waitForSound(lobby);
 
   expect(discord.botVoiceChannel(server)?.id).toBe(lobby.id);
 });
@@ -75,7 +75,7 @@ it("says why it didn't hear the bot", async () => {
     }),
   );
 
-  await expect(discord.hearBot(lobby)).rejects.toThrow(
+  await expect(discord.waitForSound(lobby)).rejects.toThrow(
     "didn't hear the bot in lobby within 2s: the bot has no voice connection in that server",
   );
   expect(discord.botVoiceChannel(server)).toBeNull();

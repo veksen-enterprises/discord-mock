@@ -45,7 +45,7 @@ it("should record the result when the winner reports", async () => {
 
   // Assert
   expect(reportMenu.embeds.at(-1)?.title).toBe("Match Reported!");
-  const board = await discord.find(leaderboardChannel, /Bob/);
+  const board = await discord.waitForMessage(leaderboardChannel, /Bob/);
   expect(board.embeds[0]?.description).toMatch(/1\s+Bob/);
 });
 ```
@@ -64,20 +64,20 @@ it("should record the result when the winner reports", async () => {
 | check autocomplete suggestions                   | `const choices = await alice.autocomplete(channel, "docs", "query", "Promise.al")`                                                                  |
 | press a button                                   | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                                               |
 | fill the form (modal) the bot opens              | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                                             |
-| reach the thread the bot started from a post     | `const thread = await discord.thread(channel, post)`, whatever the bot named it                                                                     |
-| reach a thread the bot started                   | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`                       |
+| reach the thread the bot started from a post     | `const thread = await discord.waitForThreadFrom(post)`, whatever the bot named it                                                                   |
+| reach a thread the bot started                   | `const thread = await discord.waitForThread(channel, "ticket-alice")`, then `discord.waitForMessage(thread, …)` or `alice.post(thread, …)`          |
 | a member who closed their DMs                    | `alice.closeDMs()`: the bot's DMs to them fail with 50007, so test what the bot says instead                                                        |
 | pick from a select menu                          | `await alice.select(message, "5-2")`                                                                                                                |
 | pick members, roles or channels                  | `await alice.select(setupPanel, [bob, discord.role(server, "mods")])`                                                                               |
 | post, open a forum post, react                   | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content, tags: ["Bug"] })`, `alice.react(message, "✅")`                       |
 | vote in a poll, take the vote back               | `alice.vote(poll, "Pizza")`, `alice.unvote(poll)`                                                                                                   |
 | a member starts typing                           | `alice.startTyping(general)`: the bot hears `typingStart`                                                                                           |
-| DM the bot                                       | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                                   |
+| DM the bot                                       | `alice.dm({ content })`, then `await discord.waitForDM(alice, /text/)`                                                                              |
 | a member with permissions                        | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                                        |
 | a member Discord hasn't seen for a while (prune) | `discord.member(server, "Ghost", { inactiveDays: 40 })`                                                                                             |
 | someone joins through an invite                  | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
 | join, move, leave voice                          | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
-| a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.run(general, "play")`, `await discord.hearBot(lobby)`; the bot's client needs GuildVoiceStates               |
+| a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.run(general, "play")`, `await discord.waitForSound(lobby)`; the bot's client needs GuildVoiceStates          |
 | create, edit, delete an event                    | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
 | add, rename, delete an emoji or sticker          | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
 | edit or delete their own message                 | `alice.edit(message, "fixed")`, `alice.delete(message)`                                                                                             |
@@ -96,8 +96,8 @@ it("should record the result when the winner reports", async () => {
 | make Discord fail a route                        | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                                          |
 | take a permission from the bot                   | `discord.deny(channel, Permission.SendMessages)`                                                                                                    |
 | lose the gateway session                         | `discord.disconnect()`, act, `await discord.reconnect()` (give the test a 10 s timeout)                                                             |
-| wait for a message                               | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count                   |
-| check the bot sent nothing more                  | `await discord.idle()`, then assert                                                                                                                 |
+| wait for a message                               | `await discord.waitForMessage(channel, /text/)`, or `waitForDM(member, /text/)`; only the bot's messages written since the latest action count      |
+| check the bot sent nothing more                  | `await discord.waitForIdle()`, then assert                                                                                                          |
 | wait for anything else, or absence               | `await vi.waitFor(() => expect(…).…)`                                                                                                               |
 | read what's there now                            | `discord.messages(channel)`, `discord.dms(member)`                                                                                                  |
 
@@ -114,7 +114,7 @@ One test is one journey a user takes: arrange the server, act as members, assert
 - **Who can see the reply**: an ephemeral reply stays private (another member acting on it is refused), and a public one is in `discord.messages(channel)`.
 - **Gateway events the bot listens to** (a member joins, leaves, changes nickname or display name; the bot is kicked), including for members who were there before the bot started.
 
-Stub third parties (an AI model, a music source, a payment API) the way you would anywhere. Never stub Discord or discord.js. Before asserting "exactly one reply" or "no reply", `await discord.idle()`; never a sleep.
+Stub third parties (an AI model, a music source, a payment API) the way you would anywhere. Never stub Discord or discord.js. Before asserting "exactly one reply" or "no reply", `await discord.waitForIdle()`; never a sleep.
 
 ## Red lines
 

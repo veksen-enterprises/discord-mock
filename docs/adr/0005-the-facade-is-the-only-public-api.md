@@ -16,8 +16,15 @@ and `Permission`. The core lives in `src/internal/` and is built but not exporte
 
 - One way per action. A Member acts (`alice.run`, `click`, `select`); a message has no methods.
 - Users find components by what they see: buttons and options by label, never custom ids.
-- `find` is the one wait for a message; `vi.waitFor` covers everything else.
+- A method that waits for the bot starts with `waitFor` and names what it returns
+  (`waitForMessage`, `waitForDM`, `waitForThread`, `waitForIdle`); a member's action resolves with
+  the bot's answer to it. `vi.waitFor` covers state outside Discord.
 - A failed action names messages by their text and lists what exists.
+
+**Amended 2026-11-18 (0.2.0).** The first rule for waits was "`find` is the one wait for a
+message". By 0.1.1 `thread`, `findThread`, `hearBot` and `idle` waited too, and none of the names
+said so: `find(bob, text)` hid that it waits, that it returns a bot message, and that a member means
+their DMs. JP's bar since: a name the reader can't explain without the docs is a bad name.
 
 ## Consequences
 

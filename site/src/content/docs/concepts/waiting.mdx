@@ -1,33 +1,38 @@
 ---
 title: Waiting for the bot
-description: find, idle and messages, and when to use each.
+description: The waitFor methods and messages, and when to use each.
 sidebar:
   order: 3
 ---
 
 import Sample from "../../../components/Sample.astro";
 
-The bot runs on its own timeline. Three calls read what it did, and none of them sleeps.
+The bot runs on its own timeline. Every method that waits for it starts with `waitFor`, and none of them sleeps.
 
 | To…                              | Use                                                |
 | -------------------------------- | -------------------------------------------------- |
-| wait for a message the bot sends | `await discord.find(channel, /text/)`              |
-| check the bot sent nothing more  | `await discord.idle()`, then assert                |
+| wait for a message the bot sends | `await discord.waitForMessage(channel, /text/)`    |
+| wait for a DM the bot sends      | `await discord.waitForDM(member, /text/)`          |
+| check the bot sent nothing more  | `await discord.waitForIdle()`, then assert         |
 | read what's there now            | `discord.messages(channel)`, `discord.dms(member)` |
 
 <Sample name="waiting" />
 
-## `find`
+## `waitForMessage` and `waitForDM`
 
-Waits up to 2 seconds for a message the bot created or edited **since the latest action** whose text contains the string or matches the RegExp. The text is the content plus each embed's title, description, fields and footer. Pass a member instead of a channel to search their DMs with the bot. On timeout it fails and shows the last three messages there.
+Waits up to 2 seconds for a message the bot created or edited **since the latest action** whose text contains the string or matches the RegExp. The text is the content plus each embed's title, description, fields and footer. `waitForMessage` looks in a channel or thread, `waitForDM` in a member's DMs with the bot. On timeout it fails and shows the last three messages there.
 
-Only the bot's messages count, so a member's own `!ping` never satisfies `find(channel, /ping/)`.
+Only the bot's messages count, so a member's own `!ping` never satisfies `waitForMessage(channel, /ping/)`.
 
-## `idle`
+## `waitForIdle`
 
 Resolves once the bot has no request open to Discord and nothing new has reached it for 100ms. Use it before asserting the bot sent exactly one reply, or none.
 
-A bot that works for longer than 100ms before its first request looks done. Wait on `find` for what it should send instead.
+A bot that works for longer than 100ms before its first request looks done. Wait on `waitForMessage` for what it should send instead.
+
+## Threads and sound
+
+`waitForThread(channel, name)` waits for a thread the bot starts in `channel`, by name. `waitForThreadFrom(message)` waits for the thread the bot starts from `message`, whatever it names it. `waitForSound(channel)` waits for the bot to play sound in a voice or stage channel. Each gives up after 2 seconds.
 
 ## Anything else
 
