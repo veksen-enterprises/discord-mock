@@ -227,3 +227,52 @@ it("presses a button inside a Components V2 container", async () => {
   expect(pressed.content).toBe("pressed join");
   mock.assertNoUnhandledRequests();
 });
+
+it("sends several picks from a multi-select, and refuses a count outside its min and max", async () => {
+  const guild = mock.createGuild("ladder");
+  const general = mock.createTextChannel(guild, "general");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isChatInputCommand())
+      await interaction.reply({
+        components: [
+          new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("roles")
+              .setMinValues(2)
+              .setMaxValues(3)
+              .addOptions(
+                { label: "Ranked", value: "ranked" },
+                { label: "Casual", value: "casual" },
+                { label: "Events", value: "events" },
+                { label: "News", value: "news" },
+              ),
+          ),
+        ],
+      });
+    if (interaction.isStringSelectMenu())
+      await interaction.update({ content: interaction.values.join(",") });
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  await client.application!.commands.set([
+    { name: "roles", description: "Pick your roles" },
+  ]);
+  const menu = await mock.as(alice).slashCommand(general, "roles").reply();
+
+  const picked = await mock
+    .as(alice)
+    .selectOption(menu, ["Ranked", "Events"])
+    .reply();
+
+  expect(picked.content).toBe("ranked,events");
+  expect(() => mock.as(alice).selectOption(menu, "News")).toThrow(
+    "takes 2 to 3 picks, not 1",
+  );
+});

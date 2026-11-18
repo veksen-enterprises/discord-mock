@@ -560,8 +560,10 @@ export class DiscordMock {
       submitForm: (run: InteractionRun, values: Record<string, string>) =>
         this.userSubmitsForm(user, run, values),
       /** Picks the option labelled `label` from the string select on `message` that offers it. */
-      selectOption: (message: APIMessage, label: string | RegExp) =>
-        this.userSelectsOption(user, message, label),
+      selectOption: (
+        message: APIMessage,
+        label: string | RegExp | (string | RegExp)[],
+      ) => this.userSelectsOption(user, message, label),
     };
   }
 
@@ -842,7 +844,7 @@ export class DiscordMock {
   private userSelectsOption(
     user: APIUser,
     message: APIMessage,
-    label: string | RegExp,
+    labels: string | RegExp | (string | RegExp)[],
   ) {
     this.requireVisibleTo(user, message);
     const offered = componentsIn(message)
@@ -850,21 +852,34 @@ export class DiscordMock {
       .flatMap((select: any) =>
         (select.options ?? []).map((option: any) => ({ select, option })),
       );
-    const found = offered.filter(({ option }) => matches(option.label, label));
-    if (found.length !== 1)
-      throw new Error(
-        found.length
-          ? `discordjs-test-kit: ${quote(label)} matches ${found.length} options in ${shown(message)}: ${found.map(({ option }) => option.label).join(", ")}`
-          : `discordjs-test-kit: ${user.username} can't pick ${quote(label)}: ${shown(message)} ${offered.length ? `offers ${offered.map(({ option }) => option.label).join(", ")}` : "has no select menu"}`,
+    const picks = (Array.isArray(labels) ? labels : [labels]).map((label) => {
+      const found = offered.filter(({ option }) =>
+        matches(option.label, label),
       );
-    const { select, option } = found[0]!;
+      if (found.length !== 1)
+        throw new Error(
+          found.length
+            ? `discordjs-test-kit: ${quote(label)} matches ${found.length} options in ${shown(message)}: ${found.map(({ option }) => option.label).join(", ")}`
+            : `discordjs-test-kit: ${user.username} can't pick ${quote(label)}: ${shown(message)} ${offered.length ? `offers ${offered.map(({ option }) => option.label).join(", ")}` : "has no select menu"}`,
+        );
+      return found[0]!;
+    });
+    const select = picks[0]!.select;
+    if (picks.some((pick) => pick.select !== select))
+      throw new Error(
+        `discordjs-test-kit: the options picked on ${shown(message)} are in different select menus`,
+      );
     if (select.disabled)
       throw new Error(
         `discordjs-test-kit: the select menu on ${shown(message)} is disabled`,
       );
-    if ((select.min_values ?? 1) > 1)
+    // components/reference#string-select: min_values defaults to 1, max_values to 1 (max 25). The
+    // Discord app won't send fewer or more.
+    const min = select.min_values ?? 1;
+    const max = select.max_values ?? 1;
+    if (picks.length < min || picks.length > max)
       throw new Error(
-        `discordjs-test-kit: the select menu on ${shown(message)} needs ${select.min_values} picks; multi-select is not modelled`,
+        `discordjs-test-kit: the select menu on ${shown(message)} takes ${min === max ? min : `${min} to ${max}`} picks, not ${picks.length}`,
       );
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
@@ -874,7 +889,7 @@ export class DiscordMock {
       {
         custom_id: select.custom_id,
         component_type: ComponentType.StringSelect,
-        values: [option.value],
+        values: picks.map(({ option }) => option.value),
       },
       message,
     );

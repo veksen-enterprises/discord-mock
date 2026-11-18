@@ -122,7 +122,8 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     form?: Form,
   ): Promise<Message>;
   /**
-   * Picks the option labelled `label` from the select menu on `message`. Resolves with the message
+   * Picks the option labelled `label` from the select menu on `message`, or several labels for a
+   * multi-select (between its min_values and max_values). Resolves with the message
    * visible afterwards: the same one when the bot updates it in place.
    * @example await bob.select(reportMenu, "5-2");
    */
@@ -480,7 +481,7 @@ class MemberActor {
 
   async select(
     message: Message,
-    label: string | RegExp,
+    label: string | RegExp | (string | RegExp)[],
     form?: Form,
   ): Promise<Message> {
     return this.answer(this.actor().selectOption(message, label), form);

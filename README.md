@@ -50,19 +50,19 @@ Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/S
 | `idle()`                                           | `Promise<void>`     | Resolves once the bot has gone quiet for 100ms                                                     |
 | `clientOptions`                                    | `{ rest: { api } }` | Spread into the bot's `Client` options                                                             |
 
-| `Member`                                               | Returns               | Notes                                                      |
-| ------------------------------------------------------ | --------------------- | ---------------------------------------------------------- |
-| `run(channel, "cmd sub", options?)`                    | `Promise<Message>`    | The visible reply, after any defer                         |
-| `runApp(channel, target, "Name")`                      | `Promise<Message>`    | A context-menu app on a member or a message                |
-| `autocomplete(channel, "cmd", option, typed, filled?)` | `Promise<Choice[]>`   | The bot's suggestions while the member types into `option` |
-| `click(message, label)`                                | `Promise<Message>`    | A button by its label, or its emoji when it has no label   |
-| `select(message, label)`                               | `Promise<Message>`    | A string-select option by its label                        |
-| `post(channel, message)`                               | `Message`             | Files are served by the mock                               |
-| `forumPost(forum, post)`                               | `{ thread, message }` |                                                            |
-| `react(message, emoji)`                                | `void`                |                                                            |
-| `closeDMs()`                                           | `void`                | The bot's DMs to them fail with 50007                      |
-| `nickname(nick \| null)`                               | `void`                | null goes back to their name                               |
-| `leave()`                                              | `void`                |                                                            |
+| `Member`                                               | Returns               | Notes                                                                  |
+| ------------------------------------------------------ | --------------------- | ---------------------------------------------------------------------- |
+| `run(channel, "cmd sub", options?)`                    | `Promise<Message>`    | The visible reply, after any defer                                     |
+| `runApp(channel, target, "Name")`                      | `Promise<Message>`    | A context-menu app on a member or a message                            |
+| `autocomplete(channel, "cmd", option, typed, filled?)` | `Promise<Choice[]>`   | The bot's suggestions while the member types into `option`             |
+| `click(message, label)`                                | `Promise<Message>`    | A button by its label, or its emoji when it has no label               |
+| `select(message, label \| labels[])`                   | `Promise<Message>`    | A string-select option by its label; several labels for a multi-select |
+| `post(channel, message)`                               | `Message`             | Files are served by the mock                                           |
+| `forumPost(forum, post)`                               | `{ thread, message }` |                                                                        |
+| `react(message, emoji)`                                | `void`                |                                                                        |
+| `closeDMs()`                                           | `void`                | The bot's DMs to them fail with 50007                                  |
+| `nickname(nick \| null)`                               | `void`                | null goes back to their name                                           |
+| `leave()`                                              | `void`                |                                                                        |
 
 `label` is an exact string or a RegExp, and must match exactly one button or option. When the bot answers with a form (a modal), pass what the member types as the last argument of `run`, `runApp`, `click` or `select`, by field label: `alice.click(panel, "Report", { Reason: "spam" })`. The action then resolves with the bot's answer to the submitted form. `Message` is discord-api-types' `APIMessage`, and it's live: when the bot updates a message in place, the object the test holds shows it. `click` and `select` return the message visible afterwards, which is a new one only when the bot answers with a new message.
 
@@ -185,7 +185,7 @@ The "closed vs reset" split is a real asymmetry in `@discordjs/rest`. Which one 
 - Most of the API surface. Unimplemented routes return 404 and are recorded, and the test fails when it ends, so a Gap is never mistaken for a pass.
 - Gateway `zlib-stream` and ETF. discord.js asks for zlib-stream when `zlib-sync` is installed. The mock records a Gap and closes with 4000, but discord.js resumes on 4000, so the bot reconnects in a loop until the test times out; the Gap check at teardown names the cause.
 - Known differences from docs.discord.food, not fixed yet: interaction tokens never expire (Discord: 15 minutes); callback `flags` aren't filtered to the five allowed ones; command `version` changes on every PUT; registered commands lack `nsfw`, `contexts`, `integration_types` defaults; timed-out members keep all their permissions (Discord: only VIEW_CHANNEL and READ_MESSAGE_HISTORY); editing overwrites doesn't check the bot holds what it allows; no `X-RateLimit-*` headers outside 429s; READY lacks `session_type`; RESUME ignores `seq`; identify doesn't check 4003/4005/4013; component replies get message type 20 (unchecked); a member's own channel permissions aren't checked when they post, react or press (only that they're in the server).
-- Components V2 limits (40 components, 4000 characters of text). Multi-select menus, partials. In forms (modals), only text inputs.
+- Components V2 limits (40 components, 4000 characters of text). User, role and channel select menus; partials. In forms (modals), only text inputs.
 - The contract check against real Discord (`contract/`, nightly in Actions) covers only what a bot can trigger itself. User actions (slash commands, button presses, the 3s deadline, 40060) stay modelled from the docs, not checked.
 
 What each consumer needs next: [docs/adoption.md](docs/adoption.md).
