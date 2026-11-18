@@ -287,8 +287,8 @@ export class DiscordMock {
     path: string,
     handler: RestHandler,
     opts?: { once?: boolean },
-  ) {
-    this.rest.use(method, path, handler, opts);
+  ): () => void {
+    return this.rest.use(method, path, handler, opts);
   }
 
   /** Throws if the bot hit a route the mock doesn't implement: the mock can't vouch for that code path. */

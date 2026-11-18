@@ -44,7 +44,10 @@ Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/S
 | `member(guild, name, { nickname?, permissions?, invite?, inactiveDays? })` | `Member<N>`                                  | A new user who joined `guild`; `permissions` gives them a role; `invite` is the code they joined through; `inactiveDays` is how long since Discord saw them, for prune |
 | `owner(guild)`                                                             | `Member<N>`                                  | Has every permission                                                                                                                                                   |
 | `start(client, { commands?, permissions? })`                               | `Promise<void>`                              | `permissions`: what the bot's invite grants, in guilds built before `start`                                                                                            |
-| `fail(method, path, response)`                                             | `void`                                       | Overrides a Route, e.g. `respond.serverError(503)`; a literal id in `path` fails just that channel                                                                     |
+| `fail(method, path, response)`                                             | `() => void`                                 | Overrides a Route, e.g. `respond.serverError(503)`; call the result to end it                                                                                          |
+| `deny(channel, permission)`                                                | `void`                                       | Takes a permission from the bot in `channel`: 50001 or 50013 from then on                                                                                              |
+| `disconnect()`                                                             | `void`                                       | Discord drops the bot long enough that its session expires                                                                                                             |
+| `reconnect()`                                                              | `Promise<void>`                              | The bot identifies again; events in between are lost. Takes up to 6.5 s                                                                                                |
 | `archive(thread)`                                                          | `void`                                       | Discord archives it for inactivity                                                                                                                                     |
 | `commandPermissions(guild, command, overrides)`                            | `void`                                       | An admin's overrides for `command`; `target` is a member, a channel or the guild (@everyone)                                                                           |
 | `kickBot(guild)`                                                           | `void`                                       | The bot gets `guildDelete` and hears nothing more from `guild`                                                                                                         |
@@ -202,16 +205,17 @@ Why it's strict: [ADR 0003](docs/adr/0003-strict-by-default.md). The other decis
 
 ## What discord.js does under failure (verified by the tests)
 
-| Discord does                      | discord.js does                                                    | Bot sees                                   |
-| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| One 5xx                           | Retries immediately (`retries: 3`)                                 | Nothing                                    |
-| Persistent 5xx                    | 1 try + 3 retries, then throws                                     | `HTTPError` with `status`                  |
-| Closes the connection mid-request | No retry (`shouldRetry` only covers ECONNRESET/abort)              | `other side closed`, code `UND_ERR_SOCKET` |
-| Resets the connection             | Retries                                                            | Nothing                                    |
-| Route 429                         | Waits `Retry-After` (+50ms offset), retries, forever               | Latency only                               |
-| Global 429                        | Stalls every authenticated route; interaction callbacks are exempt | Latency only                               |
-| 429 with `rejectOnRateLimit` set  | Throws                                                             | `RateLimitError`                           |
-| 403 / 404 / 400                   | Throws, no retry                                                   | `DiscordAPIError` with Discord's `code`    |
+| Discord does                      | discord.js does                                                    | Bot sees                                                            |
+| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| One 5xx                           | Retries immediately (`retries: 3`)                                 | Nothing                                                             |
+| Persistent 5xx                    | 1 try + 3 retries, then throws                                     | `HTTPError` with `status`                                           |
+| Closes the connection mid-request | No retry (`shouldRetry` only covers ECONNRESET/abort)              | `other side closed`, code `UND_ERR_SOCKET`                          |
+| Resets the connection             | Retries                                                            | Nothing                                                             |
+| Route 429                         | Waits `Retry-After` (+50ms offset), retries, forever               | Latency only                                                        |
+| Global 429                        | Stalls every authenticated route; interaction callbacks are exempt | Latency only                                                        |
+| 429 with `rejectOnRateLimit` set  | Throws                                                             | `RateLimitError`                                                    |
+| 403 / 404 / 400                   | Throws, no retry                                                   | `DiscordAPIError` with Discord's `code`                             |
+| Session lost (op 9, `d: false`)   | Identifies again after its 5 s identify throttle                   | `shardReady`; never `clientReady` again; events in between are gone |
 
 The "closed vs reset" split is a real asymmetry in `@discordjs/rest`. Which one a real Discord outage produces is unchecked.
 

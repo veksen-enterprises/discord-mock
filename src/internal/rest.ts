@@ -130,20 +130,28 @@ export class RestRouter {
     });
   }
 
-  /** msw-style override, checked before the stateful routes. Return undefined to fall through. */
+  /**
+   * msw-style override, checked before the stateful routes. Return undefined to fall through.
+   * Returns a function that removes it.
+   */
   use(
     method: string,
     pattern: string,
     handler: RestHandler,
     opts: { once?: boolean } = {},
-  ) {
-    this.overrides.unshift({
+  ): () => void {
+    const route: Route = {
       method,
       pattern,
       handler,
       once: !!opts.once,
       ...compile(pattern),
-    });
+    };
+    this.overrides.unshift(route);
+    return () => {
+      const index = this.overrides.indexOf(route);
+      if (index !== -1) this.overrides.splice(index, 1);
+    };
   }
 
   resetOverrides() {

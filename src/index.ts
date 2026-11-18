@@ -452,13 +452,60 @@ class Discord {
   }
 
   /**
-   * Answers every `method path` request with `response` instead of the Model. `:name` segments match
-   * anything; a literal id fails only that channel, message or member.
-   * @example discord.fail("PATCH", "/webhooks/:app/:token/messages/@original", respond.serverError(503));
-   * @example discord.fail("POST", `/channels/${leaderboardChannel.id}/messages`, respond.missingPermissions());
+   * Answers every `method path` request with `response` instead of the Model, until you call the
+   * function it returns. `:name` segments match anything; a literal id fails only that channel, message
+   * or member.
+   * @example const recover = discord.fail("GET", "/attachments/:channel/:id/:name", respond.serverError(503));
    */
-  fail(method: string, path: string, response: RestResponse): void {
-    this.mock.use(method, path, () => response);
+  fail(method: string, path: string, response: RestResponse): () => void {
+    return this.mock.use(method, path, () => response);
+  }
+
+  /**
+   * Takes `permission` from the bot in `channel`, as a channel overwrite denying it. Discord then
+   * answers the bot there as it would: 50001 Missing Access without View Channel, else 50013.
+   * @example discord.deny(isoChannel, Permission.SendMessages);
+   */
+  deny(channel: TextChannel | Forum, permission: bigint): void {
+    const record = this.mock.state.requireChannel(channel.id);
+    const bot = this.mock.state.bot.id;
+    const current =
+      "permission_overwrites" in record
+        ? record.permission_overwrites?.find((o) => o.id === bot)
+        : undefined;
+    this.mock.setOverwrite(
+      record,
+      { id: bot, type: 1 },
+      {
+        allow: BigInt(current?.allow ?? 0) & ~permission,
+        deny: BigInt(current?.deny ?? 0) | permission,
+      },
+    );
+  }
+
+  /**
+   * Discord drops the bot's connection for long enough that its session expires. Nothing that
+   * happens until `reconnect` reaches the bot as an event: Discord doesn't replay a lost session.
+   * REST keeps working. A short drop that resumes is invisible to a bot, so it has no method.
+   */
+  disconnect(): void {
+    if (!this.client)
+      throw new Error("discordjs-test-kit: disconnect needs a started bot");
+    this.mock.gateway.goDown();
+  }
+
+  /**
+   * Discord is back after `disconnect`: the bot identifies again and receives every guild anew.
+   * Resolves once discord.js reports the shard ready. That takes up to 6.5s after the bot's last
+   * identify: @discordjs/ws waits 5s between identifies, plus up to 1.5s (SimpleIdentifyThrottler),
+   * so a test that reconnects needs a longer timeout.
+   */
+  async reconnect(): Promise<void> {
+    if (!this.client)
+      throw new Error("discordjs-test-kit: reconnect needs a started bot");
+    const ready = once(this.client, "shardReady");
+    this.mock.gateway.comeBack();
+    await ready;
   }
 
   /**

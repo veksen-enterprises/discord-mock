@@ -84,6 +84,8 @@ it("should record the result when the winner reports", async () => {
 | rename the server                                | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                                            |
 | a bot that logs through a `WebhookClient`        | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                                             |
 | make Discord fail a route                        | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                                          |
+| take a permission from the bot                   | `discord.deny(channel, Permission.SendMessages)`                                                                                                    |
+| lose the gateway session                         | `discord.disconnect()`, act, `await discord.reconnect()` (give the test a 10 s timeout)                                                             |
 | wait for a message                               | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count                   |
 | check the bot sent nothing more                  | `await discord.idle()`, then assert                                                                                                                 |
 | wait for anything else, or absence               | `await vi.waitFor(() => expect(…).…)`                                                                                                               |
