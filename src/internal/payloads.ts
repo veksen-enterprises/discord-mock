@@ -1,23 +1,14 @@
 import {
   GatewayIntentBits,
   OverwriteType,
+  PermissionFlagsBits,
   type APIChannel,
   type APIGuildMember,
 } from "discord-api-types/v10";
 import type { DiscordState, GuildRecord } from "./state.js";
 
-export const Permission = {
-  ManageChannels: 1n << 4n,
-  AddReactions: 1n << 6n,
-  ManageMessages: 1n << 13n,
-  Administrator: 1n << 3n,
-  ViewChannel: 1n << 10n,
-  SendMessages: 1n << 11n,
-  EmbedLinks: 1n << 14n,
-  AttachFiles: 1n << 15n,
-  ReadMessageHistory: 1n << 16n,
-  ManageRoles: 1n << 28n,
-} as const;
+// Every flag Discord documents, under the names discord.js uses (PermissionFlagsBits).
+export const Permission = PermissionFlagsBits;
 
 // Highest documented bit is MANAGE_OFFICIAL_MESSAGES (1 << 53): docs.discord.food/topics/permissions.
 export const ALL_PERMISSIONS = (1n << 54n) - 1n;
