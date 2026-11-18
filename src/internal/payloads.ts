@@ -54,18 +54,8 @@ export function computePermissions(
   return base;
 }
 
-export function guildCreatePayload(
-  state: DiscordState,
-  guild: GuildRecord,
-  intents: number,
-) {
-  // docs.discord.food/gateway/gateway-events#gateway-guild-object, footnote 1: bots without
-  // GUILD_PRESENCES get only their own member (and users in voice, which the Model has none of).
-  // With it, a guild under large_threshold (50 by default) sends every member.
-  const members =
-    intents & GatewayIntentBits.GuildPresences
-      ? [...guild.members.values()]
-      : [guild.members.get(state.bot.id)!];
+/** The guild object (resources/guild#guild-object): what REST answers and GUILD_UPDATE carries. */
+export function guildPayload(guild: GuildRecord) {
   return {
     id: guild.id,
     name: guild.name,
@@ -96,6 +86,23 @@ export function guildCreatePayload(
     nsfw_level: 0,
     premium_progress_bar_enabled: false,
     safety_alerts_channel_id: null,
+  };
+}
+
+export function guildCreatePayload(
+  state: DiscordState,
+  guild: GuildRecord,
+  intents: number,
+) {
+  // docs.discord.food/gateway/gateway-events#gateway-guild-object, footnote 1: bots without
+  // GUILD_PRESENCES get only their own member (and users in voice, which the Model has none of).
+  // With it, a guild under large_threshold (50 by default) sends every member.
+  const members =
+    intents & GatewayIntentBits.GuildPresences
+      ? [...guild.members.values()]
+      : [guild.members.get(state.bot.id)!];
+  return {
+    ...guildPayload(guild),
     joined_at: new Date().toISOString(),
     large: false,
     unavailable: false,

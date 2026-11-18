@@ -306,3 +306,18 @@ it("stops members using the bot's commands once it's kicked", async () => {
     alice.run(generalChannel, "echo", { text: "hi" }),
   ).rejects.toThrow("the bot isn't in SIN any more");
 });
+
+it("renames the guild as its owner, which a member without Manage Server can't", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const alice = discord.member(server, "alice");
+  const { client } = createBot(discord.clientOptions);
+  await discord.start(client, { commands });
+
+  expect(() => alice.renameGuild("mine")).toThrow("without Manage Server");
+  discord.owner(server).renameGuild("SIN 2");
+
+  await vi.waitFor(() =>
+    expect(client.guilds.cache.get(server.id)!.name).toBe("SIN 2"),
+  );
+});

@@ -43,3 +43,43 @@ it("lists the guild's channels the bot can view, with a hidden category whose ch
   );
   mock.assertNoUnhandledRequests();
 });
+
+it("lists the bot's guilds, leaving out one it was kicked from, and refetches one with counts", async () => {
+  const kept = mock.createGuild("kept");
+  mock.addMember(kept, mock.createUser("alice"));
+  mock.removeBot(mock.createGuild("kicked"));
+  await login();
+
+  const guilds = await client.guilds.fetch();
+  const guild = await client.guilds.fetch({ guild: kept.id, force: true });
+
+  expect(guilds.map((g) => g.name)).toEqual(["kept"]);
+  expect(guilds.first()!.owner).toBe(false);
+  expect(guild.approximateMemberCount).toBe(3);
+  mock.assertNoUnhandledRequests();
+});
+
+it("renames a guild with Manage Server and hears guildUpdate, and is refused without it", async () => {
+  const guild = mock.createGuild("old");
+  await login();
+  const cached = client.guilds.cache.get(guild.id)!;
+
+  await expect(cached.setName("x")).rejects.toMatchObject({ code: 50013 });
+  mock.grantBot(Permission.ManageGuild);
+  const updated = once(client, Events.GuildUpdate);
+  await cached.setName("new");
+
+  const [before, after] = await updated;
+  expect([before.name, after.name]).toEqual(["old", "new"]);
+  mock.assertNoUnhandledRequests();
+});
+
+it("tells the bot when someone else renames the guild", async () => {
+  const guild = mock.createGuild("old");
+  await login();
+  const updated = once(client, Events.GuildUpdate);
+
+  mock.renameGuild(guild, "new");
+
+  expect((await updated)[1].name).toBe("new");
+});

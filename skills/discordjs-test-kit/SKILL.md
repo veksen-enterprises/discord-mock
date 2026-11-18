@@ -68,6 +68,7 @@ it("should record the result when the winner reports", async () => {
 | change nickname, leave the server   | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | change their display name           | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                      |
 | kick the bot from the server        | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                             |
+| rename the server                   | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                          |
 | make Discord fail a route           | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |
 | wait for a message                  | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count |
 | check the bot sent nothing more     | `await discord.idle()`, then assert                                                                                               |

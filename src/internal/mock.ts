@@ -19,6 +19,7 @@ import {
   type APIUser,
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
+import { registerGuildRoutes } from "./guilds.js";
 import {
   channelEditError,
   choicesLimitError,
@@ -30,6 +31,7 @@ import { registerMessageRoutes } from "./messages.js";
 import {
   ALL_PERMISSIONS,
   computePermissions,
+  guildPayload,
   interactionMember,
   Permission,
 } from "./payloads.js";
@@ -377,6 +379,17 @@ export class DiscordMock {
           GatewayIntentBits.GuildMembers,
         );
     }
+  }
+
+  /** `guild` is renamed; a bot in it hears GUILD_UPDATE with the guild (gateway-events#guild-update). */
+  renameGuild(guild: GuildRecord, name: string) {
+    guild.name = name;
+    if (this.state.botIn(guild.id))
+      this.gateway.dispatch(
+        GatewayDispatchEvents.GuildUpdate,
+        guildPayload(guild),
+        GatewayIntentBits.Guilds,
+      );
   }
 
   /**
@@ -2085,6 +2098,7 @@ export class DiscordMock {
       return respond.json(message);
     });
     registerMemberRoutes(this, authed);
+    registerGuildRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 

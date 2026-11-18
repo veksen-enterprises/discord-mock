@@ -16,11 +16,12 @@ import {
   type InteractionRun,
   type UserMessage,
 } from "./internal/mock.js";
+import { computePermissions, Permission } from "./internal/payloads.js";
 import type { RestResponse } from "./internal/rest.js";
 
 export { respond } from "./internal/rest.js";
 export type { RestResponse } from "./internal/rest.js";
-export { Permission } from "./internal/payloads.js";
+export { Permission };
 export type { UserMessage } from "./internal/mock.js";
 
 declare const kind: unique symbol;
@@ -166,6 +167,11 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   displayName(name: string | null): void;
   /** Leaves the guild. */
   leave(): void;
+  /**
+   * Renames the guild, which needs Manage Server (the owner has it). The bot hears `guildUpdate`.
+   * @example discord.owner(server).renameGuild("SIN 2"); // a bot that shows the guild name should follow
+   */
+  renameGuild(name: string): void;
 }
 
 const FIND_TIMEOUT_MS = 2000;
@@ -563,6 +569,21 @@ class MemberActor {
   leave(): void {
     this.markAction();
     this.mock.removeMember(this.guild(), this.user());
+  }
+
+  renameGuild(name: string): void {
+    const guild = this.guild();
+    if (
+      !(
+        computePermissions(this.mock.state, guild, this.id) &
+        Permission.ManageGuild
+      )
+    )
+      throw new Error(
+        `discordjs-test-kit: ${this.name} can't rename ${guild.name} without Manage Server`,
+      );
+    this.markAction();
+    this.mock.renameGuild(guild, name);
   }
 
   private actor() {
