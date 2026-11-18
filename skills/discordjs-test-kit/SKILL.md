@@ -136,7 +136,7 @@ The mock names messages by their text and lists what exists. Fix the test from t
 | `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                                                                          |
 | `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`                                                            |
 | `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug                                                             |
-| `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set                                                         |
+| `the bot deferred, then went quiet`               | The bot deferred and never answered: a real bug, or a `fail` you set                                                         |
 | `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`                                                            |
 | `no message in #x matched … within 2s. Last 3: …` | The bot didn't post it; the last messages show what it did post                                                              |
 | `unhandled requests: …`                           | The bot used a route the kit doesn't model yet: report it                                                                    |

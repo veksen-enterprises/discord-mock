@@ -87,7 +87,7 @@ describe("/join", () => {
     const joining = alice.run(challengesChannel, "join");
 
     // Assert: discord.js retried the edit 3 times and gave up, so the member is left on "thinking…"
-    await expect(joining).rejects.toThrow(/still "deferred"/);
+    await expect(joining).rejects.toThrow(/the bot deferred, then went quiet/);
     expect(errors[0]).toMatchObject({ status: 503 });
     expect(store.get("Test Ladder")?.get(alice.id)).toBe("Bravo");
   });

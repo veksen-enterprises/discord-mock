@@ -167,6 +167,44 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     });
   }
 
+  /**
+   * Resolves when `predicate` holds; rejects once the bot has sent no request and received no
+   * dispatch for `quietMs`, rather than after a fixed time.
+   */
+  private waitWhileBotActive(
+    predicate: (run: this) => boolean,
+    quietMs = 2_000,
+  ): Promise<this> {
+    return new Promise((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const arm = () => {
+        realClearTimeout(timer);
+        timer = realSetTimeout(() => {
+          cleanup();
+          reject(
+            new Error(
+              `discordjs-test-kit: the bot deferred, then went quiet for ${quietMs / 1000}s without editing in its reply, so the user sees "thinking…" until the token expires`,
+            ),
+          );
+        }, quietMs);
+      };
+      const check = () => {
+        arm();
+        if (!predicate(this)) return;
+        cleanup();
+        resolve(this);
+      };
+      const cleanup = () => {
+        realClearTimeout(timer);
+        this.off("change", check);
+        this.mock.activity.off("change", arm);
+      };
+      this.on("change", check);
+      this.mock.activity.on("change", arm);
+      check();
+    });
+  }
+
   /** Waits for the bot's first callback, within the deadline Discord gives it. */
   async acknowledged(): Promise<this> {
     // Discord gives the bot the whole deadline to acknowledge, so a shorter wait would fail a bot
@@ -199,14 +237,17 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
       throw new Error(
         `discordjs-test-kit: the bot opened the form ${describeModal(this.modal)} instead of replying. Pass the values to fill it in`,
       );
-    await this.waitUntil(
-      (r) =>
-        r.replyDeleted ||
-        (r.state === "replied" &&
-          !!r.original &&
-          !((r.original.flags ?? 0) & MessageFlags.Loading)),
-      timeoutMs,
-    );
+    const shown = (r: this) =>
+      r.replyDeleted ||
+      (r.state === "replied" &&
+        !!r.original &&
+        !((r.original.flags ?? 0) & MessageFlags.Loading));
+    // After a defer, Discord keeps the interaction token for 15 minutes, so a fixed wait would fail
+    // a bot that works on Discord (one adding ten reactions 500ms apart before it edits). The run
+    // waits while the bot keeps talking to Discord, and gives up once it has gone quiet.
+    if (this.state === "deferred" && timeoutMs === undefined)
+      await this.waitWhileBotActive(shown);
+    else await this.waitUntil(shown, timeoutMs);
     if (this.replyDeleted)
       throw new Error(
         "discordjs-test-kit: the bot deleted its reply, so the user sees no answer",
@@ -230,7 +271,7 @@ export class DiscordMock {
   private interactions = new Map<string, InteractionRun>();
   /** REST requests the bot has open. With `activity`, tells when the bot has gone quiet. */
   private inFlight = 0;
-  private readonly activity = new EventEmitter<{ change: [] }>();
+  readonly activity = new EventEmitter<{ change: [] }>();
   readonly interactionDeadlineMs: number;
   apiUrl = "";
 

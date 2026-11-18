@@ -1,0 +1,79 @@
+import { setTimeout as sleep } from "node:timers/promises";
+/**
+ * Discord keeps a deferred interaction's token for 15 minutes, so the run waits as long as the bot
+ * keeps working, and fails only once it has gone quiet without editing in its reply.
+ */
+import {
+  Client,
+  Events,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+} from "discord.js";
+import { expect, it } from "vitest";
+import { createDiscord, Permission } from "../src/index.js";
+
+const EMOJIS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"];
+
+const commands = [
+  new SlashCommandBuilder().setName("poll").setDescription("Start a poll"),
+  new SlashCommandBuilder().setName("forget").setDescription("Never answers"),
+].map((c) => c.toJSON());
+
+function createBot(options: object) {
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...options,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand() || !interaction.inCachedGuild())
+      return;
+    await interaction.deferReply();
+    if (interaction.commandName === "forget") return;
+    const poll = await interaction.channel!.send("Lunch?");
+    // Spaced out to stay clear of the reaction rate limit, as TitanBot's /poll does.
+    for (const emoji of EMOJIS) {
+      await poll.react(emoji);
+      await sleep(500);
+    }
+    await interaction.editReply("Poll posted.");
+  });
+  return client;
+}
+
+it("waits through a deferred reply for as long as the bot keeps working", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  const server = discord.guild("Titan");
+  const general = discord.channel(server, "general");
+  const alice = discord.member(server, "Alice");
+  await discord.start(createBot(discord.clientOptions), {
+    commands,
+    permissions:
+      Permission.SendMessages |
+      Permission.AddReactions |
+      Permission.ReadMessageHistory,
+  });
+
+  // Act
+  const reply = await alice.run(general, "poll");
+
+  // Assert
+  expect(reply.content).toBe("Poll posted.");
+}, 10_000);
+
+it("fails a deferred reply once the bot goes quiet without answering", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  const server = discord.guild("Titan");
+  const general = discord.channel(server, "general");
+  const alice = discord.member(server, "Alice");
+  await discord.start(createBot(discord.clientOptions), { commands });
+
+  // Act
+  const reply = alice.run(general, "forget");
+
+  // Assert
+  await expect(reply).rejects.toThrow(
+    "the bot deferred, then went quiet for 2s",
+  );
+});
