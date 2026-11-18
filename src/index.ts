@@ -368,6 +368,9 @@ export class DiscordMock {
       ) => this.userRunsCommand(user, channel, name, options),
       clickButton: (message: APIMessage, customId: string) =>
         this.userClicksButton(user, message, customId),
+      /** Picks the option labelled `label` from the string select on `message` that offers it. */
+      selectOption: (message: APIMessage, label: string | RegExp) =>
+        this.userSelectsOption(user, message, label),
     };
   }
 
@@ -502,6 +505,51 @@ export class DiscordMock {
       channel,
       InteractionType.MessageComponent,
       { custom_id: customId, component_type: ComponentType.Button },
+      message,
+    );
+  }
+
+  // docs.discord.food/resources/components: a string select offers `options`; the user picks
+  // between min_values and max_values (default 1) of them. Picking one option by its label is
+  // what a user does; multi-select is not modelled yet.
+  // docs.discord.food/interactions/receiving-and-responding: the bot receives custom_id,
+  // component_type and `values` (the picked options' values).
+  private userSelectsOption(
+    user: APIUser,
+    message: APIMessage,
+    label: string | RegExp,
+  ) {
+    const matches = (message.components ?? [])
+      .flatMap((row: any) => row.components ?? [])
+      .filter((c: any) => c.type === ComponentType.StringSelect)
+      .flatMap((select: any) =>
+        (select.options ?? [])
+          .filter((o: any) =>
+            typeof label === "string" ? o.label === label : label.test(o.label),
+          )
+          .map((option: any) => ({ select, option })),
+      );
+    if (matches.length !== 1)
+      throw new Error(
+        `discord-mock: message ${message.id} has ${matches.length} select options labelled ${String(label)}, expected 1`,
+      );
+    const { select, option } = matches[0]!;
+    if (select.disabled)
+      throw new Error(`discord-mock: select "${select.custom_id}" is disabled`);
+    if ((select.min_values ?? 1) > 1)
+      throw new Error(
+        `discord-mock: select "${select.custom_id}" needs ${select.min_values} picks; multi-select is not modelled`,
+      );
+    const channel = this.state.requireChannel(message.channel_id);
+    return this.dispatchInteraction(
+      user,
+      channel,
+      InteractionType.MessageComponent,
+      {
+        custom_id: select.custom_id,
+        component_type: ComponentType.StringSelect,
+        values: [option.value],
+      },
       message,
     );
   }
