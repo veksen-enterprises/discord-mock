@@ -1,12 +1,22 @@
 {
   "name": "discordjs-test-kit",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "A fake Discord (REST + Gateway) that discord.js bots connect to in tests",
+  "keywords": [
+    "discord",
+    "discord.js",
+    "fake",
+    "mock",
+    "test",
+    "testing",
+    "vitest"
+  ],
   "homepage": "https://github.com/veksen-enterprises/discordjs-test-kit#readme",
   "bugs": {
     "url": "https://github.com/veksen-enterprises/discordjs-test-kit/issues"
   },
+  "license": "MIT",
+  "author": "Jean-Philippe Sirois",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/veksen-enterprises/discordjs-test-kit.git"
