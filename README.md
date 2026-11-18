@@ -31,24 +31,24 @@ Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/S
 
 `Discord` builds the World, starts the bot, injects failures and reads what happened. A `Member` acts. Each action has one way to write it.
 
-| `Discord`                                          | Returns             | Notes                                                                       |
-| -------------------------------------------------- | ------------------- | --------------------------------------------------------------------------- |
-| `createDiscord()`                                  | `Promise<Discord>`  | One per test, on its own port                                               |
-| `guild(name)`                                      | `Guild<N>`          |                                                                             |
-| `category(guild, name)`                            | `Category<N>`       |                                                                             |
-| `channel(guild, name, category?)`                  | `TextChannel<N>`    |                                                                             |
-| `forum(guild, name)`                               | `Forum<N>`          |                                                                             |
-| `member(guild, name, { nickname?, permissions? })` | `Member<N>`         | A new user who joined `guild`; `permissions` gives them a role              |
-| `owner(guild)`                                     | `Member<N>`         | Has every permission                                                        |
-| `start(client, { commands?, permissions? })`       | `Promise<void>`     | `permissions`: what the bot's invite grants, in guilds built before `start` |
-| `fail(method, path, response)`                     | `void`              | Overrides a Route, e.g. `respond.serverError(503)`                          |
-| `archive(thread)`                                  | `void`              | Discord archives it for inactivity                                          |
-| `messages(channel)`                                | `Message[]`         | Oldest first, live objects                                                  |
-| `dms(member)`                                      | `Message[]`         | The bot's DMs with `member`                                                 |
-| `find(where, text)`                                | `Promise<Message>`  | Waits for a match written since the latest action, up to 2 s                |
-| `findThread(channel, name)`                        | `Promise<Thread>`   | Waits for a thread the bot started there, up to 2 s                         |
-| `idle()`                                           | `Promise<void>`     | Resolves once the bot has gone quiet for 100ms                              |
-| `clientOptions`                                    | `{ rest: { api } }` | Spread into the bot's `Client` options                                      |
+| `Discord`                                          | Returns             | Notes                                                                                              |
+| -------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| `createDiscord()`                                  | `Promise<Discord>`  | One per test, on its own port                                                                      |
+| `guild(name)`                                      | `Guild<N>`          |                                                                                                    |
+| `category(guild, name)`                            | `Category<N>`       |                                                                                                    |
+| `channel(guild, name, category?)`                  | `TextChannel<N>`    |                                                                                                    |
+| `forum(guild, name)`                               | `Forum<N>`          |                                                                                                    |
+| `member(guild, name, { nickname?, permissions? })` | `Member<N>`         | A new user who joined `guild`; `permissions` gives them a role                                     |
+| `owner(guild)`                                     | `Member<N>`         | Has every permission                                                                               |
+| `start(client, { commands?, permissions? })`       | `Promise<void>`     | `permissions`: what the bot's invite grants, in guilds built before `start`                        |
+| `fail(method, path, response)`                     | `void`              | Overrides a Route, e.g. `respond.serverError(503)`; a literal id in `path` fails just that channel |
+| `archive(thread)`                                  | `void`              | Discord archives it for inactivity                                                                 |
+| `messages(channel)`                                | `Message[]`         | Oldest first, live objects                                                                         |
+| `dms(member)`                                      | `Message[]`         | The bot's DMs with `member`                                                                        |
+| `find(where, text)`                                | `Promise<Message>`  | Waits for a match written since the latest action, up to 2 s                                       |
+| `findThread(channel, name)`                        | `Promise<Thread>`   | Waits for a thread the bot started there, up to 2 s                                                |
+| `idle()`                                           | `Promise<void>`     | Resolves once the bot has gone quiet for 100ms                                                     |
+| `clientOptions`                                    | `{ rest: { api } }` | Spread into the bot's `Client` options                                                             |
 
 | `Member`                            | Returns               | Notes                                                    |
 | ----------------------------------- | --------------------- | -------------------------------------------------------- |

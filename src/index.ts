@@ -251,8 +251,10 @@ class Discord {
   }
 
   /**
-   * Answers every `method path` request with `response` instead of the Model.
+   * Answers every `method path` request with `response` instead of the Model. `:name` segments match
+   * anything; a literal id fails only that channel, message or member.
    * @example discord.fail("PATCH", "/webhooks/:app/:token/messages/@original", respond.serverError(503));
+   * @example discord.fail("POST", `/channels/${leaderboardChannel.id}/messages`, respond.missingPermissions());
    */
   fail(method: string, path: string, response: RestResponse): void {
     this.mock.use(method, path, () => response);

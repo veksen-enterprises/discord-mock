@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import {
   createDiscord,
+  respond,
   Permission,
   type Guild,
   type Member,
@@ -239,4 +240,26 @@ it("refuses a form the Discord app wouldn't submit, and says when the bot opened
   await expect(
     alice.run(generalChannel, "feedback", {}, { Title: "x" }),
   ).rejects.toThrow('has no field "Title"');
+});
+
+it("fails one channel by its literal path, and leaves the others working", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+  const server = discord.guild("news");
+  const board = discord.channel(server, "board");
+  const news = discord.channel(server, "news");
+  discord.fail(
+    "POST",
+    `/channels/${board.id}/messages`,
+    respond.missingPermissions(),
+  );
+
+  const failed = await alice.run(generalChannel, "announce", {
+    channel: board.id,
+  });
+  const posted = await alice.run(generalChannel, "announce", {
+    channel: news.id,
+  });
+
+  expect(failed.content).toBe("failed: 50013");
+  expect(posted.content).toBe("posted");
 });
