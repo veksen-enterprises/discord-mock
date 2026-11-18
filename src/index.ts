@@ -87,12 +87,23 @@ export type Pickable<G extends string = string> =
 export type Message = APIMessage;
 
 /**
- * What the member types into the form (modal) the bot opens, by each field's label. Pass it as the
- * last argument of the action that opens the form; the action then resolves with the bot's answer
- * to the submitted form.
- * @example await alice.click(panel, "Report", { Reason: "spam" });
+ * What the member enters in the form (modal) the bot opens, by each field's label: text for a text
+ * input; an option's label (or several) for a select, radio group or checkbox group; true or
+ * false for a checkbox; members, roles or channels for those selects; a file (or several) for a
+ * file upload. Pass it as the last argument of the action that opens the form; the action then
+ * resolves with the bot's answer to the submitted form.
+ * @example await alice.click(panel, "Report", { Reason: "spam", Who: bob, Severity: "High" });
  */
-export type Form = Record<string, string>;
+export type Form<G extends string = string> = Record<
+  string,
+  | string
+  | string[]
+  | boolean
+  | Pickable<G>
+  | Pickable<G>[]
+  | Attachment
+  | Attachment[]
+>;
 
 /** One autocomplete suggestion: `name` is what the member sees, `value` what the command receives. */
 export interface Choice {
@@ -130,7 +141,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     channel: TextChannel<G> | Thread<G>,
     command: string,
     options?: Record<string, OptionValue<G>>,
-    form?: Form,
+    form?: Form<G>,
   ): Promise<Message>;
   /**
    * Types `typed` into `option` of `/command`, with `filled` already entered, and resolves with the
@@ -153,7 +164,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     channel: TextChannel<G> | Thread<G>,
     target: Member<G> | Message,
     command: string,
-    form?: Form,
+    form?: Form<G>,
   ): Promise<Message>;
   /**
    * Presses the button labelled `label` on `message` (or showing that emoji, when it has no label).
@@ -163,7 +174,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   click(
     message: Message,
     label: string | RegExp,
-    form?: Form,
+    form?: Form<G>,
   ): Promise<Message>;
   /**
    * Picks the option labelled `label` from the select menu on `message`, or several labels for a
@@ -174,7 +185,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   select(
     message: Message,
     label: string | RegExp | (string | RegExp)[],
-    form?: Form,
+    form?: Form<G>,
   ): Promise<Message>;
   /**
    * Picks members, roles or channels in the user, role, mentionable or channel select on `message`
@@ -185,7 +196,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   select(
     message: Message,
     picks: Pickable<G> | Pickable<G>[],
-    form?: Form,
+    form?: Form<G>,
   ): Promise<Message>;
   /**
    * Posts in `channel`. Files are served by the mock, so the bot can download them.

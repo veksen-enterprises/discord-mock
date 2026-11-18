@@ -920,7 +920,7 @@ export class DiscordMock {
       clickButton: (message: APIMessage, label: string | RegExp) =>
         this.userClicksButton(user, message, label),
       /** Fills the form the bot opened in answer to `run`, by field label, and submits it. */
-      submitForm: (run: InteractionRun, values: Record<string, string>) =>
+      submitForm: (run: InteractionRun, values: Record<string, FormValue>) =>
         this.userSubmitsForm(user, run, values),
       /** Picks the option labelled `label` from the string select on `message` that offers it. */
       selectOption: (
@@ -1506,13 +1506,14 @@ export class DiscordMock {
 
   // docs.discord.food/interactions/receiving-and-responding#modal-submit-component-data-structure:
   // the bot gets MODAL_SUBMIT (type 5) with the modal's custom_id and its components echoed back,
-  // each text input carrying `value`; `message` only when a component opened the modal.
-  // components/reference#text-input: `required` defaults to true, and min_length/max_length bound
-  // what the Discord app lets the user submit.
+  // each carrying what the member entered; `message` only when a component opened the modal.
+  // The per-type shapes (text input and radio group `value`, checkbox `value: boolean`, selects,
+  // checkbox groups and file uploads `values`) and `resolved` for picked entities and files are
+  // discord-api-types' ModalSubmitComponent, as discord.js's ModalSubmitFields reads them.
   private userSubmitsForm(
     user: APIUser,
     run: InteractionRun,
-    values: Record<string, string>,
+    values: Record<string, FormValue>,
   ) {
     const modal = run.modal;
     if (!modal || run.userId !== user.id)
@@ -1527,60 +1528,98 @@ export class DiscordMock {
       throw new Error(
         `discordjs-test-kit: the form ${describeModal(modal)} has no field ${unknown.map((l) => `"${l}"`).join(", ")}`,
       );
-    for (const { label, input } of fields) {
-      // A field the member leaves alone submits what the bot pre-filled (the text input's value).
-      const value = values[label] ?? input.value ?? "";
-      if (input.type !== ComponentType.TextInput)
-        throw new Error(
-          `discordjs-test-kit: field "${label}" is a component of type ${input.type}; only text inputs are modelled in forms`,
-        );
-      const at = `field "${label}" of ${describeModal(modal)}`;
-      if ((input.required ?? true) && value === "")
-        throw new Error(
-          `discordjs-test-kit: ${at} is required, so the Discord app won't submit the form without it`,
-        );
-      if (value !== "" && value.length < (input.min_length ?? 0))
-        throw new Error(
-          `discordjs-test-kit: ${at} needs at least ${input.min_length} characters`,
-        );
-      if (value.length > (input.max_length ?? 4000))
-        throw new Error(
-          `discordjs-test-kit: ${at} takes at most ${input.max_length ?? 4000} characters`,
-        );
-    }
+    const channel = this.state.requireChannel(run.channelId);
+    const guild =
+      "guild_id" in channel && channel.guild_id
+        ? this.state.requireGuild(channel.guild_id)
+        : undefined;
+    const picked = {
+      users: [] as string[],
+      roles: [] as string[],
+      channels: [] as string[],
+    };
+    const uploaded: APIAttachment[] = [];
+    const answers = new Map<object, Record<string, unknown>>();
+    for (const { label, input } of fields)
+      answers.set(
+        input,
+        submittedField(
+          input,
+          values[label],
+          `field "${label}" of ${describeModal(modal)}`,
+          {
+            pick: (ids, type) => {
+              const isRole = (id: string) => guild?.roles.has(id) ?? false;
+              if (type === ComponentType.ChannelSelect)
+                picked.channels.push(...ids);
+              else if (type === ComponentType.RoleSelect)
+                picked.roles.push(...ids);
+              else if (type === ComponentType.UserSelect)
+                picked.users.push(...ids);
+              else {
+                picked.roles.push(...ids.filter(isRole));
+                picked.users.push(...ids.filter((id) => !isRole(id)));
+              }
+            },
+            upload: (files) =>
+              files.map((file) => {
+                const attachment = this.state.storeAttachment(
+                  run.channelId,
+                  file,
+                );
+                uploaded.push(attachment);
+                return attachment.id;
+              }),
+          },
+        ),
+      );
     // Discord numbers components it wasn't given an id for; the order here is inferred, not checked.
     let nextId = 1;
     const id = (c: any) => c.id ?? nextId++;
-    const input = (c: any, label: string) => ({
+    const input = (c: any) => ({
       type: c.type,
       id: id(c),
       custom_id: c.custom_id,
-      value: values[label] ?? c.value ?? "",
+      ...answers.get(c),
     });
     const submitted = (modal.components as any[]).map((top) => {
       if (top.type === ComponentType.ActionRow)
         return {
           type: top.type,
           id: id(top),
-          components: top.components.map((c: any) => input(c, c.label)),
+          components: top.components.map(input),
         };
       if (top.type === ComponentType.Label)
-        return {
-          type: top.type,
-          id: id(top),
-          component: input(top.component, top.label),
-        };
+        return { type: top.type, id: id(top), component: input(top.component) };
       return { type: top.type, id: id(top) };
     });
+    const resolved = resolvedData(this.state, guild, user.id, picked);
     run.modal = undefined;
     const source = run.sourceMessageId
       ? this.state.requireMessage(run.channelId, run.sourceMessageId)
       : undefined;
     return this.dispatchInteraction(
       user,
-      this.state.requireChannel(run.channelId),
+      channel,
       InteractionType.ModalSubmit,
-      { custom_id: modal.custom_id, components: submitted },
+      {
+        custom_id: modal.custom_id,
+        components: submitted,
+        ...(resolved || uploaded.length
+          ? {
+              resolved: {
+                ...resolved,
+                ...(uploaded.length
+                  ? {
+                      attachments: Object.fromEntries(
+                        uploaded.map((a) => [a.id, a]),
+                      ),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      },
       source,
     );
   }
@@ -3188,6 +3227,139 @@ export interface Modal {
  * A modal's fields as the user sees them: each Label's input (components/reference#label), or a
  * text input in a deprecated action row, labelled by its own `label`.
  */
+/** What a member enters in a form field, by the field's component type. */
+export type FormValue =
+  | string
+  | string[]
+  | boolean
+  | { id: string }
+  | { id: string }[]
+  | Attachment
+  | Attachment[];
+
+/**
+ * One field's submitted part, checked the way the Discord app checks it before it lets the member
+ * submit (docs.discord.food/resources/components): `required` (true by default, false for a file
+ * upload), min_length/max_length for text, min_values/max_values for picks. `given` undefined
+ * leaves the field as the bot pre-filled it.
+ */
+function submittedField(
+  input: any,
+  given: FormValue | undefined,
+  at: string,
+  world: {
+    pick: (ids: string[], type: ComponentType) => void;
+    upload: (files: Attachment[]) => string[];
+  },
+): Record<string, unknown> {
+  const list = <T>(v: T | T[] | undefined): T[] =>
+    v === undefined ? [] : Array.isArray(v) ? v : [v];
+  const wrong = (what: string) =>
+    new Error(`discordjs-test-kit: ${at} takes ${what}`);
+  const required = input.required ?? input.type !== ComponentType.FileUpload;
+  const count = (n: number, min = required ? 1 : 0, max = 1) => {
+    if (required && n === 0)
+      throw new Error(
+        `discordjs-test-kit: ${at} is required, so the Discord app won't submit the form without it`,
+      );
+    if (n > 0 && (n < min || n > max))
+      throw new Error(
+        `discordjs-test-kit: ${at} takes ${min === max ? min : `${min} to ${max}`} picks, not ${n}`,
+      );
+  };
+  const byLabel = (labels: string[]) =>
+    labels.map((label) => {
+      const option = (input.options as any[]).find((o) => o.label === label);
+      if (!option)
+        throw new Error(
+          `discordjs-test-kit: ${at} has no option "${label}". It offers: ${(input.options as any[]).map((o) => `"${o.label}"`).join(", ")}`,
+        );
+      return option.value as string;
+    });
+  switch (input.type) {
+    case ComponentType.TextInput: {
+      if (given !== undefined && typeof given !== "string") throw wrong("text");
+      const value = (given as string | undefined) ?? input.value ?? "";
+      if (required && value === "") count(0);
+      if (value !== "" && value.length < (input.min_length ?? 0))
+        throw new Error(
+          `discordjs-test-kit: ${at} needs at least ${input.min_length} characters`,
+        );
+      if (value.length > (input.max_length ?? 4000))
+        throw new Error(
+          `discordjs-test-kit: ${at} takes at most ${input.max_length ?? 4000} characters`,
+        );
+      return { value };
+    }
+    case ComponentType.StringSelect:
+    case ComponentType.CheckboxGroup: {
+      if (list(given).some((v) => typeof v !== "string"))
+        throw wrong("option labels");
+      const values =
+        given === undefined
+          ? (input.options as any[])
+              .filter((o) => o.default)
+              .map((o) => o.value)
+          : byLabel(list(given as string | string[]));
+      count(
+        values.length,
+        input.min_values ?? (required ? 1 : 0),
+        input.max_values ??
+          (input.type === ComponentType.StringSelect
+            ? 1
+            : input.options.length),
+      );
+      return { values };
+    }
+    case ComponentType.RadioGroup: {
+      if (given !== undefined && typeof given !== "string")
+        throw wrong("one option label");
+      const value =
+        given === undefined
+          ? ((input.options as any[]).find((o) => o.default)?.value ?? null)
+          : byLabel([given])[0]!;
+      count(value === null ? 0 : 1);
+      return { value };
+    }
+    case ComponentType.Checkbox:
+      if (given !== undefined && typeof given !== "boolean")
+        throw wrong("true or false");
+      return { value: given ?? input.default ?? false };
+    case ComponentType.UserSelect:
+    case ComponentType.RoleSelect:
+    case ComponentType.MentionableSelect:
+    case ComponentType.ChannelSelect: {
+      const picks = list(
+        given as { id: string } | { id: string }[] | undefined,
+      );
+      if (picks.some((p) => typeof p !== "object" || !("id" in p)))
+        throw wrong("members, roles or channels");
+      const values =
+        given === undefined
+          ? ((input.default_values ?? []) as { id: string }[]).map((d) => d.id)
+          : picks.map((p) => p.id);
+      count(
+        values.length,
+        input.min_values ?? (required ? 1 : 0),
+        input.max_values ?? 1,
+      );
+      world.pick(values, input.type);
+      return { values };
+    }
+    case ComponentType.FileUpload: {
+      const files = list(given as Attachment | Attachment[] | undefined);
+      if (files.some((f) => typeof f !== "object" || !("data" in f)))
+        throw wrong("files");
+      count(files.length, input.min_values ?? 0, input.max_values ?? 10);
+      return { values: world.upload(files) };
+    }
+    default:
+      throw new Error(
+        `discordjs-test-kit: ${at} is a component of type ${input.type}, which forms don't model yet`,
+      );
+  }
+}
+
 function modalFields(modal: Modal): { label: string; input: any }[] {
   return (modal.components as any[]).flatMap((top) => {
     if (top.type === ComponentType.Label)
