@@ -16,6 +16,7 @@ import {
   type APIUser,
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
+import { messageLimitError } from "./limits.js";
 import {
   ALL_PERMISSIONS,
   computePermissions,
@@ -966,6 +967,8 @@ export class DiscordMock {
         if (denied) return denied;
         if (replyTo && !this.messagesIn(channel).some((m) => m.id === replyTo))
           return rest.gap(`reply to unknown message ${replyTo}`);
+        const overLimit = messageLimitError(req.body);
+        if (overLimit) return overLimit;
         const message = state.createMessage({
           channelId: channel.id,
           authorId: state.bot.id,
@@ -1022,6 +1025,8 @@ export class DiscordMock {
             50005,
             "Cannot edit a message authored by another user",
           );
+        const overLimit = messageLimitError(req.body);
+        if (overLimit) return overLimit;
         const updated = state.updateMessage(
           message.channel_id,
           message.id,
@@ -1250,6 +1255,8 @@ export class DiscordMock {
         type: InteractionResponseType;
         data?: any;
       };
+      const overLimit = messageLimitError(data);
+      if (overLimit) return overLimit;
       const ephemeral = !!((data?.flags ?? 0) & MessageFlags.Ephemeral);
       run.responseType = type;
       switch (type) {
@@ -1324,6 +1331,8 @@ export class DiscordMock {
     rest.route("PATCH", "/webhooks/:appId/:token/messages/@original", (req) => {
       const run = runFor(req);
       if (!run || run.state === "pending") return respond.unknownWebhook();
+      const overLimit = messageLimitError(req.body);
+      if (overLimit) return overLimit;
       const original = run.original;
       if (!original) return respond.unknownMessage();
       const updated = state.updateMessage(run.channelId, original.id, {
@@ -1346,6 +1355,8 @@ export class DiscordMock {
     rest.route("POST", "/webhooks/:appId/:token", (req) => {
       const run = runFor(req);
       if (!run || run.state === "pending") return respond.unknownWebhook();
+      const overLimit = messageLimitError(req.body);
+      if (overLimit) return overLimit;
       // Discord's docs (discord-api-docs, Create Followup Message): right after a
       // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, a followup edits the loading message instead of
       // creating one, and the ephemeral flag is ignored.
@@ -1512,6 +1523,37 @@ function buildOptions(
       throw new Error(
         `discordjs-test-kit: /${command} option "${opt.name}" must be one of: ${choices.map((c) => c.name).join(", ")}`,
       );
+    }
+    // discord-api-docs interactions/application-commands, option structure: min/max_value and
+    // min/max_length bound what a user can submit. The Discord app enforces them before sending
+    // ("client-side only"), so the Actor refuses what the app would.
+    const bound = (key: string) =>
+      key in opt
+        ? (opt as unknown as Record<string, number | undefined>)[key]
+        : undefined;
+    const tooSmall = bound("min_value"),
+      tooBig = bound("max_value");
+    if (typeof value === "number") {
+      if (tooSmall !== undefined && value < tooSmall)
+        throw new Error(
+          `discordjs-test-kit: /${command} option "${opt.name}" must be at least ${tooSmall}`,
+        );
+      if (tooBig !== undefined && value > tooBig)
+        throw new Error(
+          `discordjs-test-kit: /${command} option "${opt.name}" must be at most ${tooBig}`,
+        );
+    }
+    const minLength = bound("min_length"),
+      maxLength = bound("max_length");
+    if (typeof value === "string") {
+      if (minLength !== undefined && value.length < minLength)
+        throw new Error(
+          `discordjs-test-kit: /${command} option "${opt.name}" must be at least ${minLength} characters`,
+        );
+      if (maxLength !== undefined && value.length > maxLength)
+        throw new Error(
+          `discordjs-test-kit: /${command} option "${opt.name}" must be at most ${maxLength} characters`,
+        );
     }
     return [{ name: opt.name, type: opt.type, value }];
   });
