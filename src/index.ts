@@ -259,6 +259,42 @@ class Discord {
     this.mock.archiveThread(this.mock.state.requireChannel(thread.id));
   }
 
+  /**
+   * Waits for a thread in `channel` whose name contains `name` (or matches it when it's a RegExp):
+   * one the bot started, from a message or not. Resolves with the newest match; rejects after 2
+   * seconds, naming the threads there.
+   * @example const ticket = await discord.findThread(supportChannel, "ticket-alice");
+   */
+  async findThread(
+    channel: TextChannel,
+    name: string | RegExp,
+  ): Promise<Thread> {
+    const state = this.mock.state;
+    const threads = () =>
+      [...state.channels.values()].filter(
+        (c) =>
+          "parent_id" in c &&
+          c.parent_id === channel.id &&
+          "thread_metadata" in c,
+      );
+    const wanted = (c: { name?: string | null }) =>
+      matches(c.name ?? "", name, { partial: true });
+    const found =
+      threads().findLast(wanted) ??
+      (await this.mock
+        .waitForThread((t) => threads().includes(t) && wanted(t), {
+          timeoutMs: FIND_TIMEOUT_MS,
+        })
+        .catch(() => undefined));
+    if (!found) {
+      const names = threads().map((t) => `"${t.name}"`);
+      throw new Error(
+        `discordjs-test-kit: no thread in #${channel.name} matched ${quote(name)} within ${FIND_TIMEOUT_MS / 1000}s. ${names.length ? `Threads there: ${names.join(", ")}` : "It has no threads"}`,
+      );
+    }
+    return handle(found.id, found.name ?? "");
+  }
+
   /** Every message in `channel`, oldest first. To wait for one, use `find`. */
   messages(channel: TextChannel | Thread): Message[] {
     return this.mock.messagesIn(channel.id);

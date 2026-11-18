@@ -2,12 +2,18 @@ import { once } from "node:events";
 import {
   ChannelType,
   Client,
+  DiscordAPIError,
   Events,
   GatewayIntentBits,
+  MessageFlags,
+  Routes,
   type ForumChannel,
+  type TextChannel,
 } from "discord.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { createDiscord } from "../src/index.js";
 import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
+import { Permission } from "../src/internal/payloads.js";
 
 let mock: DiscordMock;
 let client: Client;
@@ -51,4 +57,127 @@ it("moves an archived forum post from the active list to the archived one", asyn
   const archived = await channel.threads.fetchArchived({ type: "public" });
   expect([...archived.threads.keys()]).toEqual([thread.id]);
   mock.assertNoUnhandledRequests();
+});
+
+async function startInText(botPermissions: bigint) {
+  const guild = mock.createGuild("help");
+  const general = mock.createTextChannel(guild, "general");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  const bob = mock.createUser("bob");
+  mock.addMember(guild, bob);
+  mock.grantBot(botPermissions);
+  client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+    ...mock.clientOptions,
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  const channel = client.channels.cache.get(general.id) as TextChannel;
+  return { general, channel, alice, bob };
+}
+
+const SEND = Permission.ViewChannel | Permission.SendMessages;
+
+it("starts a thread from a message, with the message's id, and refuses a second one", async () => {
+  const { general, channel, alice } = await startInText(
+    SEND | Permission.CreatePublicThreads | Permission.SendMessagesInThreads,
+  );
+  const posted = mock.as(alice).sendMessage(general, "help me");
+  const message = await channel.messages.fetch(posted.id);
+  const created = once(client, Events.ThreadCreate);
+
+  const thread = await message.startThread({ name: "alice's question" });
+
+  expect(thread.id).toBe(posted.id);
+  expect(thread.type).toBe(ChannelType.PublicThread);
+  expect((await created)[1]).toBe(true);
+  expect(posted.flags! & MessageFlags.HasThread).toBe(MessageFlags.HasThread);
+  const again = await client.rest
+    .post(Routes.threads(general.id, posted.id), { body: { name: "again" } })
+    .catch((e: unknown) => e);
+  expect(again).toMatchObject({ code: 160004 });
+});
+
+it("refuses a thread to a bot without Create Public Threads", async () => {
+  const { general, channel, alice } = await startInText(SEND);
+  const posted = mock.as(alice).sendMessage(general, "help me");
+  const message = await channel.messages.fetch(posted.id);
+
+  const error = await message
+    .startThread({ name: "nope" })
+    .catch((e: unknown) => e);
+
+  expect(error).toBeInstanceOf(DiscordAPIError);
+  expect(error).toMatchObject({ code: 50013 });
+});
+
+it("opens a private thread, lets in only the members the bot adds, then archives and locks it", async () => {
+  const { channel, alice, bob } = await startInText(
+    SEND |
+      Permission.CreatePrivateThreads |
+      Permission.SendMessagesInThreads |
+      Permission.ManageThreads,
+  );
+
+  const ticket = await channel.threads.create({
+    name: "ticket-alice",
+    type: ChannelType.PrivateThread,
+  });
+  await ticket.members.add(alice.id);
+
+  expect(ticket.type).toBe(ChannelType.PrivateThread);
+  const record = mock.state.requireChannel(ticket.id);
+  expect(mock.as(alice).sendMessage(record, "hi").content).toBe("hi");
+  expect(() => mock.as(bob).sendMessage(record, "let me in")).toThrow(
+    'bob isn\'t in the private thread "ticket-alice"',
+  );
+  expect((await ticket.members.fetch()).map((m) => m.id).sort()).toEqual(
+    [client.user!.id, alice.id].sort(),
+  );
+  await ticket.edit({ archived: true, locked: true });
+  expect(record).toMatchObject({
+    thread_metadata: { archived: true, locked: true },
+  });
+  expect(
+    await ticket.members.add(bob.id).catch((e: unknown) => e),
+  ).toMatchObject({ code: 50083 });
+});
+
+it("finds the thread the bot started, and the bot's message in it", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("help");
+  const helpChannel = discord.channel(server, "help");
+  const alice = discord.member(server, "alice");
+  const bot = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+    ...discord.clientOptions,
+  });
+  bot.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot) return;
+    const thread = await message.startThread({
+      name: `help for ${message.author.username}`,
+    });
+    await thread.send("How can I help?");
+  });
+  await discord.start(bot, {
+    permissions:
+      Permission.CreatePublicThreads | Permission.SendMessagesInThreads,
+  });
+
+  alice.post(helpChannel, { content: "my bot won't start" });
+  const thread = await discord.findThread(helpChannel, "help for alice");
+
+  expect((await discord.find(thread, "How can I help?")).channel_id).toBe(
+    thread.id,
+  );
 });

@@ -34,11 +34,14 @@ export interface GuildRecord {
 export class DiscordState extends EventEmitter<{
   messageCreate: [APIMessage];
   messageUpdate: [APIMessage];
+  threadCreate: [APIChannel];
 }> {
   readonly users = new Map<string, APIUser>();
   readonly guilds = new Map<string, GuildRecord>();
   readonly channels = new Map<string, APIChannel>();
   readonly messages = new Map<string, APIMessage[]>();
+  /** Thread id to its members' join timestamps, by user id. */
+  private readonly threadMemberIds = new Map<string, Map<string, string>>();
   /** Bytes behind each attachment url, keyed by attachment id. */
   readonly files = new Map<string, { data: Uint8Array; contentType: string }>();
   /** Base for attachment urls; set when the server listens. */
@@ -248,14 +251,19 @@ export class DiscordState extends EventEmitter<{
     name: string;
     ownerId: string;
     archived?: boolean;
+    /** A thread started from a message takes the message's id. */
+    id?: string;
+    type?: ChannelType;
+    autoArchiveDuration?: number;
+    invitable?: boolean;
   }): APIChannel {
     const parent = this.requireChannel(input.parentId);
     if (!("guild_id" in parent) || !parent.guild_id)
       throw new Error("discordjs-test-kit: threads live in guild channels");
     const now = new Date().toISOString();
     const thread = {
-      id: snowflake(),
-      type: ChannelType.PublicThread,
+      id: input.id ?? snowflake(),
+      type: input.type ?? ChannelType.PublicThread,
       guild_id: parent.guild_id,
       parent_id: parent.id,
       owner_id: input.ownerId,
@@ -268,15 +276,61 @@ export class DiscordState extends EventEmitter<{
       flags: 0 as ChannelFlags,
       thread_metadata: {
         archived: !!input.archived,
-        auto_archive_duration: 4320,
+        // docs.discord.food/resources/channel#start-thread-from-message: default 4320.
+        auto_archive_duration: input.autoArchiveDuration ?? 4320,
         archive_timestamp: now,
         locked: false,
         create_timestamp: now,
+        ...(input.invitable === undefined
+          ? {}
+          : { invitable: input.invitable }),
       },
     } as unknown as APIChannel;
     this.channels.set(thread.id, thread);
     this.messages.set(thread.id, []);
+    this.threadMemberIds.set(thread.id, new Map());
+    this.addThreadMember(thread.id, input.ownerId);
+    this.emit("threadCreate", thread);
     return thread;
+  }
+
+  /** True when `userId` wasn't in the thread yet. */
+  addThreadMember(threadId: string, userId: string): boolean {
+    const members = this.threadMemberIds.get(threadId)!;
+    if (members.has(userId)) return false;
+    members.set(userId, new Date().toISOString());
+    this.syncMemberCount(threadId);
+    return true;
+  }
+
+  /** True when `userId` was in the thread. */
+  removeThreadMember(threadId: string, userId: string): boolean {
+    const removed = this.threadMemberIds.get(threadId)!.delete(userId);
+    this.syncMemberCount(threadId);
+    return removed;
+  }
+
+  /** resources/channel#thread-member-object: id, user_id, join_timestamp, flags. */
+  threadMember(threadId: string, userId: string) {
+    const joined = this.threadMemberIds.get(threadId)?.get(userId);
+    return joined === undefined
+      ? undefined
+      : { id: threadId, user_id: userId, join_timestamp: joined, flags: 0 };
+  }
+
+  threadMembers(threadId: string) {
+    return [...(this.threadMemberIds.get(threadId)?.keys() ?? [])].map(
+      (userId) => this.threadMember(threadId, userId)!,
+    );
+  }
+
+  // resources/channel#channel-object: member_count "stops counting at 50".
+  private syncMemberCount(threadId: string) {
+    const thread = this.requireChannel(threadId) as { member_count?: number };
+    thread.member_count = Math.min(
+      50,
+      this.threadMemberIds.get(threadId)!.size,
+    );
   }
 
   /** The DM channel between the bot and `userId`, created on first use. */

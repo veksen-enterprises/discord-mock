@@ -59,6 +59,13 @@ export async function runScenarios(
       `/channels/${channelId}/messages?limit=10`,
     );
     if (messageId) {
+      // The test bot isn't invited with CREATE_PUBLIC_THREADS, so this checks the inferred
+      // permission behind Start Thread from Message.
+      out.startThreadWithoutPermission = await call(
+        "POST",
+        `/channels/${channelId}/messages/${messageId}/threads`,
+        { name: "contract thread" },
+      );
       out.editMessage = await call(
         "PATCH",
         `/channels/${channelId}/messages/${messageId}`,

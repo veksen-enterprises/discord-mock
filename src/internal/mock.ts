@@ -29,6 +29,7 @@ import {
 import { RestRouter, respond, type RestHandler } from "./rest.js";
 import { snowflake } from "./snowflake.js";
 import { DiscordState, type GuildRecord } from "./state.js";
+import { registerThreadRoutes } from "./threads.js";
 
 export { respond } from "./rest.js";
 export type { RestHandler, RestRequest, RestResponse } from "./rest.js";
@@ -446,27 +447,46 @@ export class DiscordMock {
     predicate: (m: APIMessage) => boolean,
     opts: { timeoutMs?: number } = {},
   ): Promise<APIMessage> {
+    return this.waitForState(
+      ["messageCreate", "messageUpdate"],
+      predicate,
+      opts.timeoutMs,
+    );
+  }
+
+  /** Resolves with the first thread created from now on that `predicate` accepts. */
+  waitForThread(
+    predicate: (thread: APIChannel) => boolean,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<APIChannel> {
+    return this.waitForState(["threadCreate"], predicate, opts.timeoutMs);
+  }
+
+  private waitForState<T extends APIMessage | APIChannel>(
+    events: ("messageCreate" | "messageUpdate" | "threadCreate")[],
+    predicate: (value: T) => boolean,
+    timeoutMs = 2_000,
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
-      const onMessage = (m: APIMessage) => {
-        if (!predicate(m)) return;
+      const listener = (value: T) => {
+        if (!predicate(value)) return;
         cleanup();
-        resolve(m);
+        resolve(value);
       };
       const timer = realSetTimeout(() => {
         cleanup();
-        reject(
-          new Error(
-            `discordjs-test-kit: no matching message within ${opts.timeoutMs ?? 2_000}ms`,
-          ),
-        );
-      }, opts.timeoutMs ?? 2_000);
+        reject(new Error(`discordjs-test-kit: no match within ${timeoutMs}ms`));
+      }, timeoutMs);
+      const on = this.state.on.bind(this.state) as (
+        event: string,
+        fn: (value: T) => void,
+      ) => void;
+      const off = this.state.off.bind(this.state) as typeof on;
       const cleanup = () => {
         realClearTimeout(timer);
-        this.state.off("messageCreate", onMessage);
-        this.state.off("messageUpdate", onMessage);
+        for (const event of events) off(event, listener);
       };
-      this.state.on("messageCreate", onMessage);
-      this.state.on("messageUpdate", onMessage);
+      for (const event of events) on(event, listener);
     });
   }
 
@@ -912,6 +932,18 @@ export class DiscordMock {
     if (!member)
       throw new Error(
         `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
+      );
+    // topics/threads: a private thread is visible only to its members and to MANAGE_THREADS.
+    if (
+      channel.type === ChannelType.PrivateThread &&
+      !this.state.threadMember(channel.id, user.id) &&
+      !(
+        computePermissions(this.state, guild, user.id, channel) &
+        Permission.ManageThreads
+      )
+    )
+      throw new Error(
+        `discordjs-test-kit: ${user.username} isn't in the private thread "${(channel as { name?: string }).name}"; the bot adds them with thread.members.add`,
       );
     return { guild, member };
   }
@@ -1595,6 +1627,7 @@ export class DiscordMock {
       return respond.json(message);
     });
     registerMemberRoutes(this, authed);
+    registerThreadRoutes(this, authed);
   }
 
   /** VIEW_CHANNEL first: without it "other channel permissions are effectively ignored" (docs.discord.food/topics/permissions). */

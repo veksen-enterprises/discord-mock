@@ -58,6 +58,7 @@ it("should record the result when the winner reports", async () => {
 | use an app from a context menu      | `await alice.runApp(channel, bob, "View Profile")` (or a message for a message app)                                               |
 | press a button                      | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                             |
 | fill the form (modal) the bot opens | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                           |
+| reach a thread the bot started      | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`     |
 | pick from a select menu             | `await alice.select(message, "5-2")`                                                                                              |
 | post, open a forum post, react      | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |
 | DM the bot                          | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                 |

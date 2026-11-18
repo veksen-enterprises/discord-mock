@@ -46,12 +46,16 @@ describe("scenarios against the mock", () => {
       createChannel: 201,
       sendMessage: 200,
       listMessages: 200,
+      startThreadWithoutPermission: 403,
       editMessage: 200,
       denySendMessages: 204,
       sendWithoutPermission: 403,
       deleteChannel: 200,
     });
     expect(responses.sendWithoutPermission!.body).toMatchObject({
+      code: 50013,
+    });
+    expect(responses.startThreadWithoutPermission!.body).toMatchObject({
       code: 50013,
     });
   });
