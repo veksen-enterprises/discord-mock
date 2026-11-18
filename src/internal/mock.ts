@@ -312,6 +312,10 @@ export class DiscordMock {
 
   createGuild(name: string, opts: { ownerId?: string } = {}) {
     const guild = this.state.createGuild({ name, ownerId: opts.ownerId });
+    // A guild built after grantBot added the bot through the same invite link, so the bot gets the
+    // same role there (topics/oauth2#bot-authorization-flow: the permissions are granted on join).
+    if (this.invitePermissions !== undefined)
+      this.createRole(guild, "bot", this.invitePermissions, [this.state.bot]);
     this.gateway.announceGuild(guild);
     return guild;
   }
@@ -575,8 +579,12 @@ export class DiscordMock {
     return role;
   }
 
-  /** What the bot's invite link grants: a "bot" role with `permissions` in every guild built so far. */
+  /** What the bot's invite link grants, by every grantBot so far: guilds built later get it too. */
+  private invitePermissions?: bigint;
+
+  /** What the bot's invite link grants: a "bot" role with `permissions` in every guild, built or to come. */
   grantBot(permissions: bigint) {
+    this.invitePermissions = (this.invitePermissions ?? 0n) | permissions;
     for (const guild of this.state.guilds.values())
       this.createRole(guild, "bot", permissions, [this.state.bot]);
   }

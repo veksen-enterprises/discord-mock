@@ -498,3 +498,19 @@ it("tells a bot that logs expressions about a moderator's new emoji, which a mem
 
   expect(heard).toEqual(["pog", "poggers"]);
 });
+
+it("gives the bot its invite permissions in a server built after start", async () => {
+  const discord = await createDiscord();
+  discord.guild("first");
+  const { client } = createBot(discord.clientOptions);
+  await discord.start(client, { permissions: Permission.ManageGuild });
+
+  const later = discord.guild("later");
+  await vi.waitFor(() => expect(client.guilds.cache.has(later.id)).toBe(true));
+
+  expect(
+    client.guilds.cache
+      .get(later.id)!
+      .members.me!.permissions.has(Permission.ManageGuild),
+  ).toBe(true);
+});

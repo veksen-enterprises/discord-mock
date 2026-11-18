@@ -430,7 +430,7 @@ class Discord {
    * `commands` the way a deploy script would. The client is destroyed when the test ends.
    *
    * `permissions` are what the bot's invite link grants: the bot gets a role with them in every
-   * guild built before `start`. Without it, or in a guild built later, it has only @everyone's.
+   * guild, including one built after `start`. Without it, it has only @everyone's.
    * @example await discord.start(bot.client, { commands, permissions: Permission.SendMessages });
    */
   async start(
