@@ -161,6 +161,15 @@ export class Discord {
     return this.mock.as(this.u(member)).clickButton(message, customId).reply();
   }
 
+  /** `member` picks the option labelled `label` from a select menu on `message`. Resolves with the visible response. */
+  select(
+    member: Member,
+    message: Message,
+    label: string | RegExp,
+  ): Promise<Message> {
+    return this.mock.as(this.u(member)).selectOption(message, label).reply();
+  }
+
   /** Answer every `method path` request with `response` instead of the Model, e.g. a 503. */
   fail(method: string, path: string, response: RestResponse) {
     this.mock.use(method, path, () => response);
