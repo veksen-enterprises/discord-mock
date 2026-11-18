@@ -204,6 +204,7 @@ export async function runScenarios(
     out.botVoiceState = await call("GET", `${guild}/voice-states/@me`);
     out.listScheduledEvents = await call("GET", `${guild}/scheduled-events`);
     out.listEmojis = await call("GET", `${guild}/emojis`);
+    out.listAutoModRules = await call("GET", `${guild}/auto-moderation/rules`);
     out.unknownEmoji = await call("GET", `${guild}/emojis/1`);
     out.listStickers = await call("GET", `${guild}/stickers`);
     out.unknownScheduledEvent = await call(
