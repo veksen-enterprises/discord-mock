@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased (0.2.0)
+
+Breaking: every name now says what the method does, what it returns and whether it waits. Methods that wait for the bot start with `waitFor`. Rename your calls with this table; nothing else in a test changes.
+
+| 0.1                                    | 0.2                                                                                                |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `discord.find(channel, text)`          | `discord.waitForMessage(channel, text)`                                                            |
+| `discord.find(member, text)`           | `discord.waitForDM(member, text)`                                                                  |
+| `discord.findThread(channel, name)`    | `discord.waitForThread(channel, name)`                                                             |
+| `discord.thread(channel, message)`     | `discord.waitForThreadFrom(message)`                                                               |
+| `discord.hearBot(channel)`             | `discord.waitForSound(channel)`                                                                    |
+| `discord.idle()`                       | `discord.waitForIdle()`                                                                            |
+| `member.run(…)`                        | `member.runCommand(…)`                                                                             |
+| `member.runApp(channel, target, name)` | `member.runUserCommand(channel, name, member)`, `member.runMessageCommand(channel, name, message)` |
+| `member.autocomplete(…)`               | `member.typeInOption(…)`                                                                           |
+| `member.edit(…)`, `member.delete(…)`   | `member.editMessage(…)`, `member.deleteMessage(…)`                                                 |
+| `member.nickname(…)`                   | `member.setNickname(…)`                                                                            |
+| `member.displayName(…)`                | `member.setDisplayName(…)`                                                                         |
+| `member.leave()`                       | `member.leaveGuild()`                                                                              |
+| `member.invite(…)`                     | `member.createInvite(…)`                                                                           |
+| `member.forumPost(…)`                  | `member.postInForum(…)`                                                                            |
+| `discord.lock(thread)`                 | `member.lockThread(thread)`, which needs Manage Threads                                            |
+| `discord.deny(channel, permission)`    | `discord.deny(channel, "bot", permission)`; the same for `allow`                                   |
+| `discord.archive(thread)`              | `discord.autoArchive(thread)`                                                                      |
+| `discord.outage(guild)`                | `discord.startOutage(guild)`                                                                       |
+| `discord.commandPermissions(…)`        | `discord.setCommandPermissions(…)`                                                                 |
+| `discord.fail(…)`                      | `discord.answerWith(…)`                                                                            |
+| `discord.channel(…)`                   | `discord.textChannel(…)`                                                                           |
+| `discord.close()`                      | Removed: the server closes when the test ends                                                      |
+
 ## 0.1.1
 
 Docs only; the code is unchanged.
