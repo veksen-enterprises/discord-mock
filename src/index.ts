@@ -662,6 +662,40 @@ class Discord {
   }
 
   /**
+   * The thread the bot started from `message` in `channel`, once it starts it: waits up to 2
+   * seconds. A thread started from a message shares its id, so this finds it whatever its name.
+   * @example const thread = await discord.thread(helpChannel, alice.post(helpChannel, { content: "help?" }));
+   */
+  async thread<G extends string>(
+    channel: TextChannel<G>,
+    message: Message,
+  ): Promise<Thread<G>> {
+    if (message.channel_id !== channel.id)
+      throw new Error(
+        `discordjs-test-kit: ${shown(message)} isn't in #${channel.name}`,
+      );
+    const started = () => {
+      const thread = this.mock.state.channels.get(message.id);
+      return thread && "thread_metadata" in thread
+        ? handle<Thread<G>>(thread.id, thread.name ?? "")
+        : undefined;
+    };
+    const now = started();
+    if (now) return now;
+    try {
+      await this.mock.waitForMessage(
+        (m) => m.id === message.id && !!started(),
+        { timeoutMs: FIND_TIMEOUT_MS },
+      );
+    } catch {
+      throw new Error(
+        `discordjs-test-kit: the bot started no thread from ${shown(message)} in #${channel.name} within ${FIND_TIMEOUT_MS / 1000}s`,
+      );
+    }
+    return started()!;
+  }
+
+  /**
    * Waits for a thread in `channel` whose name contains `name` (or matches it when it's a RegExp):
    * one the bot started, from a message or not. Resolves with the newest match; rejects after 2
    * seconds, naming the threads there.

@@ -175,3 +175,37 @@ it("locks a thread without archiving it", async () => {
   const [, after] = await updated;
   expect(after).toMatchObject({ locked: true, archived: false });
 });
+
+it("gets the thread the bot started from a message, whatever it named it", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("help");
+  const questions = discord.channel(server, "questions");
+  const alice = discord.member(server, "alice");
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+    ...discord.clientOptions,
+  });
+  client.on(Events.MessageCreate, async (message) => {
+    if (!message.author.bot) await message.startThread({ name: "Ticket #1" });
+  });
+  await discord.start(client, {
+    permissions:
+      Permission.ViewChannel |
+      Permission.SendMessages |
+      Permission.CreatePublicThreads,
+  });
+
+  const post = alice.post(questions, { content: "my order is late" });
+  const thread = await discord.thread(questions, post);
+  const unthreaded = discord.member(server, "bob", { bot: true });
+  const ignored = unthreaded.post(questions, { content: "bot post" });
+
+  expect(thread).toMatchObject({ id: post.id, name: "Ticket #1" });
+  await expect(discord.thread(questions, ignored)).rejects.toThrow(
+    "the bot started no thread from",
+  );
+});
