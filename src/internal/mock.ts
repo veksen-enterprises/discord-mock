@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
+  ApplicationCommandType,
   ApplicationCommandOptionType,
   ChannelType,
   ComponentType,
@@ -10,6 +11,7 @@ import {
   InteractionResponseType,
   InteractionType,
   MessageFlags,
+  type APIApplicationCommand,
   type APIApplicationCommandOption,
   type APIChannel,
   type APIMessage,
@@ -478,6 +480,12 @@ export class DiscordMock {
         name: string,
         options: Record<string, unknown> = {},
       ) => this.userRunsCommand(user, channel, name, options),
+      /** Picks the app `name` from the context menu of a member (or user) or a message in `channel`. */
+      contextMenu: (
+        channel: APIChannel,
+        target: APIUser | APIMessage,
+        name: string,
+      ) => this.userRunsContextMenu(user, channel, target, name),
       /** Presses the button labelled `label` (or showing that emoji, when it has no label). */
       clickButton: (message: APIMessage, label: string | RegExp) =>
         this.userClicksButton(user, message, label),
@@ -582,19 +590,13 @@ export class DiscordMock {
       );
     }
     const guild = guildId ? this.state.requireGuild(guildId) : undefined;
-    // Discord's docs, interactions/application-commands#permissions: default_member_permissions
-    // is what a member needs to use the command; "0" leaves only admins. Discord hides it from
-    // everyone else, so they can't run it at all.
-    if (guild && command.default_member_permissions != null) {
-      const needed = BigInt(command.default_member_permissions);
-      const has = computePermissions(this.state, guild, user.id, channel);
-      const allowed =
-        has === ALL_PERMISSIONS || (needed !== 0n && (has & needed) === needed);
-      if (!allowed)
-        throw new Error(
-          `discordjs-test-kit: ${user.username} can't use /${commandName}: it needs permissions ${needed}`,
-        );
-    }
+    this.requireCommandAllowed(
+      user,
+      channel,
+      guild,
+      command,
+      `/${commandName}`,
+    );
     const { options, leaf } = commandOptions(
       command.options ?? [],
       path,
@@ -611,6 +613,97 @@ export class DiscordMock {
         type: command.type,
         options,
         resolved: resolvedFor(this.state, leaf, input, guild, user.id),
+      },
+    );
+  }
+
+  // Discord's docs, interactions/application-commands#permissions: default_member_permissions
+  // is what a member needs to use the command; "0" leaves only admins. Discord hides it from
+  // everyone else, so they can't run it at all.
+  private requireCommandAllowed(
+    user: APIUser,
+    channel: APIChannel,
+    guild: GuildRecord | undefined,
+    command: APIApplicationCommand,
+    shownName: string,
+  ) {
+    if (!guild || command.default_member_permissions == null) return;
+    const needed = BigInt(command.default_member_permissions);
+    const has = computePermissions(this.state, guild, user.id, channel);
+    const allowed =
+      has === ALL_PERMISSIONS || (needed !== 0n && (has & needed) === needed);
+    if (!allowed)
+      throw new Error(
+        `discordjs-test-kit: ${user.username} can't use ${shownName}: it needs permissions ${needed}`,
+      );
+  }
+
+  // Discord's docs, interactions/application-commands#user-commands and #message-commands: a
+  // context-menu command is picked from the Apps menu of a user or a message. Its name keeps its
+  // case and spaces. The interaction carries target_id and `resolved` with the target: the user
+  // plus, in a guild, their partial member (no user, deaf or mute), or the full message.
+  // discord.js reads resolved.users / resolved.messages without a guard
+  // (ContextMenuCommandInteraction.resolveContextMenuOptions), so `resolved` is always sent.
+  private userRunsContextMenu(
+    user: APIUser,
+    channel: APIChannel,
+    target: APIUser | APIMessage,
+    name: string,
+  ) {
+    const isMessage = "channel_id" in target;
+    const type = isMessage
+      ? ApplicationCommandType.Message
+      : ApplicationCommandType.User;
+    const guildId = "guild_id" in channel ? channel.guild_id : undefined;
+    const command = this.state.findCommand(guildId, name, type);
+    if (!command) {
+      const kind = isMessage ? "message" : "user";
+      const registered = this.state
+        .commandsVisibleIn(guildId, type)
+        .map((c) => `"${c.name}"`);
+      throw new Error(
+        `discordjs-test-kit: the ${kind} app "${name}" isn't registered. ${registered.length ? `Registered ${kind} apps: ${registered.join(", ")}` : `The bot registered no ${kind} apps (commands of type ${type})`}`,
+      );
+    }
+    const guild = guildId ? this.state.requireGuild(guildId) : undefined;
+    this.requireCommandAllowed(user, channel, guild, command, `"${name}"`);
+    let resolved: Record<string, unknown>;
+    if (isMessage) {
+      if (target.channel_id !== channel.id)
+        throw new Error(
+          `discordjs-test-kit: ${shown(target)} isn't in #${(channel as { name?: string }).name ?? channel.id}`,
+        );
+      this.requireVisibleTo(user, target);
+      resolved = { messages: { [target.id]: target } };
+    } else {
+      // "A user must have permission to send text messages in the channel they invoke a user
+      // command in" (Discord's docs, #user-commands); Discord shows them "Permission Denied".
+      if (
+        guild &&
+        (computePermissions(this.state, guild, user.id, channel) &
+          Permission.SendMessages) ===
+          0n
+      )
+        throw new Error(
+          `discordjs-test-kit: ${user.username} can't use "${name}" in #${(channel as { name?: string }).name}: they can't send messages there, so Discord answers "Permission Denied"`,
+        );
+      const member = guild?.members.get(target.id);
+      const { user: _, deaf: _d, mute: _m, ...partial } = member ?? {};
+      resolved = {
+        users: { [target.id]: target },
+        ...(member ? { members: { [target.id]: partial } } : {}),
+      };
+    }
+    return this.dispatchInteraction(
+      user,
+      channel,
+      InteractionType.ApplicationCommand,
+      {
+        id: command.id,
+        name: command.name,
+        type,
+        target_id: target.id,
+        resolved,
       },
     );
   }

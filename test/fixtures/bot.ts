@@ -6,7 +6,9 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ApplicationCommandType,
   Client,
+  ContextMenuCommandBuilder,
   Events,
   GatewayIntentBits,
   Partials,
@@ -57,6 +59,12 @@ export const commands = [
     .setName("settings")
     .setDescription("Server settings, for whoever can manage the server")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new ContextMenuCommandBuilder()
+    .setName("View Nickname")
+    .setType(ApplicationCommandType.User),
+  new ContextMenuCommandBuilder()
+    .setName("Quote")
+    .setType(ApplicationCommandType.Message),
 ].map((c) => c.toJSON());
 
 export async function deployCommands(opts: {
@@ -99,6 +107,19 @@ export function createBot(
       if (interaction.isButton() && interaction.customId === "count") {
         const n = Number(interaction.message.content.split(" ")[1]) + 1;
         await interaction.update({ content: `count ${n}` });
+        return;
+      }
+      if (interaction.isUserContextMenuCommand()) {
+        const member = interaction.targetMember;
+        await interaction.reply(
+          member && "displayName" in member
+            ? `nickname ${member.displayName}`
+            : `user ${interaction.targetUser.username}`,
+        );
+        return;
+      }
+      if (interaction.isMessageContextMenuCommand()) {
+        await interaction.reply(`> ${interaction.targetMessage.content}`);
         return;
       }
       if (!interaction.isChatInputCommand()) return;

@@ -55,6 +55,7 @@ it("should record the result when the winner reports", async () => {
 | To…                                | Write                                                                                                                             |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | run a slash command                | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                     |
+| use an app from a context menu     | `await alice.runApp(channel, bob, "View Profile")` (or a message for a message app)                                               |
 | press a button                     | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                             |
 | pick from a select menu            | `await alice.select(message, "5-2")`                                                                                              |
 | post, open a forum post, react     | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |

@@ -168,3 +168,22 @@ it("refuses to let a member act in a server they aren't in, even when the types 
   ).toThrow("alice isn't a member of elsewhere");
   expect(message.reactions ?? []).toEqual([]);
 });
+
+it("runs a user app on a member and a message app on a message, from the Apps menu", async () => {
+  const { generalChannel, alice, bob } = await startBot();
+  const said = alice.post(generalChannel, { content: "gg" });
+
+  const nickname = await alice.runApp(generalChannel, bob, "View Nickname");
+  const quote = await bob.runApp(generalChannel, said, "Quote");
+
+  expect(nickname.content).toBe("nickname Bobby");
+  expect(quote.content).toBe("> gg");
+});
+
+it("names the registered apps of that kind when the app isn't one", async () => {
+  const { generalChannel, alice, bob } = await startBot();
+
+  await expect(alice.runApp(generalChannel, bob, "Quote")).rejects.toThrow(
+    'the user app "Quote" isn\'t registered. Registered user apps: "View Nickname"',
+  );
+});

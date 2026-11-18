@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import {
+  ApplicationCommandType,
   ChannelType,
   type APIApplicationCommand,
   type APIBan,
@@ -540,16 +541,23 @@ export class DiscordState extends EventEmitter<{
   findCommand(
     guildId: string | undefined,
     name: string,
+    type: ApplicationCommandType = ApplicationCommandType.ChatInput,
   ): APIApplicationCommand | undefined {
-    return this.commandsVisibleIn(guildId).find((c) => c.name === name);
+    return this.commandsVisibleIn(guildId, type).find((c) => c.name === name);
   }
 
-  /** The slash commands a user can type in `guildId` (or a DM): the guild's, then the global ones. */
-  commandsVisibleIn(guildId: string | undefined): APIApplicationCommand[] {
+  /**
+   * The commands of `type` a user can use in `guildId` (or a DM): the guild's, then the global
+   * ones. Names are unique per type and scope (Discord's docs, application-command-naming).
+   */
+  commandsVisibleIn(
+    guildId: string | undefined,
+    type: ApplicationCommandType = ApplicationCommandType.ChatInput,
+  ): APIApplicationCommand[] {
     return [
       ...((guildId && this.commands.get(guildId)?.values()) || []),
       ...(this.commands.get("global")?.values() ?? []),
-    ].filter((command) => command.type === 1);
+    ].filter((command) => command.type === type);
   }
 
   requireUser(id: string): APIUser {

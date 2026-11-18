@@ -73,6 +73,16 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     options?: Record<string, OptionValue<G>>,
   ): Promise<Message>;
   /**
+   * Picks the app `command` from the Apps menu of `target` (a member or a message) while in
+   * `channel`: a context-menu command, registered with type User or Message. Resolves with the reply.
+   * @example const card = await alice.runApp(general, bob, "View Profile");
+   */
+  runApp(
+    channel: TextChannel<G> | Thread<G>,
+    target: Member<G> | Message,
+    command: string,
+  ): Promise<Message>;
+  /**
    * Presses the button labelled `label` on `message` (or showing that emoji, when it has no label).
    * Resolves with the message visible afterwards: the same one when the bot updates it in place.
    * @example await alice.click(panel, "Join Ladder");
@@ -340,6 +350,23 @@ class MemberActor {
     );
     return this.actor()
       .slashCommand(this.mock.state.requireChannel(channel.id), command, values)
+      .reply();
+  }
+
+  async runApp(
+    channel: TextChannel | Thread,
+    target: Member | Message,
+    command: string,
+  ): Promise<Message> {
+    const state = this.mock.state;
+    return this.actor()
+      .contextMenu(
+        state.requireChannel(channel.id),
+        "channel_id" in target
+          ? state.requireMessage(target.channel_id, target.id)
+          : state.requireUser(target.id),
+        command,
+      )
       .reply();
   }
 
