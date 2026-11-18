@@ -3,13 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "description": "A fake Discord (REST + Gateway) that discord.js bots connect to in tests",
-  "homepage": "https://github.com/veksen-enterprises/discord-mock#readme",
+  "homepage": "https://github.com/veksen-enterprises/discordjs-test-kit#readme",
   "bugs": {
-    "url": "https://github.com/veksen-enterprises/discord-mock/issues"
+    "url": "https://github.com/veksen-enterprises/discordjs-test-kit/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/veksen-enterprises/discord-mock.git"
+    "url": "git+https://github.com/veksen-enterprises/discordjs-test-kit.git"
   },
   "files": [
     "dist",

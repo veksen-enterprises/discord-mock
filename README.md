@@ -22,7 +22,7 @@ expect(reportMenu.embeds.at(-1)?.title).toBe("Match Reported!");
 As a git dependency pinned to a commit; `prepare` builds it on install.
 
 ```sh
-npm install --save-dev "github:veksen-enterprises/discord-mock#<commit>"
+npm install --save-dev "github:veksen-enterprises/discordjs-test-kit#<commit>"
 ```
 
 Peers: `discord.js` `^14.26.4` and `vitest` `^4.1.2 || ^5.0.0`; CI runs both floors and the locked latest. Node 22 or 24.
