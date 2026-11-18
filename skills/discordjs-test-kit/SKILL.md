@@ -78,6 +78,8 @@ it("should record the result when the winner reports", async () => {
 | override who can use a command                   | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |
 | a moderator kicks or bans someone                | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                                              |
 | kick the bot from the server                     | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
+| a Discord outage                                 | `discord.outage(server)`, then `discord.endOutage(server)`: `guildUnavailable`, then `guildAvailable`                                               |
+| open and end a stage                             | `const hall = discord.stageChannel(server, "hall")`, `mod.startStage(hall, "Q&A")`, `mod.endStage(hall)`                                            |
 | rename the server                                | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                                            |
 | a bot that logs through a `WebhookClient`        | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                                             |
 | make Discord fail a route                        | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                                          |
