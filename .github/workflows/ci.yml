@@ -47,8 +47,17 @@ jobs:
 
   # The docs site has its own install so Astro never reaches the kit's. It still needs the kit's
   # node_modules: TypeDoc resolves discord.js's types from ../src when it builds the API reference.
+  # On main, once the kit's checks pass, the build goes to Cloudflare Pages by direct upload. The
+  # deploy waits for the SITE_URL repository variable, so it does nothing until Pages is set up
+  # (site/README.md).
   site:
+    needs: [check, test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      SITE_URL: ${{ vars.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,3 +72,10 @@ jobs:
         working-directory: site
       - run: npm run build
         working-directory: site
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.SITE_URL != ''
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site/dist --project-name=discordjs-test-kit --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
