@@ -6,7 +6,7 @@ import {
   registerCommands,
   type Store,
 } from "../../examples/ladder/bot.js";
-import { respond } from "../../src/index.js";
+import { respond } from "../../src/internal/mock.js";
 import { createDiscord } from "./index.js";
 
 const world = {

@@ -10,7 +10,7 @@ import {
   type DiscordMock,
   type RestResponse,
   type UserMessage,
-} from "../../src/index.js";
+} from "../../src/internal/mock.js";
 
 declare const kind: unique symbol;
 /** A guild in the World. */

@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import { Events, GatewayIntentBits, type Client } from "discord.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDiscordMock, type DiscordMock } from "../src/index.js";
+import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
 import { createBot, deployCommands } from "./fixtures/bot.js";
 
 let mock: DiscordMock;

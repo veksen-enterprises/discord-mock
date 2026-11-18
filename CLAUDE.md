@@ -36,11 +36,12 @@ npm run format:check  # oxfmt (check only)
 
 ## Layout
 
-- `src/index.ts` — `createDiscordMock`, world building, Actors, built-in Routes
-- `src/state.ts` — the Model
-- `src/rest.ts` — Route matching, Overrides, the Request log, `respond.*`
-- `src/gateway.ts` — Sessions, identify/resume, intent-filtered Dispatches
-- `src/payloads.ts` — permission computation, Gateway payload builders
+- `src/index.ts` — the public API (re-exports the core for now)
+- `src/internal/mock.ts` — `createDiscordMock`, world building, Actors, built-in Routes
+- `src/internal/state.ts` — the Model
+- `src/internal/rest.ts` — Route matching, Overrides, the Request log, `respond.*`
+- `src/internal/gateway.ts` — Sessions, identify/resume, intent-filtered Dispatches
+- `src/internal/payloads.ts` — permission computation, Gateway payload builders
 - `test/fixtures/bot.ts` — a small stock bot the tests drive
 - `contract/` — the same bot-triggered scenarios against the mock and the test guild,
   compared by status and shape; accepted differences in `baseline.json`. Runs nightly

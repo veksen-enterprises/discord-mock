@@ -1,7 +1,7 @@
 import { MessageFlags } from "discord.js";
 import { expect, it } from "vitest";
 import { commands, createBot, type Store } from "../../examples/ladder/bot.js";
-import { respond } from "../../src/index.js";
+import { respond } from "../../src/internal/mock.js";
 import { createDiscord } from "./index.js";
 
 async function ladderServer() {

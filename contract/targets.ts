@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { Client, Events, GatewayIntentBits } from "discord.js";
-import { createDiscordMock } from "../src/index.js";
+import { createDiscordMock } from "../src/internal/mock.js";
 
 /** What a scenario needs from either side: raw REST, a guild to work in, and the gateway traffic. */
 export interface Target {

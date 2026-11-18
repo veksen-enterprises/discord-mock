@@ -17,7 +17,7 @@ import {
   respond,
   type DiscordMock,
   type DiscordMockOptions,
-} from "../src/index.js";
+} from "../src/internal/mock.js";
 import { createBot, deployCommands } from "./fixtures/bot.js";
 
 let mock: DiscordMock;

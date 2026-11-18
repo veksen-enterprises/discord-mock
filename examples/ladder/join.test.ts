@@ -9,7 +9,7 @@ import {
   createDiscordMock,
   respond,
   type DiscordMock,
-} from "../../src/index.js";
+} from "../../src/internal/mock.js";
 import { createBot, registerCommands, type Store } from "./bot.js";
 
 let mock: DiscordMock;

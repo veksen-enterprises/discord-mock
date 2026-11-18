@@ -3,7 +3,7 @@ import {
   createDiscordMock,
   type DiscordMock,
   type RestResponse,
-} from "../../src/index.js";
+} from "../../src/internal/mock.js";
 
 /** Channels by name; `category` puts the channel in a category of that name. */
 type GuildSpec = { channels: Record<string, { category?: string }> };

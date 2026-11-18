@@ -5,7 +5,7 @@ import {
   createDiscordMock,
   type DiscordMock,
   type RestResponse,
-} from "../../src/index.js";
+} from "../../src/internal/mock.js";
 
 /**
  * A fake Discord you describe and drive by name, the way a user would talk about a server:

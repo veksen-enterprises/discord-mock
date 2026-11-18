@@ -6,7 +6,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createDiscordMock, type DiscordMock } from "../src/index.js";
+import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
 
 let mock: DiscordMock;
 let client: Client;
