@@ -45,6 +45,7 @@ import {
   interactionMember,
   Permission,
 } from "./payloads.js";
+import { pollFrom, registerPollRoutes, removeVote, vote } from "./polls.js";
 import {
   RestRouter,
   respond,
@@ -745,6 +746,17 @@ export class DiscordMock {
        */
       pickEntities: (message: APIMessage, ids: string[]) =>
         this.userPicksEntities(user, message, ids),
+      /** Votes for the answers labelled `labels` in `message`'s poll. */
+      vote: (message: APIMessage, labels: string[]) => {
+        this.requireVisibleTo(user, message);
+        this.requireMembership(
+          user,
+          this.state.requireChannel(message.channel_id),
+        );
+        vote(this, user, message, labels);
+      },
+      /** Takes back their vote in `message`'s poll. */
+      removeVote: (message: APIMessage) => removeVote(this, user, message),
     };
   }
 
@@ -1850,6 +1862,12 @@ export class DiscordMock {
             GatewayIntentBits.Guilds,
           );
         }
+        // resources/permissions: SEND_POLLS "Allows sending polls"; needed in guild channels
+        // (inferred: a DM has no permissions to check).
+        if (req.body?.poll && "guild_id" in channel && channel.guild_id) {
+          const noPolls = this.checkBotPerms(channel, Permission.SendPolls);
+          if (noPolls) return noPolls;
+        }
         const message = state.createMessage({
           channelId: channel.id,
           authorId: state.bot.id,
@@ -1857,6 +1875,7 @@ export class DiscordMock {
           embeds: req.body?.embeds,
           components: req.body?.components,
           flags: req.body?.flags,
+          poll: pollFrom(req.body?.poll),
           replyTo,
           pingReplied: req.body?.allowed_mentions?.replied_user ?? true,
         });
@@ -1913,7 +1932,8 @@ export class DiscordMock {
             50005,
             "Cannot edit a message authored by another user",
           );
-        const overLimit = messageLimitError(req.body);
+        const overLimit =
+          pollEditGap(rest, message, req.body) ?? messageLimitError(req.body);
         if (overLimit) return overLimit;
         const updated = state.updateMessage(
           message.channel_id,
@@ -2186,6 +2206,12 @@ export class DiscordMock {
         case InteractionResponseType.UpdateMessage: {
           if (!run.sourceMessageId)
             return rest.gap(`callback type 7 on a ${run.type} interaction`);
+          const pollGap = pollEditGap(
+            rest,
+            state.requireMessage(run.channelId, run.sourceMessageId),
+            data,
+          );
+          if (pollGap) return pollGap;
           const updated = state.updateMessage(
             run.channelId,
             run.sourceMessageId,
@@ -2248,6 +2274,8 @@ export class DiscordMock {
       if (overLimit) return overLimit;
       const original = run.original;
       if (!original) return respond.unknownMessage();
+      const pollGap = pollEditGap(rest, original, req.body);
+      if (pollGap) return pollGap;
       const updated = state.updateMessage(run.channelId, original.id, {
         ...pickMessageFields(req.body),
         flags: (original.flags ?? 0) & ~MessageFlags.Loading,
@@ -2303,7 +2331,8 @@ export class DiscordMock {
       (req) => {
         const { refused, run, message } = followupFor(req);
         if (refused) return refused;
-        const overLimit = messageLimitError(req.body);
+        const overLimit =
+          pollEditGap(rest, message, req.body) ?? messageLimitError(req.body);
         if (overLimit) return overLimit;
         const updated = state.updateMessage(
           message.channel_id,
@@ -2376,6 +2405,7 @@ export class DiscordMock {
     registerScheduledEventRoutes(this, authed);
     registerExpressionRoutes(this, authed);
     registerAutoModRoutes(this, authed);
+    registerPollRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 
@@ -2446,13 +2476,28 @@ function interactionMetadata(run: InteractionRun) {
   };
 }
 
+/**
+ * resources/poll: "After creation, the poll message cannot be edited", and the code table has
+ * 520003 "Cannot edit a poll message"; whether that covers an edit that leaves the poll alone (say,
+ * removing buttons) is unchecked, so editing a poll message is a Gap, as is adding a poll to a
+ * message that isn't a deferred reply still loading (that one becomes the reply, inferred).
+ */
+function pollEditGap(rest: RestRouter, message: APIMessage, body: any) {
+  if (message.poll) return rest.gap("editing a poll message");
+  if (body?.poll && !((message.flags ?? 0) & MessageFlags.Loading))
+    return rest.gap("adding a poll to a message in an edit");
+  return undefined;
+}
+
 function pickMessageFields(body: any) {
   if (!body) return {};
-  const out: Partial<Pick<APIMessage, "content" | "embeds" | "components">> =
-    {};
+  const out: Partial<
+    Pick<APIMessage, "content" | "embeds" | "components" | "poll">
+  > = {};
   if ("content" in body) out.content = body.content ?? "";
   if ("embeds" in body) out.embeds = body.embeds ?? [];
   if ("components" in body) out.components = body.components ?? [];
+  if (body.poll) out.poll = pollFrom(body.poll);
   return out;
 }
 

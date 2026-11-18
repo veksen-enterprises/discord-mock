@@ -195,6 +195,15 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /** Reacts to `message` with a unicode emoji. */
   react(message: Message, emoji: string): void;
   /**
+   * Votes in the poll on `message` for the answer labelled `answer`, or several where the poll
+   * allows it. The bot hears `messagePollVoteAdd` with GuildMessagePolls. Voting again needs `unvote`
+   * first, as in the Discord app.
+   * @example alice.vote(poll, "Pizza");
+   */
+  vote(message: Message, answer: string | string[]): void;
+  /** Takes back their vote; the bot hears `messagePollVoteRemove`. */
+  unvote(message: Message): void;
+  /**
    * Turns off DMs from server members, as a privacy setting: the bot's DMs to them fail with 50007.
    * @example alice.closeDMs(); await alice.run(general, "remind-me"); // the bot should say it can't DM
    */
@@ -727,6 +736,14 @@ class MemberActor {
 
   react(message: Message, emoji: string): void {
     this.actor().react(message, emoji);
+  }
+
+  vote(message: Message, answer: string | string[]): void {
+    this.actor().vote(message, [answer].flat());
+  }
+
+  unvote(message: Message): void {
+    this.actor().removeVote(message);
   }
 
   closeDMs(): void {

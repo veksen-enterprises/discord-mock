@@ -137,6 +137,11 @@ interface MessageBody {
   flags?: number;
   embeds?: Embed[] | null;
   components?: Component[] | null;
+  poll?: {
+    question?: { text?: string };
+    answers?: { poll_media?: { text?: string } }[];
+    duration?: number;
+  } | null;
 }
 interface Embed {
   title?: string;
@@ -199,6 +204,37 @@ function messageProblems(body: MessageBody | undefined): Problem[] {
       path: ["embeds"],
       message: "Embed size exceeds maximum size of 6000",
     });
+
+  // resources/poll: question text up to 300, "up to 10" answers of up to 55, duration "up to 32
+  // days" in hours. At least one answer and a duration of at least 1 are inferred; so is the poll
+  // being refused beside IS_COMPONENTS_V2 as message#create-message says.
+  if (body.poll) {
+    tooLong(["poll", "question", "text"], body.poll.question?.text, 300);
+    const answers = body.poll.answers ?? [];
+    if (answers.length < 1 || answers.length > 10)
+      problems.push({
+        path: ["poll", "answers"],
+        message: "Must be between 1 and 10 in length.",
+      });
+    answers.forEach((answer, i) =>
+      tooLong(
+        ["poll", "answers", i, "poll_media", "text"],
+        answer.poll_media?.text,
+        55,
+      ),
+    );
+    const hours = body.poll.duration ?? 24;
+    if (hours < 1 || hours > 32 * 24)
+      problems.push({
+        path: ["poll", "duration"],
+        message: "Must be between 1 and 768.",
+      });
+    if ((body.flags ?? 0) & MessageFlags.IsComponentsV2)
+      problems.push({
+        path: ["poll"],
+        message: "Cannot be used with the IS_COMPONENTS_V2 flag.",
+      });
+  }
 
   // Components V2 (components/reference): "Messages allow up to 40 total components", nested ones
   // and accessories counted (inferred); "the content and embeds fields will no longer work", which

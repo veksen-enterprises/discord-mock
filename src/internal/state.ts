@@ -97,6 +97,8 @@ export class DiscordState extends EventEmitter<{
   readonly webhooks = new Map<string, WebhookRecord>();
   /** Invites by code. */
   readonly invites = new Map<string, InviteRecord>();
+  /** Poll votes by message id, then user id: the answer ids they picked. */
+  readonly pollVotes = new Map<string, Map<string, number[]>>();
   /** AutoMod rules by id. */
   readonly autoModRules = new Map<string, APIAutoModerationRule>();
   /** Guild scheduled events by id. */
@@ -553,6 +555,7 @@ export class DiscordState extends EventEmitter<{
       originalResponseMessageId?: string;
     };
     webhookId?: string;
+    poll?: APIMessage["poll"];
   }): APIMessage {
     const channel = this.requireChannel(input.channelId);
     // No guild_id: Discord sends it on gateway dispatches only, not in REST message objects.
@@ -616,6 +619,7 @@ export class DiscordState extends EventEmitter<{
           }
         : {}),
       flags: input.flags ?? 0,
+      ...(input.poll ? { poll: input.poll } : {}),
       ...(input.webhookId ? { webhook_id: input.webhookId } : {}),
       ...(input.interaction
         ? {

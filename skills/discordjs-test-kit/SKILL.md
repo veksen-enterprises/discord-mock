@@ -64,6 +64,7 @@ it("should record the result when the winner reports", async () => {
 | pick from a select menu                   | `await alice.select(message, "5-2")`                                                                                                                |
 | pick members, roles or channels           | `await alice.select(setupPanel, [bob, discord.role(server, "mods")])`                                                                               |
 | post, open a forum post, react            | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content, tags: ["Bug"] })`, `alice.react(message, "✅")`                       |
+| vote in a poll, take the vote back        | `alice.vote(poll, "Pizza")`, `alice.unvote(poll)`                                                                                                   |
 | DM the bot                                | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                                   |
 | a member with permissions                 | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                                        |
 | someone joins through an invite           | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
