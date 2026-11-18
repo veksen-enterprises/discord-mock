@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   ApplicationCommandPermissionType,
+  AuditLogEvent,
   ApplicationCommandType,
   ApplicationCommandOptionType,
   ChannelType,
@@ -19,6 +20,7 @@ import {
   type APIMessage,
   type APIUser,
 } from "discord-api-types/v10";
+import { reasonOf, recordAudit, registerAuditLogRoutes } from "./audit.js";
 import {
   overridesFor,
   registerCommandPermissionRoutes,
@@ -32,7 +34,7 @@ import {
   messageLimitError,
   modalLimitError,
 } from "./limits.js";
-import { registerMemberRoutes } from "./members.js";
+import { banUser, kickMember, registerMemberRoutes } from "./members.js";
 import { registerMessageRoutes } from "./messages.js";
 import {
   ALL_PERMISSIONS,
@@ -464,6 +466,41 @@ export class DiscordMock {
       { guild_id: guild.id, user },
       GatewayIntentBits.GuildMembers,
     );
+  }
+
+  /**
+   * Moderator `executor` kicks or bans `target`, as from the Discord app: they need Kick or Ban
+   * Members, and their highest role above the target's unless they own the guild
+   * (topics/permissions#permission-hierarchy). The bot sees the member leave, the ban, and the audit
+   * log entry naming `executor`.
+   */
+  moderate(
+    guild: GuildRecord,
+    executor: APIUser,
+    target: APIUser,
+    action: "kick" | "ban",
+    reason?: string,
+  ) {
+    const needed =
+      action === "kick" ? Permission.KickMembers : Permission.BanMembers;
+    const highest = (id: string) =>
+      Math.max(
+        0,
+        ...(guild.members.get(id)?.roles ?? []).map(
+          (r) => guild.roles.get(r)?.position ?? 0,
+        ),
+      );
+    const allowed =
+      (computePermissions(this.state, guild, executor.id) & needed) !== 0n &&
+      target.id !== guild.ownerId &&
+      (executor.id === guild.ownerId ||
+        highest(executor.id) > highest(target.id));
+    if (!allowed)
+      throw new Error(
+        `discordjs-test-kit: ${executor.username} can't ${action} ${target.username}: it needs ${action === "kick" ? "Kick" : "Ban"} Members and a higher role`,
+      );
+    if (action === "kick") kickMember(this, guild, target, executor.id, reason);
+    else banUser(this, guild, target, executor.id, reason);
   }
 
   /**
@@ -1220,6 +1257,7 @@ export class DiscordMock {
     registerMessageRoutes(this, authed);
     registerCommandPermissionRoutes(this, authed);
     registerWebhookRoutes(this, authed);
+    registerAuditLogRoutes(this, authed);
 
     rest.route(
       "GET",
@@ -1749,11 +1787,22 @@ export class DiscordMock {
           (m) => m.id === req.params.messageId,
         );
         if (!message) return respond.unknownMessage();
-        if (message.author.id !== state.bot.id) {
+        const others = message.author.id !== state.bot.id;
+        if (others) {
           const denied = this.checkBotPerms(channel, Permission.ManageMessages);
           if (denied) return denied;
         }
         this.deleteMessage(message);
+        // Deleting someone else's message is a MESSAGE_DELETE audit log entry, its target the
+        // author; your own isn't logged. These entries merge on Discord: not modelled.
+        if (others && "guild_id" in channel && channel.guild_id)
+          recordAudit(this, state.requireGuild(channel.guild_id), {
+            action_type: AuditLogEvent.MessageDelete,
+            user_id: state.bot.id,
+            target_id: message.author.id,
+            options: { channel_id: channel.id, count: "1" },
+            reason: reasonOf(req),
+          });
         return respond.noContent();
       }),
     );

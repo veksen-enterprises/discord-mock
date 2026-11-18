@@ -173,6 +173,14 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   /** Leaves the guild. */
   leave(): void;
   /**
+   * Kicks `member` from the Discord app: needs Kick Members and a higher role. The bot sees them
+   * leave and, with View Audit Log, the audit log entry naming who did it.
+   * @example mod.kick(alice, "spam"); // a bot that logs kicks should name mod
+   */
+  kick(member: Member<G>, reason?: string): void;
+  /** Bans `member` from the Discord app: needs Ban Members and a higher role. Like `kick`. */
+  ban(member: Member<G>, reason?: string): void;
+  /**
    * Renames the guild, which needs Manage Server (the owner has it). The bot hears `guildUpdate`.
    * @example discord.owner(server).renameGuild("SIN 2"); // a bot that shows the guild name should follow
    */
@@ -643,6 +651,28 @@ class MemberActor {
     this.mock.removeMember(this.guild(), this.user());
   }
 
+  kick(member: Member, reason?: string): void {
+    this.markAction();
+    this.mock.moderate(
+      this.guild(),
+      this.user(),
+      this.userOf(member),
+      "kick",
+      reason,
+    );
+  }
+
+  ban(member: Member, reason?: string): void {
+    this.markAction();
+    this.mock.moderate(
+      this.guild(),
+      this.user(),
+      this.userOf(member),
+      "ban",
+      reason,
+    );
+  }
+
   invite(channel: TextChannel, options: { maxUses?: number } = {}): string {
     this.markAction();
     return createInvite(
@@ -688,6 +718,9 @@ class MemberActor {
   }
   private user() {
     return this.mock.state.requireUser(this.id);
+  }
+  private userOf(member: Member) {
+    return this.mock.state.requireUser(member.id);
   }
   private guild() {
     return this.mock.state.requireGuild(this.guildId);

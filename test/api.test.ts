@@ -384,3 +384,23 @@ it("lets an admin open an admin-only command to one member", async () => {
     "an override denies them",
   );
 });
+
+it("lets a moderator kick a member, which the audit log credits to them", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const mod = discord.member(server, "mod", {
+    permissions: Permission.KickMembers,
+  });
+  const alice = discord.member(server, "alice");
+  const { client } = createBot(discord.clientOptions);
+  await discord.start(client, {
+    commands,
+    permissions: Permission.ViewAuditLog,
+  });
+
+  expect(() => alice.kick(mod)).toThrow("Kick Members");
+  mod.kick(alice, "spam");
+
+  const log = await client.guilds.cache.get(server.id)!.fetchAuditLogs();
+  expect(log.entries.first()?.executor?.username).toBe("mod");
+});

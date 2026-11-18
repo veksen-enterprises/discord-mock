@@ -1,11 +1,15 @@
 import {
+  AuditLogEvent,
   ChannelType,
   GatewayDispatchEvents,
   GatewayIntentBits,
+  type APIAuditLogChange,
   type APIBan,
   type APIGuildMember,
   type APIRole,
+  type APIUser,
 } from "discord-api-types/v10";
+import { reasonOf, recordAudit } from "./audit.js";
 import type { DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
@@ -174,6 +178,17 @@ export function registerMemberRoutes(
           "Target user is not connected to voice",
         );
 
+      const memberChanges = (
+        ["nick", "communication_disabled_until", "mute", "deaf"] as const
+      )
+        .filter((key) => key in body && body[key] !== (member[key] ?? null))
+        .map((key) => change(key, member[key] ?? null, body[key] ?? null));
+      const roleChanges =
+        "roles" in body
+          ? roleDiff(guild, member.roles, (body.roles as string[] | null) ?? [])
+          : [];
+      const reason = reasonOf(req);
+
       if ("nick" in body) member.nick = (body.nick as string | null) || null;
       if ("roles" in body)
         member.roles = [...((body.roles as string[] | null) ?? [])];
@@ -185,6 +200,23 @@ export function registerMemberRoutes(
           channelId: target,
           mute: body.mute as boolean | undefined,
           deaf: body.deaf as boolean | undefined,
+        });
+      // A move or disconnect is MEMBER_MOVE or MEMBER_DISCONNECT, which merge; not recorded yet.
+      if (memberChanges.length > 0)
+        recordAudit(mock, guild, {
+          action_type: AuditLogEvent.MemberUpdate,
+          user_id: bot,
+          target_id: userId,
+          changes: memberChanges,
+          reason,
+        });
+      if (roleChanges.length > 0)
+        recordAudit(mock, guild, {
+          action_type: AuditLogEvent.MemberRoleUpdate,
+          user_id: bot,
+          target_id: userId,
+          changes: roleChanges,
+          reason,
         });
       announceUpdate(guild, member);
       return respond.json(member);
@@ -208,7 +240,16 @@ export function registerMemberRoutes(
       if (add && !had) member.roles.push(role.id);
       if (!add && had)
         member.roles = member.roles.filter((id) => id !== role.id);
-      if (add !== had) announceUpdate(guild, member);
+      if (add !== had) {
+        announceUpdate(guild, member);
+        recordAudit(mock, guild, {
+          action_type: AuditLogEvent.MemberRoleUpdate,
+          user_id: bot,
+          target_id: member.user.id,
+          changes: roleDiff(guild, add ? [] : [role.id], add ? [role.id] : []),
+          reason: reasonOf(req),
+        });
+      }
       return respond.noContent();
     });
   rest.route(
@@ -232,24 +273,10 @@ export function registerMemberRoutes(
       if (!guild.members.has(userId)) return unknownMember();
       if (!botHas(guild, Permission.KickMembers) || !outranks(guild, userId))
         return respond.missingPermissions();
-      mock.removeMember(guild, state.requireUser(userId));
+      kickMember(mock, guild, state.requireUser(userId), bot, reasonOf(req));
       return respond.noContent();
     }),
   );
-
-  // GUILD_BAN_ADD/REMOVE: GUILD_MODERATION intent, "only sent to bots with the BAN_MEMBERS or
-  // VIEW_AUDIT_LOG permission".
-  const announceBan = (guild: GuildRecord, t: string, ban: APIBan) => {
-    if (
-      botHas(guild, Permission.BanMembers) ||
-      botHas(guild, Permission.ViewAuditLog)
-    )
-      gateway.dispatch(
-        t,
-        { guild_id: guild.id, user: ban.user },
-        GatewayIntentBits.GuildModeration,
-      );
-  };
 
   rest.route(
     "PUT",
@@ -268,15 +295,7 @@ export function registerMemberRoutes(
       // Deleting the user's recent messages isn't modelled: say so rather than pretend.
       const seconds = Number(req.body?.delete_message_seconds ?? 0);
       if (seconds > 0) return rest.gap("ban with delete_message_seconds");
-      const ban: APIBan = {
-        user,
-        reason:
-          (req.headers["x-audit-log-reason"] as string | undefined) ?? null,
-      };
-      guild.bans.set(userId, ban);
-      // docs.discord.food: "Fires a Guild Ban Add and optionally a Guild Member Remove".
-      if (guild.members.has(userId)) mock.removeMember(guild, user);
-      announceBan(guild, GatewayDispatchEvents.GuildBanAdd, ban);
+      banUser(mock, guild, user, bot, reasonOf(req));
       return respond.noContent();
     }),
   );
@@ -292,7 +311,13 @@ export function registerMemberRoutes(
       const ban = guild.bans.get(req.params.userId!);
       if (!ban) return unknownBan();
       guild.bans.delete(req.params.userId!);
-      announceBan(guild, GatewayDispatchEvents.GuildBanRemove, ban);
+      announceBan(mock, guild, GatewayDispatchEvents.GuildBanRemove, ban);
+      recordAudit(mock, guild, {
+        action_type: AuditLogEvent.MemberBanRemove,
+        user_id: bot,
+        target_id: ban.user.id,
+        reason: reasonOf(req),
+      });
       return respond.noContent();
     }),
   );
@@ -451,4 +476,83 @@ export function registerMemberRoutes(
       return respond.noContent();
     }),
   );
+}
+
+const change = (key: string, oldValue: unknown, newValue: unknown) =>
+  ({
+    key,
+    // "If old_value isn't included, it indicated that the property was previously null", and a
+    // missing new_value means it was reset to null.
+    ...(oldValue === null ? {} : { old_value: oldValue }),
+    ...(newValue === null ? {} : { new_value: newValue }),
+  }) as APIAuditLogChange;
+
+/** MEMBER_ROLE_UPDATE's changes: `$add` and `$remove`, each with partial roles (id and name). */
+function roleDiff(guild: GuildRecord, before: string[], after: string[]) {
+  const partial = (ids: string[]) =>
+    ids.map((id) => ({ id, name: guild.roles.get(id)?.name ?? "" }));
+  const added = after.filter((id) => !before.includes(id));
+  const removed = before.filter((id) => !after.includes(id));
+  return [
+    ...(added.length ? [{ key: "$add", new_value: partial(added) }] : []),
+    ...(removed.length
+      ? [{ key: "$remove", new_value: partial(removed) }]
+      : []),
+  ] as APIAuditLogChange[];
+}
+
+/** GUILD_BAN_ADD/REMOVE: GUILD_MODERATION, "only sent to bots with the BAN_MEMBERS or VIEW_AUDIT_LOG permission". */
+function announceBan(
+  mock: DiscordMock,
+  guild: GuildRecord,
+  t: string,
+  ban: APIBan,
+) {
+  const perms = computePermissions(mock.state, guild, mock.state.bot.id);
+  if (perms & (Permission.BanMembers | Permission.ViewAuditLog))
+    mock.gateway.dispatch(
+      t,
+      { guild_id: guild.id, user: ban.user },
+      GatewayIntentBits.GuildModeration,
+    );
+}
+
+/** `executorId` kicks `user`: GUILD_MEMBER_REMOVE, and a MEMBER_KICK audit log entry. */
+export function kickMember(
+  mock: DiscordMock,
+  guild: GuildRecord,
+  user: APIUser,
+  executorId: string,
+  reason?: string,
+) {
+  mock.removeMember(guild, user);
+  recordAudit(mock, guild, {
+    action_type: AuditLogEvent.MemberKick,
+    user_id: executorId,
+    target_id: user.id,
+    reason,
+  });
+}
+
+/**
+ * `executorId` bans `user`. docs.discord.food: "Fires a Guild Ban Add and optionally a Guild
+ * Member Remove"; and a MEMBER_BAN_ADD audit log entry.
+ */
+export function banUser(
+  mock: DiscordMock,
+  guild: GuildRecord,
+  user: APIUser,
+  executorId: string,
+  reason?: string,
+) {
+  const ban: APIBan = { user, reason: reason ?? null };
+  guild.bans.set(user.id, ban);
+  if (guild.members.has(user.id)) mock.removeMember(guild, user);
+  announceBan(mock, guild, GatewayDispatchEvents.GuildBanAdd, ban);
+  recordAudit(mock, guild, {
+    action_type: AuditLogEvent.MemberBanAdd,
+    user_id: executorId,
+    target_id: user.id,
+    reason,
+  });
 }

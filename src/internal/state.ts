@@ -4,6 +4,7 @@ import {
   ChannelType,
   type APIApplicationCommand,
   type APIApplicationCommandPermission,
+  type APIAuditLogEntry,
   type APIBan,
   type ChannelFlags,
   type GuildMemberFlags,
@@ -82,6 +83,8 @@ export class DiscordState extends EventEmitter<{
     string,
     Map<string, APIApplicationCommandPermission[]>
   >();
+  /** Audit log entries by guild id, oldest first. */
+  readonly auditLog = new Map<string, APIAuditLogEntry[]>();
   /** Channel webhooks by id. */
   readonly webhooks = new Map<string, WebhookRecord>();
   /** Invites by code. */

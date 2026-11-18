@@ -1,10 +1,12 @@
 import {
+  AuditLogEvent,
   ChannelType,
   GatewayDispatchEvents,
   GatewayIntentBits,
   type APIChannel,
   type APIMessage,
 } from "discord-api-types/v10";
+import { reasonOf, recordAudit } from "./audit.js";
 import type { DiscordMock } from "./mock.js";
 import { Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
@@ -191,6 +193,14 @@ export function registerMessageRoutes(
         { ids: deleted, channel_id: channel.id, guild_id: guildId },
         GatewayIntentBits.GuildMessages,
       );
+      // MESSAGE_BULK_DELETE: target_id is the channel, count how many went (audit-log docs).
+      recordAudit(mock, state.requireGuild(guildId), {
+        action_type: AuditLogEvent.MessageBulkDelete,
+        user_id: state.bot.id,
+        target_id: channel.id,
+        options: { count: String(deleted.length) },
+        reason: reasonOf(req),
+      });
       return respond.noContent();
     }),
   );

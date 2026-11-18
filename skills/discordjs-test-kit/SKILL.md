@@ -70,6 +70,7 @@ it("should record the result when the winner reports", async () => {
 | change nickname, leave the server         | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | change their display name                 | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                      |
 | override who can use a command            | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                        |
+| a moderator kicks or bans someone         | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                            |
 | kick the bot from the server              | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                             |
 | rename the server                         | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                          |
 | a bot that logs through a `WebhookClient` | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                           |
