@@ -140,6 +140,46 @@ export async function runScenarios(
       rate_limit_per_user: 5,
     });
     out.listRoles = await call("GET", `/guilds/${target.guildId}/roles`);
+    const guild = `/guilds/${target.guildId}`;
+    out.listGuildChannels = await call("GET", `${guild}/channels`);
+    out.listGuilds = await call("GET", "/users/@me/guilds");
+    out.getGuild = await call("GET", `${guild}?with_counts=true`);
+    // The invite has no Manage Server: a rename must be refused, and leaves the guild alone.
+    out.renameGuild = await call("PATCH", guild, { name: "contract renamed" });
+    out.createInvite = await call("POST", `/channels/${channelId}/invites`, {
+      max_age: 3600,
+    });
+    const code = (out.createInvite.body as { code?: string })?.code;
+    if (code) {
+      const again = await call("POST", `/channels/${channelId}/invites`, {
+        max_age: 3600,
+      });
+      // Not a response: 1 when the second create without `unique` reused the first invite.
+      out.inviteReused = {
+        status: (again.body as { code?: string })?.code === code ? 1 : 0,
+        body: null,
+      };
+      out.getInvite = await call("GET", `/invites/${code}?with_counts=true`);
+      out.listChannelInvites = await call(
+        "GET",
+        `/channels/${channelId}/invites`,
+      );
+      out.listGuildInvites = await call("GET", `${guild}/invites`);
+      out.deleteInvite = await call("DELETE", `/invites/${code}`);
+    }
+    out.unknownInvite = await call("GET", "/invites/contractnope");
+    out.botVoiceState = await call("GET", `${guild}/voice-states/@me`);
+    const commands = `/applications/${target.botId}${guild}/commands`;
+    out.listCommandPermissions = await call("GET", `${commands}/permissions`);
+    out.appCommandPermissions = await call(
+      "GET",
+      `${commands}/${target.botId}/permissions`,
+    );
+    out.createWebhook = await call("POST", `/channels/${channelId}/webhooks`, {
+      name: "contract",
+    });
+    out.listGuildWebhooks = await call("GET", `${guild}/webhooks`);
+    out.auditLog = await call("GET", `${guild}/audit-logs?limit=1`);
     out.denySendMessages = await call(
       "PUT",
       `/channels/${channelId}/permissions/${target.botId}`,

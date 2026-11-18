@@ -66,9 +66,13 @@ export async function mockTarget(): Promise<Target> {
   mock.createRole(guild, "contract-bot", INVITE_PERMISSIONS, [mock.state.bot]);
   // The test guild's @everyone lets the bot start public threads: run 7 got 201 for a thread the
   // invite doesn't grant. The mock's @everyone is narrower, so the bot gets it here.
-  mock.createRole(guild, "everyone-extras", Permission.CreatePublicThreads, [
-    mock.state.bot,
-  ]);
+  // Create Invite is in a new server's @everyone too (inferred; the contract's createInvite checks it).
+  mock.createRole(
+    guild,
+    "everyone-extras",
+    Permission.CreatePublicThreads | Permission.CreateInstantInvite,
+    [mock.state.bot],
+  );
   const dispatches: Target["dispatches"] = [];
   const client = await connect(mock.token, mock.apiUrl, dispatches);
   return {
