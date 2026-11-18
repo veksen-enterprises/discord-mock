@@ -122,7 +122,10 @@ describe.skipIf(!TOKEN)("mock against real Discord", () => {
             k,
             {
               status: v.status,
-              code: (v.body as { code?: number })?.code ?? null,
+              // An error's code is a number; an invite's `code` is its string id, not compared.
+              code: (({ code }) => (typeof code === "number" ? code : null))(
+                (v.body ?? {}) as { code?: unknown },
+              ),
             },
           ]),
         );
