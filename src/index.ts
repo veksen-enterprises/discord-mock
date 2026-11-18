@@ -262,6 +262,25 @@ export class DiscordMock {
   }
 
   /**
+   * `user` sets their server nickname in `guild` (null clears it). Discord's docs,
+   * gateway-events#guild-member-update: GUILD_MEMBER_UPDATE with the member and guild_id,
+   * sent only with GUILD_MEMBERS.
+   */
+  setNickname(guild: GuildRecord, user: APIUser, nick: string | null) {
+    const member = this.state.guilds.get(guild.id)?.members.get(user.id);
+    if (!member)
+      throw new Error(
+        `discord-mock: ${user.username} isn't a member of ${guild.name}`,
+      );
+    member.nick = nick;
+    this.gateway.dispatch(
+      GatewayDispatchEvents.GuildMemberUpdate,
+      { ...member, guild_id: guild.id },
+      GatewayIntentBits.GuildMembers,
+    );
+  }
+
+  /**
    * `user` leaves `guild` (or is kicked or banned). Discord's docs, gateway-events#guild-member-remove:
    * GUILD_MEMBER_REMOVE { guild_id, user }, sent only with GUILD_MEMBERS.
    */

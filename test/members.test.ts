@@ -84,3 +84,21 @@ it("announces a member leaving to a bot with GUILD_MEMBERS", async () => {
   expect(member.id).toBe(carol.id);
   expect(member.guild.id).toBe(guild.id);
 });
+
+it("announces a nickname change to a bot with GUILD_MEMBERS", async () => {
+  const guild = await start([
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+  ]);
+  const record = mock.state.requireGuild(guild.id);
+  const carol = mock.createUser("carol");
+  mock.addMember(record, carol);
+  await vi.waitFor(() => expect(guild.members.cache.has(carol.id)).toBe(true));
+  const updated = once(client, Events.GuildMemberUpdate);
+
+  mock.setNickname(record, carol, "Caz");
+
+  const [before, after] = await updated;
+  expect(before.displayName).toBe("carol");
+  expect(after.displayName).toBe("Caz");
+});
