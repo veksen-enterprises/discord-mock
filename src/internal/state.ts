@@ -148,7 +148,8 @@ export class DiscordState extends EventEmitter<{
 
   assignRole(guildId: string, userId: string, roleId: string) {
     const member = this.requireGuild(guildId).members.get(userId);
-    if (!member) throw new Error(`discord-mock: ${userId} isn't a member`);
+    if (!member)
+      throw new Error(`discordjs-test-kit: ${userId} isn't a member`);
     if (!member.roles.includes(roleId)) member.roles.push(roleId);
   }
 
@@ -246,7 +247,7 @@ export class DiscordState extends EventEmitter<{
   }): APIChannel {
     const parent = this.requireChannel(input.parentId);
     if (!("guild_id" in parent) || !parent.guild_id)
-      throw new Error("discord-mock: threads live in guild channels");
+      throw new Error("discordjs-test-kit: threads live in guild channels");
     const now = new Date().toISOString();
     const thread = {
       id: snowflake(),
@@ -564,23 +565,25 @@ export class DiscordState extends EventEmitter<{
 
   requireUser(id: string): APIUser {
     const user = this.users.get(id);
-    if (!user) throw new Error(`discord-mock: unknown user ${id}`);
+    if (!user) throw new Error(`discordjs-test-kit: unknown user ${id}`);
     return user;
   }
   requireGuild(id: string): GuildRecord {
     const guild = this.guilds.get(id);
-    if (!guild) throw new Error(`discord-mock: unknown guild ${id}`);
+    if (!guild) throw new Error(`discordjs-test-kit: unknown guild ${id}`);
     return guild;
   }
   requireChannel(id: string): APIChannel {
     const channel = this.channels.get(id);
-    if (!channel) throw new Error(`discord-mock: unknown channel ${id}`);
+    if (!channel) throw new Error(`discordjs-test-kit: unknown channel ${id}`);
     return channel;
   }
   requireMessage(channelId: string, id: string): APIMessage {
     const message = this.messages.get(channelId)?.find((m) => m.id === id);
     if (!message)
-      throw new Error(`discord-mock: unknown message ${id} in ${channelId}`);
+      throw new Error(
+        `discordjs-test-kit: unknown message ${id} in ${channelId}`,
+      );
     return message;
   }
 }

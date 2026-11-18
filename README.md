@@ -1,9 +1,9 @@
-# discord-mock
+# discordjs-test-kit
 
 A fake Discord that a stock discord.js `Client` logs in to, so a test runs the bot as it ships. It runs a real local HTTP server (REST) and WebSocket server (Gateway) on `127.0.0.1`, keeps an in-memory model of guilds, channels, members, messages and interactions, and refuses what Discord refuses.
 
 ```ts
-import { createDiscord } from "discord-mock";
+import { createDiscord } from "discordjs-test-kit";
 
 const discord = await createDiscord(); // torn down when the test ends; fails it on a Gap
 const server = discord.guild("SIN");

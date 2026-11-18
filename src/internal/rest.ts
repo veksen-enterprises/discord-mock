@@ -117,7 +117,7 @@ export class RestRouter {
   /** Record a Gap and answer 404 with code 0, which no real Discord error uses. */
   gap(what: string): RestResponse {
     this.unhandled.push(what);
-    return respond.error(404, 0, `discord-mock: no handler for ${what}`);
+    return respond.error(404, 0, `discordjs-test-kit: no handler for ${what}`);
   }
 
   route(method: string, pattern: string, handler: RestHandler) {

@@ -92,7 +92,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
         cleanup();
         reject(
           new Error(
-            `discord-mock: interaction ${this.id} still "${this.state}" after ${timeoutMs}ms`,
+            `discordjs-test-kit: interaction ${this.id} still "${this.state}" after ${timeoutMs}ms`,
           ),
         );
       }, timeoutMs);
@@ -186,7 +186,7 @@ export class DiscordMock {
   assertNoUnhandledRequests() {
     if (this.rest.unhandled.length) {
       throw new Error(
-        `discord-mock: unhandled requests:\n  ${this.rest.unhandled.join("\n  ")}`,
+        `discordjs-test-kit: unhandled requests:\n  ${this.rest.unhandled.join("\n  ")}`,
       );
     }
   }
@@ -241,7 +241,7 @@ export class DiscordMock {
   archiveThread(thread: APIChannel) {
     const record = this.state.requireChannel(thread.id);
     if (!("thread_metadata" in record) || !record.thread_metadata)
-      throw new Error(`discord-mock: ${thread.id} is not a thread`);
+      throw new Error(`discordjs-test-kit: ${thread.id} is not a thread`);
     record.thread_metadata.archived = true;
     record.thread_metadata.archive_timestamp = new Date().toISOString();
     this.gateway.dispatch(
@@ -271,7 +271,7 @@ export class DiscordMock {
     const member = this.state.guilds.get(guild.id)?.members.get(user.id);
     if (!member)
       throw new Error(
-        `discord-mock: ${user.username} isn't a member of ${guild.name}`,
+        `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
       );
     member.nick = nick;
     this.gateway.dispatch(
@@ -288,7 +288,7 @@ export class DiscordMock {
   removeMember(guild: GuildRecord, user: APIUser) {
     if (!this.state.guilds.get(guild.id)?.members.delete(user.id))
       throw new Error(
-        `discord-mock: ${user.username} isn't a member of ${guild.name}`,
+        `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
       );
     this.gateway.dispatch(
       GatewayDispatchEvents.GuildMemberRemove,
@@ -326,7 +326,7 @@ export class DiscordMock {
     perms: { allow?: bigint; deny?: bigint },
   ) {
     if (!("permission_overwrites" in channel))
-      throw new Error("discord-mock: channel has no overwrites");
+      throw new Error("discordjs-test-kit: channel has no overwrites");
     const overwrites = (channel.permission_overwrites ??= []);
     const next = {
       id: target.id,
@@ -369,7 +369,7 @@ export class DiscordMock {
         cleanup();
         reject(
           new Error(
-            `discord-mock: no matching message within ${opts.timeoutMs ?? 2_000}ms`,
+            `discordjs-test-kit: no matching message within ${opts.timeoutMs ?? 2_000}ms`,
           ),
         );
       }, opts.timeoutMs ?? 2_000);
@@ -471,7 +471,7 @@ export class DiscordMock {
     post: UserMessage & { title: string },
   ) {
     if (forum.type !== ChannelType.GuildForum)
-      throw new Error(`discord-mock: ${forum.id} isn't a forum`);
+      throw new Error(`discordjs-test-kit: ${forum.id} isn't a forum`);
     const thread = this.state.createThread({
       parentId: forum.id,
       name: post.title,
@@ -502,7 +502,7 @@ export class DiscordMock {
         .commandsVisibleIn(guildId)
         .map((c) => `/${c.name}`);
       throw new Error(
-        `discord-mock: /${commandName} isn't registered. ${registered.length ? `Registered: ${registered.join(", ")}` : "The bot registered no commands (it never PUT any to /applications/.../commands)"}`,
+        `discordjs-test-kit: /${commandName} isn't registered. ${registered.length ? `Registered: ${registered.join(", ")}` : "The bot registered no commands (it never PUT any to /applications/.../commands)"}`,
       );
     }
     const guild = guildId ? this.state.requireGuild(guildId) : undefined;
@@ -516,7 +516,7 @@ export class DiscordMock {
         has === ALL_PERMISSIONS || (needed !== 0n && (has & needed) === needed);
       if (!allowed)
         throw new Error(
-          `discord-mock: ${user.username} can't use /${commandName}: it needs permissions ${needed}`,
+          `discordjs-test-kit: ${user.username} can't use /${commandName}: it needs permissions ${needed}`,
         );
     }
     const { options, leaf } = commandOptions(
@@ -547,7 +547,7 @@ export class DiscordMock {
       message.interaction_metadata?.user.id !== user.id
     )
       throw new Error(
-        `discord-mock: ${user.username} can't see ${shown(message)}: it's ephemeral, only ${message.interaction_metadata?.user.username} can`,
+        `discordjs-test-kit: ${user.username} can't see ${shown(message)}: it's ephemeral, only ${message.interaction_metadata?.user.username} can`,
       );
   }
 
@@ -567,19 +567,19 @@ export class DiscordMock {
     if (found.length !== 1)
       throw new Error(
         found.length
-          ? `discord-mock: ${quote(label)} matches ${found.length} buttons on ${shown(message)}: ${found.map(buttonLabel).join(", ")}`
-          : `discord-mock: ${user.username} can't click ${quote(label)}: ${shown(message)} has ${buttons.length ? `buttons ${buttons.map(buttonLabel).join(", ")}` : "no buttons"}`,
+          ? `discordjs-test-kit: ${quote(label)} matches ${found.length} buttons on ${shown(message)}: ${found.map(buttonLabel).join(", ")}`
+          : `discordjs-test-kit: ${user.username} can't click ${quote(label)}: ${shown(message)} has ${buttons.length ? `buttons ${buttons.map(buttonLabel).join(", ")}` : "no buttons"}`,
       );
     const button = found[0]!;
     if (button.disabled)
       throw new Error(
-        `discord-mock: button ${buttonLabel(button)} on ${shown(message)} is disabled`,
+        `discordjs-test-kit: button ${buttonLabel(button)} on ${shown(message)} is disabled`,
       );
     // docs.discord.food/resources/components#button-object: a link button (style 5) opens its
     // URL and a premium button (style 6) opens a purchase; neither sends the bot an interaction.
     if (button.custom_id === undefined)
       throw new Error(
-        `discord-mock: button ${buttonLabel(button)} ${button.style === 6 ? "opens a purchase" : "opens a URL"}; the bot gets no interaction`,
+        `discordjs-test-kit: button ${buttonLabel(button)} ${button.style === 6 ? "opens a purchase" : "opens a URL"}; the bot gets no interaction`,
       );
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
@@ -611,17 +611,17 @@ export class DiscordMock {
     if (found.length !== 1)
       throw new Error(
         found.length
-          ? `discord-mock: ${quote(label)} matches ${found.length} options in ${shown(message)}: ${found.map(({ option }) => option.label).join(", ")}`
-          : `discord-mock: ${user.username} can't pick ${quote(label)}: ${shown(message)} ${offered.length ? `offers ${offered.map(({ option }) => option.label).join(", ")}` : "has no select menu"}`,
+          ? `discordjs-test-kit: ${quote(label)} matches ${found.length} options in ${shown(message)}: ${found.map(({ option }) => option.label).join(", ")}`
+          : `discordjs-test-kit: ${user.username} can't pick ${quote(label)}: ${shown(message)} ${offered.length ? `offers ${offered.map(({ option }) => option.label).join(", ")}` : "has no select menu"}`,
       );
     const { select, option } = found[0]!;
     if (select.disabled)
       throw new Error(
-        `discord-mock: the select menu on ${shown(message)} is disabled`,
+        `discordjs-test-kit: the select menu on ${shown(message)} is disabled`,
       );
     if ((select.min_values ?? 1) > 1)
       throw new Error(
-        `discord-mock: the select menu on ${shown(message)} needs ${select.min_values} picks; multi-select is not modelled`,
+        `discordjs-test-kit: the select menu on ${shown(message)} needs ${select.min_values} picks; multi-select is not modelled`,
       );
     const channel = this.state.requireChannel(message.channel_id);
     return this.dispatchInteraction(
@@ -651,7 +651,7 @@ export class DiscordMock {
     const member = guild?.members.get(user.id);
     if (guild && !member)
       throw new Error(
-        `discord-mock: ${user.username} isn't a member of ${guild.name}`,
+        `discordjs-test-kit: ${user.username} isn't a member of ${guild.name}`,
       );
     const run = new InteractionRun(
       this,
@@ -785,7 +785,7 @@ export class DiscordMock {
           return respond.error(
             400,
             50035,
-            `discord-mock: channel type ${req.body?.type} not implemented`,
+            `discordjs-test-kit: channel type ${req.body?.type} not implemented`,
           );
         const channel = state.createTextChannel(guild.id, {
           name: req.body.name,
@@ -1351,7 +1351,7 @@ function commandOptions(
   if (!path.length) {
     if (subcommands.length)
       throw new Error(
-        `discord-mock: /${command} needs a subcommand: ${subcommands.map((o) => o.name).join(", ")}`,
+        `discordjs-test-kit: /${command} needs a subcommand: ${subcommands.map((o) => o.name).join(", ")}`,
       );
     return { options: buildOptions(schema, input, command), leaf: schema };
   }
@@ -1359,7 +1359,7 @@ function commandOptions(
   const sub = subcommands.find((o) => o.name === next);
   if (!sub)
     throw new Error(
-      `discord-mock: /${command} has no subcommand "${next}". It has: ${subcommands.map((o) => o.name).join(", ")}`,
+      `discordjs-test-kit: /${command} has no subcommand "${next}". It has: ${subcommands.map((o) => o.name).join(", ")}`,
     );
   const nested = commandOptions(
     ("options" in sub ? sub.options : undefined) ?? [],
@@ -1382,7 +1382,7 @@ function buildOptions(
   for (const key of Object.keys(input)) {
     if (!schema.some((o) => o.name === key))
       throw new Error(
-        `discord-mock: /${command} has no option "${key}". ${schema.length ? `It has: ${schema.map((o) => o.name).join(", ")}` : "It takes no options"}`,
+        `discordjs-test-kit: /${command} has no option "${key}". ${schema.length ? `It has: ${schema.map((o) => o.name).join(", ")}` : "It takes no options"}`,
       );
   }
   return schema.flatMap((opt) => {
@@ -1390,23 +1390,23 @@ function buildOptions(
     if (value === undefined) {
       if ("required" in opt && opt.required)
         throw new Error(
-          `discord-mock: /${command} requires option "${opt.name}"`,
+          `discordjs-test-kit: /${command} requires option "${opt.name}"`,
         );
       return [];
     }
     const check = OPTION_CHECKS[opt.type];
     if (!check)
       throw new Error(
-        `discord-mock: option type ${opt.type} not supported yet`,
+        `discordjs-test-kit: option type ${opt.type} not supported yet`,
       );
     if (!check(value))
       throw new Error(
-        `discord-mock: /${command} option "${opt.name}" has the wrong type`,
+        `discordjs-test-kit: /${command} option "${opt.name}" has the wrong type`,
       );
     const choices = "choices" in opt ? opt.choices : undefined;
     if (choices?.length && !choices.some((c) => c.value === value)) {
       throw new Error(
-        `discord-mock: /${command} option "${opt.name}" must be one of: ${choices.map((c) => c.name).join(", ")}`,
+        `discordjs-test-kit: /${command} option "${opt.name}" must be one of: ${choices.map((c) => c.name).join(", ")}`,
       );
     }
     return [{ name: opt.name, type: opt.type, value }];
@@ -1448,7 +1448,7 @@ function resolvedFor(
     const allowed = "channel_types" in o ? o.channel_types : undefined;
     if (allowed?.length && !allowed.includes(channel.type as never))
       throw new Error(
-        `discord-mock: option "${o.name}" only offers channel types ${allowed.join(", ")}`,
+        `discordjs-test-kit: option "${o.name}" only offers channel types ${allowed.join(", ")}`,
       );
     const c = channel as APIChannel & Record<string, unknown>;
     return [

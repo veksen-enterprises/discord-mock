@@ -264,7 +264,7 @@ class Discord {
         const place = isMember ? `${where.name}'s DMs` : `#${where.name}`;
         const last = all.slice(-3).map(shown);
         throw new Error(
-          `discord-mock: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
+          `discordjs-test-kit: no message in ${place} written since the last action matched ${quote(text)} within ${FIND_TIMEOUT_MS / 1000}s. ${last.length ? `Last ${last.length}: ${last.join(", ")}` : "It has no messages"}`,
         );
       }
       await new Promise((r) => setTimeout(r, FIND_INTERVAL_MS));

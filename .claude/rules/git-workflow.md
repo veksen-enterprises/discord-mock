@@ -3,7 +3,7 @@
 ## Branches
 
 - **For now, commit and push straight to `main`, no PRs** (JP, 2026-11-17).
-  This holds until a consumer depends on discord-mock from git; then switch to
+  This holds until a consumer depends on discordjs-test-kit from git; then switch to
   feature branches and PRs, and update this file.
 - Never force-push `main`. A hook enforces this (`.claude/hooks/block-force-push.sh`).
 - If a push is rejected, `git fetch origin main && git rebase origin/main`,

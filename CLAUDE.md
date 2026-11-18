@@ -1,4 +1,4 @@
-# discord-mock
+# discordjs-test-kit
 
 A fake Discord (REST + Gateway) that a stock discord.js bot connects to in
 tests. Consumers: sin-bot and the d2armory bot.

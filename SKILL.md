@@ -1,9 +1,9 @@
 ---
-name: discord-mock
-description: Write or fix a test for a discord.js bot with discord-mock. Use when testing slash commands, buttons, select menus, messages, DMs, member changes or Discord failures, or when a discord-mock error needs reading.
+name: discordjs-test-kit
+description: Write or fix a test for a discord.js bot with discordjs-test-kit. Use when testing slash commands, buttons, select menus, messages, DMs, member changes or Discord failures, or when a discordjs-test-kit error needs reading.
 ---
 
-# Testing a discord.js bot with discord-mock
+# Testing a discord.js bot with discordjs-test-kit
 
 The bot logs in to a fake Discord over real HTTP and WebSocket. Nothing in discord.js is mocked. A test builds a World, starts the bot, acts as members and reads what the bot did.
 
@@ -24,7 +24,7 @@ If the bot builds its `Client` at module load, extract a factory like this first
 ## A test
 
 ```ts
-import { createDiscord, respond } from "discord-mock";
+import { createDiscord, respond } from "discordjs-test-kit";
 
 it("should record the result when the winner reports", async () => {
   const discord = await createDiscord();

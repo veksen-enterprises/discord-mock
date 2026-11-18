@@ -1,6 +1,6 @@
-# discord-mock
+# discordjs-test-kit
 
-The ubiquitous language of discord-mock: a fake Discord that a real discord.js
+The ubiquitous language of discordjs-test-kit: a fake Discord that a real discord.js
 bot connects to in tests. **Core** holds the terms every area shares; each
 subsection after it holds the language local to one area. Discord's own terms
 (guild, channel, member, role, snowflake, intent) keep their Discord meaning and
@@ -21,7 +21,7 @@ The code under test, as it ships: the consumer's handlers on a stock discord.js
 _Avoid_: client (that's the discord.js object inside the bot), app
 
 **Consumer**:
-A project whose bot is tested with discord-mock. Today: sin-bot and the d2armory
+A project whose bot is tested with discordjs-test-kit. Today: sin-bot and the d2armory
 bot.
 
 **Model**:

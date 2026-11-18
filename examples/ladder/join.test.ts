@@ -1,5 +1,5 @@
 /**
- * AFTER: the same bot, unchanged, logged in to discord-mock as it would log in to Discord. A
+ * AFTER: the same bot, unchanged, logged in to discordjs-test-kit as it would log in to Discord. A
  * member runs /join; the test reads what Discord would show them. No vi.mock, no spies, no casts.
  */
 import { MessageFlags } from "discord.js";

@@ -59,7 +59,7 @@ export class Gateway {
       this.options.recordGap(`gateway ${req.url}`);
       socket.close(
         4000,
-        `discord-mock: unsupported ${params.get("compress") ? "compress" : "encoding"} (${req.url})`,
+        `discordjs-test-kit: unsupported ${params.get("compress") ? "compress" : "encoding"} (${req.url})`,
       );
       return;
     }
