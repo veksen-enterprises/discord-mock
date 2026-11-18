@@ -60,3 +60,10 @@ pre,
 .expressive-code {
   font-variant-ligatures: none;
 }
+
+/* The current page in the sidebar: the brand yellow with ink text (11.9:1), not the ochre
+   Starlight would take from text-accent (SidebarSublist.astro). */
+:root[data-theme="light"] .top-level a[aria-current="page"] {
+  color: var(--sl-color-white);
+  background-color: #ffc800;
+}
