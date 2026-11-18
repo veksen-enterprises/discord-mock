@@ -102,6 +102,13 @@ export interface DiscordMockOptions {
 
 type InteractionState = "pending" | "deferred" | "replied" | "modal";
 
+/**
+ * How long a run waits on a bot that keeps sending requests without showing its reply. Discord keeps
+ * the token for 15 minutes; this bounds a test, not the bot, and is set above the slowest flow the
+ * trials hit (TitanBot's /poll, about 5s of spaced reactions).
+ */
+const MAX_BUSY_WAIT_MS = 10_000;
+
 /** A user-triggered interaction, and what the bot did with it. */
 export class InteractionRun extends EventEmitter<{ change: [] }> {
   state: InteractionState = "pending";
@@ -170,6 +177,8 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   /**
    * Resolves when `predicate` holds. Once the bot has sent no request and received no dispatch for
    * `quietMs`, rejects ("fail") or resolves all the same ("settle"), rather than after a fixed time.
+   * A bot that never goes quiet (a polling loop) fails after `MAX_BUSY_WAIT_MS`, naming its latest
+   * requests, instead of holding the test until the runner's own timeout.
    */
   private waitWhileBotActive(
     predicate: (run: this) => boolean,
@@ -179,6 +188,18 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   ): Promise<this> {
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const busy = realSetTimeout(() => {
+        cleanup();
+        const latest = this.mock.rest.log
+          .slice(-3)
+          .map((r) => `${r.method} ${r.path}`)
+          .join(", ");
+        reject(
+          new Error(
+            `discordjs-test-kit: the bot was still working ${MAX_BUSY_WAIT_MS / 1000}s after this interaction without showing a reply. Its latest requests: ${latest || "none"}`,
+          ),
+        );
+      }, MAX_BUSY_WAIT_MS);
       const arm = () => {
         realClearTimeout(timer);
         timer = realSetTimeout(() => {
@@ -199,6 +220,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
       };
       const cleanup = () => {
         realClearTimeout(timer);
+        realClearTimeout(busy);
         this.off("change", check);
         this.mock.activity.off("change", arm);
       };
