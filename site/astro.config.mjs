@@ -1,11 +1,16 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import starlightLlmsTxt from "starlight-llms-txt";
 import starlightTypeDoc, { typeDocSidebarGroup } from "starlight-typedoc";
 
 export default defineConfig({
+  // Absolute URLs in llms.txt and the sitemap. The deploy sets SITE_URL to the public address.
+  site: process.env.SITE_URL ?? "http://localhost:4321",
   integrations: [
     starlight({
       title: "discordjs-test-kit",
+      description:
+        "A fake Discord that a stock discord.js bot logs in to, so a test runs the bot as it ships.",
       expressiveCode: { defaultProps: { wrap: true } },
       customCss: ["./src/styles/custom.css"],
       social: [
@@ -16,6 +21,24 @@ export default defineConfig({
         },
       ],
       plugins: [
+        // llms.txt for agents reading the docs on the web: guides first, the API reference last,
+        // and llms-small.txt without the reference.
+        starlightLlmsTxt({
+          promote: [
+            "index",
+            "quickstart",
+            "concepts/the-world",
+            "concepts/members",
+            "concepts/waiting",
+            "concepts/gaps",
+            "recipes/**",
+            "testing-guide",
+          ],
+          demote: ["api/**"],
+          exclude: ["api/**"],
+          // Collapsing whitespace runs the testing guide's heading into its first paragraph.
+          minify: { whitespace: false },
+        }),
         // The reference is generated from the kit's public API on every build, so it can't drift.
         starlightTypeDoc({
           entryPoints: ["../src/index.ts"],
