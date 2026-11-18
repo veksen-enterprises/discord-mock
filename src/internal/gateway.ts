@@ -36,6 +36,9 @@ export interface GatewayOptions {
 export class Gateway {
   private wss = new WebSocketServer({ noServer: true });
   private sessions = new Map<string, Session>();
+  /** Sockets that connected while the Gateway is down, each waiting for its HELLO. */
+  private held: (() => void)[] = [];
+  private down = false;
   url = "";
 
   constructor(
@@ -64,12 +67,18 @@ export class Gateway {
       return;
     }
     const send = (payload: unknown) => socket.send(JSON.stringify(payload));
-    send({
-      op: GatewayOpcodes.Hello,
-      d: { heartbeat_interval: 41_250 },
-      s: null,
-      t: null,
-    });
+    const hello = () => {
+      if (socket.readyState !== socket.OPEN) return;
+      send({
+        op: GatewayOpcodes.Hello,
+        d: { heartbeat_interval: 41_250 },
+        s: null,
+        t: null,
+      });
+    };
+    // A bot reconnecting during an outage waits on HELLO; @discordjs/ws gives it 60s (helloTimeout).
+    if (this.down) this.held.push(hello);
+    else hello();
 
     let session: Session | undefined;
     socket.on("message", (raw) => {
@@ -304,6 +313,25 @@ export class Gateway {
       session.socket?.terminate();
       session.socket = null;
     }
+  }
+
+  /**
+   * Discord goes away for long enough that every session expires: docs.discord.food/gateway/using-gateway#resuming
+   * says a session whose replay buffer overfills is invalidated. Dispatches until `comeBack` reach no one.
+   */
+  goDown() {
+    this.down = true;
+    for (const session of this.sessions.values()) session.socket?.terminate();
+    this.sessions.clear();
+  }
+
+  /**
+   * Discord is back. A held bot gets HELLO, tries to RESUME, gets Invalid Session (d: false) because
+   * its session is gone, and identifies again; @discordjs/ws handles op 9 that way (WebSocketShard.onMessage).
+   */
+  comeBack() {
+    this.down = false;
+    for (const hello of this.held.splice(0)) hello();
   }
 
   close() {

@@ -60,6 +60,8 @@ it("should record the result when the winner reports", async () => {
 | post, open a forum post, react     | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`          |
 | change nickname, leave the server  | `alice.nickname("Al")`, `alice.leave()`                                                                                 |
 | make Discord fail a route          | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                              |
+| take a permission from the bot     | `discord.deny(channel, Permission.SendMessages)`                                                                        |
+| lose the gateway session           | `discord.disconnect()`, act, `await discord.reconnect()` (give the test a 10 s timeout)                                 |
 | wait for a message                 | `await discord.find(channel, /text/)` (or a member, for their DMs); only messages written since the latest action count |
 | wait for anything else, or absence | `await vi.waitFor(() => expect(…).…)`                                                                                   |
 | read what's there now              | `discord.messages(channel)`, `discord.dms(member)`                                                                      |

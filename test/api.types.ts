@@ -1,6 +1,6 @@
 // Type probes for the public API: each line marked @ts-expect-error is a misuse, and `npm run
 // typecheck` fails if it compiles. Never run, only typechecked.
-import { createDiscord } from "../src/index.js";
+import { createDiscord, Permission } from "../src/index.js";
 
 const discord = await createDiscord();
 const server = discord.guild("SIN");
@@ -29,6 +29,10 @@ discord.channel(otherServer, "late", ladderCategory);
 // Posting in another server's channel
 // @ts-expect-error
 alice.post(otherChannel, { content: "hi" });
+// Denying the bot in a thread, which has no overwrites of its own
+const post = alice.forumPost(discord.forum(server, "listings"), { title: "t" });
+// @ts-expect-error
+discord.deny(post.thread, Permission.SendMessages);
 
 // Not caught, by design: command names, whose literal type discord.js's builders erase.
 void alice.run(challengesChannel, "jion");

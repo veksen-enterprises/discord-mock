@@ -31,22 +31,25 @@ Agents writing tests: read [`SKILL.md`](SKILL.md), shipped in the package.
 
 `Discord` builds the World, starts the bot, injects failures and reads what happened. A `Member` acts. Each action has one way to write it.
 
-| `Discord`                                    | Returns             | Notes                                                                       |
-| -------------------------------------------- | ------------------- | --------------------------------------------------------------------------- |
-| `createDiscord()`                            | `Promise<Discord>`  | One per test, on its own port                                               |
-| `guild(name)`                                | `Guild<N>`          |                                                                             |
-| `category(guild, name)`                      | `Category<N>`       |                                                                             |
-| `channel(guild, name, category?)`            | `TextChannel<N>`    |                                                                             |
-| `forum(guild, name)`                         | `Forum<N>`          |                                                                             |
-| `member(guild, name, nick?)`                 | `Member<N>`         | A new user who joined `guild`                                               |
-| `owner(guild)`                               | `Member<N>`         | Has every permission                                                        |
-| `start(client, { commands?, permissions? })` | `Promise<void>`     | `permissions`: what the bot's invite grants, in guilds built before `start` |
-| `fail(method, path, response)`               | `void`              | Overrides a Route, e.g. `respond.serverError(503)`                          |
-| `archive(thread)`                            | `void`              | Discord archives it for inactivity                                          |
-| `messages(channel)`                          | `Message[]`         | Oldest first, live objects                                                  |
-| `dms(member)`                                | `Message[]`         | The bot's DMs with `member`                                                 |
-| `find(where, text)`                          | `Promise<Message>`  | Waits for a match written since the latest action, up to 2 s                |
-| `clientOptions`                              | `{ rest: { api } }` | Spread into the bot's `Client` options                                      |
+| `Discord`                                    | Returns             | Notes                                                                         |
+| -------------------------------------------- | ------------------- | ----------------------------------------------------------------------------- |
+| `createDiscord()`                            | `Promise<Discord>`  | One per test, on its own port                                                 |
+| `guild(name)`                                | `Guild<N>`          |                                                                               |
+| `category(guild, name)`                      | `Category<N>`       |                                                                               |
+| `channel(guild, name, category?)`            | `TextChannel<N>`    |                                                                               |
+| `forum(guild, name)`                         | `Forum<N>`          |                                                                               |
+| `member(guild, name, nick?)`                 | `Member<N>`         | A new user who joined `guild`                                                 |
+| `owner(guild)`                               | `Member<N>`         | Has every permission                                                          |
+| `start(client, { commands?, permissions? })` | `Promise<void>`     | `permissions`: what the bot's invite grants, in guilds built before `start`   |
+| `fail(method, path, response)`               | `() => void`        | Overrides a Route, e.g. `respond.serverError(503)`; call the result to end it |
+| `deny(channel, permission)`                  | `void`              | Takes a permission from the bot in `channel`: 50001 or 50013 from then on     |
+| `disconnect()`                               | `void`              | Discord drops the bot long enough that its session expires                    |
+| `reconnect()`                                | `Promise<void>`     | The bot identifies again; events in between are lost. Takes up to 6.5 s       |
+| `archive(thread)`                            | `void`              | Discord archives it for inactivity                                            |
+| `messages(channel)`                          | `Message[]`         | Oldest first, live objects                                                    |
+| `dms(member)`                                | `Message[]`         | The bot's DMs with `member`                                                   |
+| `find(where, text)`                          | `Promise<Message>`  | Waits for a match written since the latest action, up to 2 s                  |
+| `clientOptions`                              | `{ rest: { api } }` | Spread into the bot's `Client` options                                        |
 
 | `Member`                            | Returns               | Notes                                                    |
 | ----------------------------------- | --------------------- | -------------------------------------------------------- |
@@ -159,16 +162,17 @@ Why it's strict: [ADR 0003](docs/adr/0003-strict-by-default.md). The other decis
 
 ## What discord.js does under failure (verified by the tests)
 
-| Discord does                      | discord.js does                                                    | Bot sees                                   |
-| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| One 5xx                           | Retries immediately (`retries: 3`)                                 | Nothing                                    |
-| Persistent 5xx                    | 1 try + 3 retries, then throws                                     | `HTTPError` with `status`                  |
-| Closes the connection mid-request | No retry (`shouldRetry` only covers ECONNRESET/abort)              | `other side closed`, code `UND_ERR_SOCKET` |
-| Resets the connection             | Retries                                                            | Nothing                                    |
-| Route 429                         | Waits `Retry-After` (+50ms offset), retries, forever               | Latency only                               |
-| Global 429                        | Stalls every authenticated route; interaction callbacks are exempt | Latency only                               |
-| 429 with `rejectOnRateLimit` set  | Throws                                                             | `RateLimitError`                           |
-| 403 / 404 / 400                   | Throws, no retry                                                   | `DiscordAPIError` with Discord's `code`    |
+| Discord does                      | discord.js does                                                    | Bot sees                                                            |
+| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| One 5xx                           | Retries immediately (`retries: 3`)                                 | Nothing                                                             |
+| Persistent 5xx                    | 1 try + 3 retries, then throws                                     | `HTTPError` with `status`                                           |
+| Closes the connection mid-request | No retry (`shouldRetry` only covers ECONNRESET/abort)              | `other side closed`, code `UND_ERR_SOCKET`                          |
+| Resets the connection             | Retries                                                            | Nothing                                                             |
+| Route 429                         | Waits `Retry-After` (+50ms offset), retries, forever               | Latency only                                                        |
+| Global 429                        | Stalls every authenticated route; interaction callbacks are exempt | Latency only                                                        |
+| 429 with `rejectOnRateLimit` set  | Throws                                                             | `RateLimitError`                                                    |
+| 403 / 404 / 400                   | Throws, no retry                                                   | `DiscordAPIError` with Discord's `code`                             |
+| Session lost (op 9, `d: false`)   | Identifies again after its 5 s identify throttle                   | `shardReady`; never `clientReady` again; events in between are gone |
 
 The "closed vs reset" split is a real asymmetry in `@discordjs/rest`. Which one a real Discord outage produces is unchecked.
 
