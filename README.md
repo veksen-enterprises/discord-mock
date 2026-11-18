@@ -25,7 +25,22 @@ npm install --save-dev discordjs-test-kit
 
 Peers: `discord.js` `^14.26.4` and `vitest` `^4.1.2 || ^5.0.0`; CI runs both floors and the locked latest. Node 22 or 24.
 
-Agents writing tests: the package ships a skill at [`skills/discordjs-test-kit/SKILL.md`](skills/discordjs-test-kit/SKILL.md). No agent loads skills from `node_modules` by itself. Link it with [skills-npm](https://github.com/antfu/skills-npm): `npm i -D skills-npm && npx skills-npm setup` symlinks it into `.claude/skills/` (and `.agents/skills/` for other agents) and adds a `prepare` script that relinks after each install. The link points into `node_modules`, so upgrading the kit updates the skill. Or copy the folder into `.claude/skills/` yourself.
+## Start with an agent
+
+The package ships a skill for coding agents at [`skills/discordjs-test-kit/SKILL.md`](skills/discordjs-test-kit/SKILL.md): the one change a bot needs, one way to write each action, and how to read the kit's errors. Paste this into Claude Code, or any coding agent, at the root of your bot's repo:
+
+```text
+Add tests for this discord.js bot with discordjs-test-kit.
+1. Install it: npm install --save-dev discordjs-test-kit vitest
+2. Read node_modules/discordjs-test-kit/skills/discordjs-test-kit/SKILL.md and follow it.
+3. Make the bot's Client accept client options (the only change the bot needs), as the skill shows.
+4. Write one test per thing a user does with the bot: each slash command, button and message
+   flow, acting as members and asserting what they see.
+5. Run the tests. If one fails with "unhandled requests", the kit doesn't model that Discord
+   route yet: tell me which, and don't stub it. If one fails on the bot's behaviour, show me.
+```
+
+To keep the skill loaded in later sessions, link it with [skills-npm](https://github.com/antfu/skills-npm): `npm i -D skills-npm && npx skills-npm setup` symlinks it into `.claude/skills/` (and `.agents/skills/` for other agents) and adds a `prepare` script that relinks after each install, so upgrading the kit updates the skill.
 
 ## Writing a test
 
