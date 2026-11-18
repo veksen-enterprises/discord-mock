@@ -575,21 +575,92 @@ export class DiscordState extends EventEmitter<{
     // docs.discord.food/interactions/application-commands: bulk overwrite replaces the scope;
     // a command whose name (and type) already exists keeps its id.
     for (const body of bodies) {
-      const key = `${body.type ?? 1}:${body.name}`;
-      const command = {
-        id: existing?.get(key)?.id ?? snowflake(),
-        application_id: this.applicationId,
-        version: snowflake(),
-        default_member_permissions: null,
-        type: 1,
-        description: "",
-        ...(scope === "global" ? {} : { guild_id: scope }),
-        ...body,
-      } as APIApplicationCommand;
-      next.set(key, command);
+      const key = commandKey(body);
+      next.set(key, this.buildCommand(scope, body, existing?.get(key)?.id));
     }
     this.commands.set(scope, next);
     return [...next.values()];
+  }
+
+  /**
+   * Create Application Command is an upsert: "Returns 201 if a command with the same name does not
+   * already exist, or a 200 if it does (in which case the previous command will be overwritten)".
+   */
+  upsertCommand(
+    scope: string,
+    body: RESTPostAPIApplicationCommandsJSONBody,
+  ): { command: APIApplicationCommand; created: boolean } {
+    const commands = this.scopeCommands(scope);
+    const key = commandKey(body);
+    const previous = commands.get(key);
+    const command = this.buildCommand(scope, body, previous?.id);
+    commands.set(key, command);
+    return { command, created: !previous };
+  }
+
+  /** Edit Application Command: "any fields provided will entirely overwrite the existing values". */
+  editCommand(
+    scope: string,
+    id: string,
+    patch: Partial<RESTPostAPIApplicationCommandsJSONBody>,
+  ): APIApplicationCommand | undefined {
+    const commands = this.scopeCommands(scope);
+    const [key, previous] =
+      [...commands].find(([, command]) => command.id === id) ?? [];
+    if (!key || !previous) return undefined;
+    const command = {
+      ...previous,
+      ...patch,
+      version: snowflake(),
+    } as APIApplicationCommand;
+    commands.delete(key);
+    commands.set(commandKey(command), command);
+    return command;
+  }
+
+  deleteCommand(scope: string, id: string): boolean {
+    const commands = this.scopeCommands(scope);
+    const key = [...commands].find(([, command]) => command.id === id)?.[0];
+    return key ? commands.delete(key) : false;
+  }
+
+  /** The command named like `body` in `scope`, other than `id`: a rename onto it collides. */
+  commandNamed(
+    scope: string,
+    body: { name?: string; type?: number },
+    id: string,
+  ): APIApplicationCommand | undefined {
+    const found = this.commands.get(scope)?.get(commandKey(body));
+    return found && found.id !== id ? found : undefined;
+  }
+
+  commandById(scope: string, id: string): APIApplicationCommand | undefined {
+    return [...(this.commands.get(scope)?.values() ?? [])].find(
+      (command) => command.id === id,
+    );
+  }
+
+  private scopeCommands(scope: string) {
+    let commands = this.commands.get(scope);
+    if (!commands) this.commands.set(scope, (commands = new Map()));
+    return commands;
+  }
+
+  private buildCommand(
+    scope: string,
+    body: RESTPostAPIApplicationCommandsJSONBody,
+    id = snowflake(),
+  ): APIApplicationCommand {
+    return {
+      id,
+      application_id: this.applicationId,
+      version: snowflake(),
+      default_member_permissions: null,
+      type: 1,
+      description: "",
+      ...(scope === "global" ? {} : { guild_id: scope }),
+      ...body,
+    } as APIApplicationCommand;
   }
 
   findCommand(
@@ -637,4 +708,9 @@ export class DiscordState extends EventEmitter<{
       );
     return message;
   }
+}
+
+/** Names are unique "per application, per type, within each scope". */
+function commandKey(body: { name?: string; type?: number }) {
+  return `${body.type ?? 1}:${body.name}`;
 }

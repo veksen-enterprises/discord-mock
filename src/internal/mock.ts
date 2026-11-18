@@ -13,6 +13,7 @@ import {
   MessageFlags,
   type APIApplicationCommand,
   type APIApplicationCommandOption,
+  type RESTPostAPIApplicationCommandsJSONBody,
   type APIChannel,
   type APIMessage,
   type APIUser,
@@ -1081,13 +1082,82 @@ export class DiscordMock {
       "/applications/:appId/guilds/:guildId/commands",
       putCommands((p) => p.guildId!),
     );
-    rest.route(
-      "GET",
+    const scopeOf = (p: Record<string, string>) => p.guildId ?? "global";
+    for (const base of [
       "/applications/:appId/commands",
-      authed(() =>
-        respond.json([...(state.commands.get("global")?.values() ?? [])]),
-      ),
-    );
+      "/applications/:appId/guilds/:guildId/commands",
+    ]) {
+      rest.route(
+        "GET",
+        base,
+        authed((req) =>
+          respond.json([
+            ...(state.commands.get(scopeOf(req.params))?.values() ?? []),
+          ]),
+        ),
+      );
+      // interactions/application-commands#create-global-application-command: an upsert, 201 for
+      // a new name, 200 for one that exists.
+      rest.route(
+        "POST",
+        base,
+        authed((req) => {
+          if (req.params.appId !== state.applicationId)
+            return respond.error(403, 50001, "Missing Access");
+          const body = req.body as RESTPostAPIApplicationCommandsJSONBody;
+          if (
+            (body.type ?? 1) === 1 &&
+            !("description" in body && body.description)
+          )
+            return respond.invalidFormBody();
+          const { command, created } = state.upsertCommand(
+            scopeOf(req.params),
+            body,
+          );
+          return respond.json(command, created ? 201 : 200);
+        }),
+      );
+      rest.route(
+        "GET",
+        `${base}/:commandId`,
+        authed((req) => {
+          const command = state.commandById(
+            scopeOf(req.params),
+            req.params.commandId!,
+          );
+          return command ? respond.json(command) : unknownCommand();
+        }),
+      );
+      // #edit-global-application-command: 200 with the command. Renaming onto a name the scope
+      // already uses has an error code (40041) but no documented trigger: a Gap until checked.
+      rest.route(
+        "PATCH",
+        `${base}/:commandId`,
+        authed((req) => {
+          const scope = scopeOf(req.params);
+          const previous = state.commandById(scope, req.params.commandId!);
+          if (!previous) return unknownCommand();
+          const patch = {
+            type: previous.type,
+            name: previous.name,
+            ...req.body,
+          };
+          if (state.commandNamed(scope, patch, previous.id))
+            return rest.gap("rename a command onto an existing name");
+          return respond.json(state.editCommand(scope, previous.id, req.body)!);
+        }),
+      );
+      // #delete-global-application-command: "Returns 204 No Content".
+      rest.route(
+        "DELETE",
+        `${base}/:commandId`,
+        authed((req) =>
+          state.deleteCommand(scopeOf(req.params), req.params.commandId!)
+            ? respond.noContent()
+            : unknownCommand(),
+        ),
+      );
+    }
 
     rest.route(
       "GET",
@@ -1664,6 +1734,10 @@ export class DiscordMock {
     return undefined;
   }
 }
+
+// 10063 is in Discord's code table; pairing it with an unknown command id is inferred, not checked.
+const unknownCommand = () =>
+  respond.error(404, 10063, "Unknown application command");
 
 export async function createDiscordMock(
   options?: DiscordMockOptions,

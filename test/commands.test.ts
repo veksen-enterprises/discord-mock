@@ -98,3 +98,48 @@ it("hides a command from members without its default permissions", async () => {
       .slashCommand(general, "admin-config set", { updates: general.id }),
   ).toThrow(/can't use \/admin-config/);
 });
+
+it("creates one command as an upsert, edits it, and deletes it so users can't run it", async () => {
+  const { general, alice } = await start();
+  const commands = client.application!.commands;
+  const ping = { name: "ping", description: "Pings" };
+
+  const created = await commands.create(ping, general.guild_id);
+  const again = await commands.create(
+    { ...ping, description: "Pings again" },
+    general.guild_id,
+  );
+  const edited = await commands.edit(
+    created.id,
+    { description: "Pings, edited" },
+    general.guild_id,
+  );
+
+  expect(again.id).toBe(created.id);
+  expect(edited.description).toBe("Pings, edited");
+  expect((await commands.fetch({ guildId: general.guild_id })).size).toBe(1);
+  await commands.delete(created.id, general.guild_id);
+  expect(() => mock.as(alice).slashCommand(general, "ping")).toThrow(
+    "/ping isn't registered",
+  );
+  expect(
+    await commands.delete(created.id, general.guild_id).catch((e) => e),
+  ).toMatchObject({ code: 10063 });
+});
+
+it("answers 201 for a new command and 200 for an existing name, as Discord's docs say", async () => {
+  await start();
+  const path = `/applications/${client.application!.id}/commands`;
+  const post = () =>
+    fetch(`${mock.apiUrl}${path}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bot ${mock.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ name: "ping", description: "Pings" }),
+    });
+
+  expect((await post()).status).toBe(201);
+  expect((await post()).status).toBe(200);
+});
