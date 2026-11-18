@@ -953,6 +953,7 @@ class MemberActor {
     label: string | RegExp,
     form?: Form,
   ): Promise<Message> {
+    await this.botSettled();
     return this.answer(this.actor().clickButton(message, label), form);
   }
 
@@ -961,6 +962,7 @@ class MemberActor {
     picks: string | RegExp | Pickable | (string | RegExp)[] | Pickable[],
     form?: Form,
   ): Promise<Message> {
+    await this.botSettled();
     const list = Array.isArray(picks) ? picks : [picks];
     const labels = list.filter(
       (pick): pick is string | RegExp =>
@@ -975,6 +977,15 @@ class MemberActor {
           ),
       form,
     );
+  }
+
+  /**
+   * A member reads a message before using its components, so the bot has finished what it does
+   * after sending it, such as fetching the reply and starting a component collector on it. A bot
+   * still busy after the idle wait gets the click anyway, as a member wouldn't wait forever.
+   */
+  private async botSettled() {
+    await this.mock.waitForIdle().catch(() => {});
   }
 
   /** The visible reply to `run`, filling and submitting the form first when the bot opens one. */

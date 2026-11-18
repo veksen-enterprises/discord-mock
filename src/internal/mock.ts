@@ -168,12 +168,14 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   }
 
   /**
-   * Resolves when `predicate` holds; rejects once the bot has sent no request and received no
-   * dispatch for `quietMs`, rather than after a fixed time.
+   * Resolves when `predicate` holds. Once the bot has sent no request and received no dispatch for
+   * `quietMs`, rejects ("fail") or resolves all the same ("settle"), rather than after a fixed time.
    */
   private waitWhileBotActive(
     predicate: (run: this) => boolean,
-    quietMs = 2_000,
+    whenQuiet: "fail" | "settle" = "fail",
+    // "settle" uses the quiet spell idle() uses.
+    quietMs = whenQuiet === "fail" ? 2_000 : 100,
   ): Promise<this> {
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -181,6 +183,7 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
         realClearTimeout(timer);
         timer = realSetTimeout(() => {
           cleanup();
+          if (whenQuiet === "settle") return resolve(this);
           reject(
             new Error(
               `discordjs-test-kit: the bot deferred, then went quiet for ${quietMs / 1000}s without editing in its reply, so the user sees "thinking…" until the token expires`,
@@ -245,6 +248,16 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     // After a defer, Discord keeps the interaction token for 15 minutes, so a fixed wait would fail
     // a bot that works on Discord (one adding ten reactions 500ms apart before it edits). The run
     // waits while the bot keeps talking to Discord, and gives up once it has gone quiet.
+    // A deferred update (type 6) shows the user no "thinking…": the message just stays as it is
+    // until the bot edits it, by this interaction or any other way. So the click is done once the
+    // bot goes quiet, and the member sees the message as it then stands.
+    if (this.responseType === InteractionResponseType.DeferredMessageUpdate) {
+      await this.waitWhileBotActive(shown, "settle");
+      return this.mock.state.requireMessage(
+        this.channelId,
+        this.sourceMessageId!,
+      );
+    }
     if (this.state === "deferred" && timeoutMs === undefined)
       await this.waitWhileBotActive(shown);
     else await this.waitUntil(shown, timeoutMs);
