@@ -58,6 +58,7 @@ it("should record the result when the winner reports", async () => {
 | press a button                     | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                             |
 | pick from a select menu            | `await alice.select(message, "5-2")`                                                                                              |
 | post, open a forum post, react     | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |
+| DM the bot                         | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                 |
 | change nickname, leave the server  | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | make Discord fail a route          | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |
 | wait for a message                 | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count |
