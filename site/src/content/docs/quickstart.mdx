@@ -1,0 +1,38 @@
+---
+title: Quickstart
+description: Make the bot accept client options, then write the first test.
+---
+
+import Sample from "../../components/Sample.astro";
+
+## 1. Let the test pass client options
+
+The bot must accept client options. Nothing else in it changes:
+
+```ts title="src/bot.ts"
+export function createBot(clientOptions: Partial<ClientOptions> = {}) {
+  const client = new Client({ intents, ...clientOptions });
+  // handlers…
+  return { client };
+}
+```
+
+`discord.clientOptions` points discord.js's REST at the kit. discord.js then asks it for the Gateway URL, so the WebSocket follows on its own.
+
+If the bot builds its `Client` when its module loads, extract a factory like this first. If it also builds its own `new REST()`, for example to deploy commands, spread `clientOptions.rest` into it too, or its requests go to discord.com.
+
+## 2. Write a test
+
+<Sample name="quickstart" />
+
+- `createDiscord()` gives each test its own fake Discord. It shuts down when the test ends.
+- `discord.start(client, { commands })` logs the bot in, waits for `ready`, and registers the commands the way the bot's deploy script would. Pass the same command JSON.
+- `alice.run(...)` runs the slash command as Alice and resolves with the reply she would see.
+
+## 3. Run it
+
+```sh
+npx vitest run
+```
+
+If the bot calls a route the kit doesn't model, the test fails at teardown and names the route. See [Gaps](/concepts/gaps/).

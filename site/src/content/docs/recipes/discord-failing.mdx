@@ -1,0 +1,27 @@
+---
+title: Discord failing
+description: Make a route fail, and test what the member sees.
+---
+
+import Sample from "../../../components/Sample.astro";
+
+`discord.fail(method, path, response)` answers every matching request with `response` instead of the Model. `:name` segments in the path match anything; a literal id fails only that channel, message or member. `respond` builds the responses.
+
+<Sample name="failures" />
+
+Each test asserts what the member reads, not that the bot caught an error.
+
+## What discord.js does with each failure
+
+These are verified by the kit's own tests against a stock `Client`.
+
+| `respond.`                     | Discord does                      | discord.js does                       | The bot sees                               |
+| ------------------------------ | --------------------------------- | ------------------------------------- | ------------------------------------------ |
+| `serverError(503)`             | Persistent 5xx                    | 1 try + 3 retries, then throws        | `HTTPError` with `status`                  |
+| `connectionClosed()`           | Closes the connection mid-request | No retry                              | `other side closed`, code `UND_ERR_SOCKET` |
+| `connectionReset()`            | Resets the connection             | Retries                               | Nothing while a retry succeeds             |
+| `rateLimited({ retryAfter })`  | Route 429                         | Waits `Retry-After`, retries, forever | Latency only                               |
+| `missingPermissions()`         | 403, code 50013                   | Throws, no retry                      | `DiscordAPIError` with `code` 50013        |
+| `error(status, code, message)` | Any 4xx                           | Throws, no retry                      | `DiscordAPIError` with Discord's `code`    |
+
+`fail` holds until the test ends, so a persistent 429 never clears and discord.js waits forever. A rate limit only shows as latency to the bot; test it only if the bot sets `rejectOnRateLimit`.

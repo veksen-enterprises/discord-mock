@@ -1,0 +1,24 @@
+---
+title: Members
+description: Acting as a member, the way they would in the Discord app.
+sidebar:
+  order: 2
+---
+
+A member is an Actor: the test acts through them, and the kit refuses what the Discord app would refuse them.
+
+```ts
+const opponentMenu = await alice.run(challengesChannel, "challenge");
+await alice.select(opponentMenu, "Bob");
+await bob.click(panel, "Accept");
+alice.post(generalChannel, { content: "!ping" });
+alice.dm({ content: "help" });
+```
+
+- **Interactions resolve with what the member sees.** `run`, `click` and `select` wait for the bot to answer and resolve with the reply. If the bot doesn't answer within 3 seconds, they fail with what Discord shows: "The application did not respond".
+- **A message the bot edits in place is the object the test holds.** Keep one variable per menu and act on it line by line. When the bot answers with a new message, use the value `click` or `select` returns.
+- **Buttons and options are picked by label**, as a person reads them. A label that matches none or several fails and lists what's there.
+- **Ephemeral replies stay private.** Another member acting on one is refused.
+- **Commands check permissions.** A member without the command's `default_member_permissions` can't run it.
+
+The full list of actions is in the [testing guide](/testing-guide/#one-way-per-action).

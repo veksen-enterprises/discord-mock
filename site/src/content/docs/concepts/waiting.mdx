@@ -1,0 +1,34 @@
+---
+title: Waiting for the bot
+description: find, idle and messages, and when to use each.
+sidebar:
+  order: 3
+---
+
+import Sample from "../../../components/Sample.astro";
+
+The bot runs on its own timeline. Three calls read what it did, and none of them sleeps.
+
+| To…                              | Use                                                |
+| -------------------------------- | -------------------------------------------------- |
+| wait for a message the bot sends | `await discord.find(channel, /text/)`              |
+| check the bot sent nothing more  | `await discord.idle()`, then assert                |
+| read what's there now            | `discord.messages(channel)`, `discord.dms(member)` |
+
+<Sample name="waiting" />
+
+## `find`
+
+Waits up to 2 seconds for a message the bot created or edited **since the latest action** whose text contains the string or matches the RegExp. The text is the content plus each embed's title, description, fields and footer. Pass a member instead of a channel to search their DMs with the bot. On timeout it fails and shows the last three messages there.
+
+Only the bot's messages count, so a member's own `!ping` never satisfies `find(channel, /ping/)`.
+
+## `idle`
+
+Resolves once the bot has no request open to Discord and nothing new has reached it for 100ms. Use it before asserting the bot sent exactly one reply, or none.
+
+A bot that works for longer than 100ms before its first request looks done. Wait on `find` for what it should send instead.
+
+## Anything else
+
+For state outside Discord, such as the bot's database, use `await vi.waitFor(() => expect(…))`.

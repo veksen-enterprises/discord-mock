@@ -1,0 +1,35 @@
+---
+title: The World
+description: The guilds, channels and members a test builds before it starts the bot.
+sidebar:
+  order: 1
+---
+
+The World is what exists on the fake Discord before the bot logs in: guilds, channels, categories, members and their permissions. A test builds only what it needs.
+
+```ts
+const discord = await createDiscord();
+const server = discord.guild("SIN");
+const ladderCategory = discord.category(server, "Test Ladder");
+const challengesChannel = discord.channel(server, "challenges", ladderCategory);
+const lobby = discord.voiceChannel(server, "lobby");
+const alice = discord.member(server, "Alice");
+const mod = discord.member(server, "Mod", {
+  permissions: Permission.ModerateMembers,
+});
+const admin = discord.owner(server);
+```
+
+## Handles
+
+Every builder returns a handle with an `.id`. Pass handles around, never ids. A handle is typed by its guild, so acting as a member of one guild in a channel of another doesn't compile.
+
+## The least privilege Discord would give
+
+- The bot has only @everyone's permissions unless `start` grants it more: `discord.start(client, { commands, permissions: Permission.ManageRoles })`. That's the role its invite link would give it.
+- Each guild has a human owner, and the bot isn't it. Owners bypass every permission check, so a bot that owned the guild would pass tests it fails on Discord.
+- A member has no permissions beyond @everyone unless built with `permissions`. Use `discord.owner(server)` for someone who can do anything.
+
+## After `start`
+
+A member built after `start` joins while the bot is running, so the bot hears `guildMemberAdd`, as it would on Discord. Members built before `start` were already in the guild when the bot logged in, so it gets no join event for them.
