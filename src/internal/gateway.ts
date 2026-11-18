@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
+import { constants as zlibConstants, createDeflate } from "node:zlib";
 import {
   GatewayDispatchEvents,
   GatewayIntentBits,
@@ -61,17 +62,22 @@ export class Gateway {
 
   private onConnection(socket: WebSocket, req: IncomingMessage) {
     const params = new URL(req.url!, "http://localhost").searchParams;
-    // zlib-stream kicks in when zlib-sync is installed. No close code says "unsupported": @discordjs/ws
-    // resumes on 4000 (WebSocketShard.onClose), so the bot reconnects in a loop. The Gap is what fails the test.
-    if (params.get("compress") || params.get("encoding") === "etf") {
+    // zstd-stream and ETF aren't modelled. No close code says "unsupported": @discordjs/ws resumes on
+    // 4000 (WebSocketShard.onClose), so the bot reconnects in a loop. The Gap is what fails the test.
+    const compress = params.get("compress");
+    if (
+      (compress && compress !== "zlib-stream") ||
+      params.get("encoding") === "etf"
+    ) {
       this.options.recordGap(`gateway ${req.url}`);
       socket.close(
         4000,
-        `discordjs-test-kit: unsupported ${params.get("compress") ? "compress" : "encoding"} (${req.url})`,
+        `discordjs-test-kit: unsupported ${compress ? "compress" : "encoding"} (${req.url})`,
       );
       return;
     }
-    const send = (payload: unknown) => socket.send(JSON.stringify(payload));
+    if (compress) this.compressed.set(socket, zlibStream(socket));
+    const send = (payload: unknown) => this.write(socket, payload);
     const hello = () => {
       if (socket.readyState !== socket.OPEN) return;
       send({
@@ -173,7 +179,7 @@ export class Gateway {
           session = existing;
           session.socket = socket;
           for (const payload of session.missed.splice(0))
-            socket.send(JSON.stringify(payload));
+            this.write(socket, payload);
           this.send(session, GatewayDispatchEvents.Resumed, null);
           return;
         }
@@ -269,8 +275,18 @@ export class Gateway {
   private send(session: Session, t: string, d: unknown) {
     const payload = { op: GatewayOpcodes.Dispatch, t, s: ++session.seq, d };
     this.options.onDispatch?.();
-    if (session.socket) session.socket.send(JSON.stringify(payload));
+    if (session.socket) this.write(session.socket, payload);
     else session.missed.push(payload);
+  }
+
+  /** Sockets that asked for zlib-stream transport compression, each with its own deflate context. */
+  private compressed = new WeakMap<WebSocket, (text: string) => void>();
+
+  private write(socket: WebSocket, payload: unknown) {
+    const text = JSON.stringify(payload);
+    const compress = this.compressed.get(socket);
+    if (compress) compress(text);
+    else socket.send(text);
   }
 
   /** GUILD_CREATE for a guild created after the bot connected (docs: scenario 3, "joins a new guild"). */
@@ -412,4 +428,32 @@ export class Gateway {
     for (const client of this.wss.clients) client.terminate();
     this.wss.close();
   }
+}
+
+/**
+ * docs.discord.food/topics/gateway#transport-compression: with compress=zlib-stream every packet the
+ * Gateway sends goes through one zlib context for the whole connection, each ending in the 4-byte
+ * Z_SYNC_FLUSH suffix (00 00 ff ff) that tells the client a message is complete. The client sends
+ * plain text. Packets are written in order: each waits for the previous flush.
+ */
+function zlibStream(socket: WebSocket): (text: string) => void {
+  const deflate = createDeflate();
+  let chunks: Buffer[] = [];
+  deflate.on("data", (chunk: Buffer) => chunks.push(chunk));
+  socket.on("close", () => deflate.destroy());
+  let queue = Promise.resolve();
+  return (text) => {
+    queue = queue.then(
+      () =>
+        new Promise<void>((resolve) => {
+          deflate.write(text);
+          deflate.flush(zlibConstants.Z_SYNC_FLUSH, () => {
+            const packet = Buffer.concat(chunks);
+            chunks = [];
+            if (socket.readyState === socket.OPEN) socket.send(packet);
+            resolve();
+          });
+        }),
+    );
+  };
 }
