@@ -69,7 +69,51 @@ export async function runScenarios(
         `/channels/${channelId}/messages/${messageId}`,
         { content: "contract test, edited" },
       );
+      // The invite has no Manage Threads or Pin Messages: both answers are refusals to compare.
+      out.deleteThread = await call("DELETE", `/channels/${messageId}`);
+      out.pinMessage = await call(
+        "PUT",
+        `/channels/${channelId}/messages/pins/${messageId}`,
+      );
+      out.listPins = await call("GET", `/channels/${channelId}/messages/pins`);
+      const reactions = `/channels/${channelId}/messages/${messageId}/reactions`;
+      const thumbsUp = encodeURIComponent("👍");
+      out.react = await call("PUT", `${reactions}/${thumbsUp}/@me`);
+      out.listReactions = await call("GET", `${reactions}/${thumbsUp}`);
+      out.removeUserReaction = await call(
+        "DELETE",
+        `${reactions}/${thumbsUp}/${target.botId}`,
+      );
+      await call("PUT", `${reactions}/${thumbsUp}/@me`);
+      out.removeEmojiReactions = await call(
+        "DELETE",
+        `${reactions}/${thumbsUp}`,
+      );
+      await call("PUT", `${reactions}/${thumbsUp}/@me`);
+      out.removeAllReactions = await call("DELETE", reactions);
     }
+    const spam: string[] = [];
+    for (const content of ["spam 1", "spam 2"]) {
+      const sent = await call("POST", `/channels/${channelId}/messages`, {
+        content,
+      });
+      spam.push((sent.body as { id: string }).id);
+    }
+    out.bulkDeleteTooFew = await call(
+      "POST",
+      `/channels/${channelId}/messages/bulk-delete`,
+      { messages: [spam[0]] },
+    );
+    out.bulkDelete = await call(
+      "POST",
+      `/channels/${channelId}/messages/bulk-delete`,
+      { messages: spam },
+    );
+    out.editChannel = await call("PATCH", `/channels/${channelId}`, {
+      topic: "contract topic",
+      rate_limit_per_user: 5,
+    });
+    out.listRoles = await call("GET", `/guilds/${target.guildId}/roles`);
     out.denySendMessages = await call(
       "PUT",
       `/channels/${channelId}/permissions/${target.botId}`,
