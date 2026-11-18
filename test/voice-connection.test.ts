@@ -94,7 +94,17 @@ it("refuses a voice connection that doesn't offer DAVE with 4017", async () => {
 
 it("gives a Lavalink-style bot the voice server for its own op 4, as TitanBot's riffy reads it", async () => {
   const { lobby, cached } = await start();
-  const server = once(client, Events.VoiceServerUpdate);
+  // riffy forwards the raw packet (TitanBot's riffySetup.js); discord.js before 14.27 doesn't emit
+  // voiceServerUpdate at all.
+  const server = new Promise<{
+    token: string;
+    endpoint: string;
+    guild_id: string;
+  }>((resolve) =>
+    client.on(Events.Raw, (packet: { t?: string; d: never }) => {
+      if (packet.t === "VOICE_SERVER_UPDATE") resolve(packet.d);
+    }),
+  );
 
   cached.shard.send({
     op: 4,
@@ -105,12 +115,10 @@ it("gives a Lavalink-style bot the voice server for its own op 4, as TitanBot's 
       self_deaf: true,
     },
   });
-  const [update] = (await server) as [
-    { token: string; endpoint: string; guildId: string },
-  ];
+  const update = await server;
 
   expect(update.endpoint).toMatch(/^127\.0\.0\.1:\d+$/);
-  expect(update.guildId).toBe(cached.id);
+  expect(update.guild_id).toBe(cached.id);
   expect(mock.voiceServer.sessions.get(cached.id)?.token).toBe(update.token);
   expect(cached.members.me?.voice.selfDeaf).toBe(true);
 });
