@@ -49,7 +49,7 @@ describe("scenarios against the mock", () => {
       startThread: 201,
       editMessage: 200,
       deleteThread: 200,
-      deleteThreadWithoutManageChannels: 403,
+      deleteThreadWithoutManageChannels: 200,
       pinMessage: 403,
       listPins: 200,
       react: 204,

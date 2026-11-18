@@ -1329,15 +1329,19 @@ export class DiscordMock {
         const channel = state.channels.get(req.params.channelId!);
         if (!channel) return respond.unknownChannel();
         // resources/channel#delete-channel: MANAGE_CHANNELS, "or MANAGE_THREADS if the channel is a
-        // thread". Contract run 11: Discord let a bot with Manage Channels but not Manage Threads
-        // delete its own thread, so either permission is taken; whether being the creator is
-        // enough on its own is what the deleteThreadWithoutManageChannels scenario checks. Fires
-        // Thread Delete, "just the id, guild_id, parent_id, and type" (gateway-events#thread-delete).
+        // thread". Contract runs 11 and 12: Discord let the bot delete a thread it started with
+        // neither in the channel (Manage Channels denied there, held guild-wide). The mock reads
+        // that as the creator may delete; it can't rule out that guild-wide Manage Channels is what
+        // counts, since the bot can't drop its own role's permission. Others need Manage Threads
+        // or Manage Channels in the channel (inferred). Fires Thread Delete, "just the id,
+        // guild_id, parent_id, and type" (gateway-events#thread-delete).
         const thread = "thread_metadata" in channel ? channel : undefined;
-        const denied = thread
-          ? this.checkBotPerms(channel, Permission.ManageThreads) &&
-            this.checkBotPerms(channel, Permission.ManageChannels)
-          : this.checkBotPerms(channel, Permission.ManageChannels);
+        const denied = !thread
+          ? this.checkBotPerms(channel, Permission.ManageChannels)
+          : thread.owner_id === state.bot.id
+            ? this.checkBotPerms(channel, 0n)
+            : this.checkBotPerms(channel, Permission.ManageThreads) &&
+              this.checkBotPerms(channel, Permission.ManageChannels);
         if (denied) return denied;
         state.deleteChannel(channel.id);
         if (thread)

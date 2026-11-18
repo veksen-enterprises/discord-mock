@@ -256,9 +256,9 @@ it("deletes a thread with Manage Threads, and the bot hears threadDelete", async
   expect(mock.state.channels.has(thread.id)).toBe(false);
 });
 
-it("deletes a thread with Manage Channels alone, as Discord allowed in contract run 11", async () => {
+it("deletes a thread the bot started without Manage Threads, as Discord did in contract run 12", async () => {
   const { general, channel, alice } = await startInText(
-    SEND | Permission.CreatePublicThreads | Permission.ManageChannels,
+    SEND | Permission.CreatePublicThreads,
   );
   const posted = mock.as(alice).sendMessage(general, "help me");
   const thread = await (
@@ -268,4 +268,15 @@ it("deletes a thread with Manage Channels alone, as Discord allowed in contract 
   await thread.delete();
 
   expect(mock.state.channels.has(thread.id)).toBe(false);
+});
+
+it("refuses to delete a member's thread without Manage Threads", async () => {
+  const { forum, alice } = await start();
+  const { thread } = mock.as(alice).forumPost(forum, { title: "mine" });
+
+  const error = await client.rest
+    .delete(Routes.channel(thread.id))
+    .catch((e: unknown) => e);
+
+  expect(error).toMatchObject({ code: 50013 });
 });
