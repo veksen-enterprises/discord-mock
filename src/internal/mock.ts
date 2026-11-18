@@ -136,7 +136,10 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
 export class DiscordMock {
   readonly state = new DiscordState();
   readonly rest = new RestRouter();
-  readonly token = `mock.${snowflake()}.token`;
+  // Real tokens start with the bot's id in base64, and bots such as Needle decode it to find their
+  // application id. Shape inferred from tokens in the wild, not documented.
+  private readonly developerId = snowflake();
+  readonly token = `${Buffer.from(this.state.applicationId).toString("base64").replace(/=+$/, "")}.${snowflake()}.mock`;
   readonly gateway: Gateway;
   private server: Server;
   private interactions = new Map<string, InteractionRun>();
@@ -759,6 +762,32 @@ export class DiscordMock {
       "GET",
       "/users/@me",
       authed(() => respond.json(state.bot)),
+    );
+    // docs.discord.food/resources/application, Get Current Application: "Returns the application
+    // object associated with the requestor." Fields per the Application Structure table; the owner
+    // and verify_key values are placeholders (the World has no developer account).
+    rest.route(
+      "GET",
+      "/applications/@me",
+      authed(() =>
+        respond.json({
+          id: state.applicationId,
+          name: state.bot.username,
+          icon: null,
+          description: "",
+          bot_public: true,
+          bot_require_code_grant: false,
+          owner: {
+            id: this.developerId,
+            username: "developer",
+            discriminator: "0",
+            avatar: null,
+          },
+          team: null,
+          flags: 0,
+          verify_key: "0".repeat(64),
+        }),
+      ),
     );
 
     const putCommands = (

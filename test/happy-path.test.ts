@@ -44,6 +44,16 @@ describe("a stock discord.js Client against the mock", () => {
     mock.assertNoUnhandledRequests();
   });
 
+  it("fetches its application, whose id is also in the token", async () => {
+    await start();
+
+    const application = await client.application!.fetch();
+
+    expect(application.id).toBe(mock.state.applicationId);
+    const tokenId = Buffer.from(mock.token.split(".")[0]!, "base64").toString();
+    expect(tokenId).toBe(application.id);
+  });
+
   it("replies to a message", async () => {
     const { general, alice } = await start();
     const sent = mock.as(alice).sendMessage(general, "!ping");
