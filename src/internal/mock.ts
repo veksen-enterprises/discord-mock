@@ -112,6 +112,16 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
 
   /** The visible reply: waits through a defer until the bot edits in real content. */
   async reply(timeoutMs?: number): Promise<APIMessage> {
+    // Discord gives the bot the whole deadline to acknowledge, so a shorter wait would fail a bot
+    // that works on Discord. The margin covers the callback request landing just inside it.
+    const deadlineMs = this.mock.interactionDeadlineMs;
+    await this.waitUntil((r) => r.state !== "pending", deadlineMs + 250).catch(
+      () => {
+        throw new Error(
+          `discordjs-test-kit: the bot didn't answer within ${deadlineMs / 1000}s, so Discord shows the user "The application did not respond"`,
+        );
+      },
+    );
     await this.waitUntil(
       (r) =>
         r.state === "replied" &&
@@ -130,11 +140,11 @@ export class DiscordMock {
   readonly gateway: Gateway;
   private server: Server;
   private interactions = new Map<string, InteractionRun>();
-  private deadlineMs: number;
+  readonly interactionDeadlineMs: number;
   apiUrl = "";
 
   constructor(options: DiscordMockOptions = {}) {
-    this.deadlineMs = options.interactionDeadlineMs ?? 3_000;
+    this.interactionDeadlineMs = options.interactionDeadlineMs ?? 3_000;
     this.gateway = new Gateway(this.state, {
       token: this.token,
       privilegedIntents:
@@ -1156,7 +1166,7 @@ export class DiscordMock {
       if (!run || run.token !== req.params.token)
         return respond.unknownInteraction();
       if (run.state !== "pending") return respond.alreadyAcknowledged();
-      if (Date.now() - run.createdAt > this.deadlineMs)
+      if (Date.now() - run.createdAt > this.interactionDeadlineMs)
         return respond.unknownInteraction();
 
       const { type, data } = req.body as {

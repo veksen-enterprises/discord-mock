@@ -232,4 +232,18 @@ describe("interaction rules", () => {
     expect(run.state).toBe("pending");
     expect(bot.errors[0]).toMatchObject({ code: 10062 });
   });
+
+  it("waits for the reply as long as Discord's deadline, and says what the user sees", async () => {
+    const { general, alice } = await start({
+      mock: { interactionDeadlineMs: 50 },
+    });
+    const t0 = Date.now();
+
+    await expect(
+      mock.as(alice).slashCommand(general, "lazy").reply(),
+    ).rejects.toThrow(
+      `the bot didn't answer within 0.05s, so Discord shows the user "The application did not respond"`,
+    );
+    expect(Date.now() - t0).toBeLessThan(1_000);
+  });
 });
