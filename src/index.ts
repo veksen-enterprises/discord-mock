@@ -110,12 +110,14 @@ const FIND_TIMEOUT_MS = 2000;
  */
 class Discord {
   private client?: Client;
-  /** Messages created or edited since the latest action: the ones `find` looks at. */
+  /** Messages the bot created or edited since the latest action: the ones `find` looks at. */
   private readonly written = new Set<Message>();
   private readonly markAction = () => this.written.clear();
 
   constructor(private readonly mock: DiscordMock) {
-    const record = (message: Message) => this.written.add(message);
+    const record = (message: Message) => {
+      if (message.author.id === mock.state.bot.id) this.written.add(message);
+    };
     mock.state.on("messageCreate", record);
     mock.state.on("messageUpdate", record);
   }

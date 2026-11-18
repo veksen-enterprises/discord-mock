@@ -30,6 +30,14 @@ it("finds a message the bot posts after the action returns", async () => {
   expect((await discord.find(generalChannel, "pong")).content).toBe("pong");
 });
 
+it("doesn't take the member's own message for the bot's", async () => {
+  const { discord, generalChannel, alice } = await startBot();
+
+  alice.post(generalChannel, { content: "!ping" });
+
+  expect((await discord.find(generalChannel, /p.ng/)).content).toBe("pong");
+});
+
 it("names the channel and its last messages when find gives up", async () => {
   const { discord, generalChannel, alice } = await startBot();
   alice.post(generalChannel, { content: "hello" });
