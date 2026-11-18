@@ -18,7 +18,7 @@ contradicts one, say so explicitly rather than silently overriding it.
 
 ## Stack
 
-- TypeScript (ESM), Node 22+ (CI runs 22 and 24: sin-bot is on 22, d2armory on 24)
+- TypeScript (ESM), Node 22+ (CI runs 22, 24 and 26: sin-bot is on 22, d2armory on 24, 26 is the current LTS)
 - discord.js 14 as a peer dependency; `discord-api-types` for payloads; `ws`
 - Vitest | Linter: OxLint | Formatter: OxFmt
 

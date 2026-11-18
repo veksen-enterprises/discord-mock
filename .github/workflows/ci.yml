@@ -20,8 +20,9 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
 
-  # Both consumers' Node versions: sin-bot runs 22, d2armory 24. One more run installs the lowest
-  # discord.js and vitest the peer ranges allow (sin-bot's versions), so the floor is tested.
+  # Every Node LTS line still supported: 22 (sin-bot, and the engines floor), 24 (d2armory) and 26
+  # (Active LTS since 2026-10-28). One more run installs the lowest discord.js and vitest the peer
+  # ranges allow (sin-bot's versions), so the floor is tested.
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -30,6 +31,7 @@ jobs:
         include:
           - node: 22
           - node: 24
+          - node: 26
           - node: 22
             floor: discord.js@14.26.4 vitest@4.1.2
     steps:

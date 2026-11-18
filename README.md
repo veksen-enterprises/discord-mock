@@ -23,7 +23,7 @@ expect(reportMenu.embeds.at(-1)?.title).toBe("Match Reported!");
 npm install --save-dev discordjs-test-kit
 ```
 
-Peers: `discord.js` `^14.26.4` and `vitest` `^4.1.2 || ^5.0.0`; CI runs both floors and the locked latest. Node 22 or 24.
+Peers: `discord.js` `^14.26.4` and `vitest` `^4.1.2 || ^5.0.0`; CI runs both floors and the locked latest. Node 22, 24 or 26.
 
 ## Start with an agent
 
