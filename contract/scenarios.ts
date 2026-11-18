@@ -140,6 +140,39 @@ export async function runScenarios(
       rate_limit_per_user: 5,
     });
     out.listRoles = await call("GET", `/guilds/${target.guildId}/roles`);
+    const card = {
+      type: 17,
+      components: [
+        { type: 10, content: "contract card" },
+        {
+          type: 9,
+          components: [{ type: 10, content: "section" }],
+          accessory: { type: 2, style: 2, label: "More", custom_id: "more" },
+        },
+      ],
+    };
+    out.sendComponentsV2 = await call(
+      "POST",
+      `/channels/${channelId}/messages`,
+      {
+        flags: 1 << 15,
+        components: [card],
+      },
+    );
+    out.sendComponentsV2WithContent = await call(
+      "POST",
+      `/channels/${channelId}/messages`,
+      { flags: 1 << 15, content: "not allowed", components: [card] },
+    );
+    out.sendButtons = await call("POST", `/channels/${channelId}/messages`, {
+      content: "buttons",
+      components: [
+        {
+          type: 1,
+          components: [{ type: 2, style: 1, label: "Go", custom_id: "go" }],
+        },
+      ],
+    });
     const guild = `/guilds/${target.guildId}`;
     out.listGuildChannels = await call("GET", `${guild}/channels`);
     out.listGuilds = await call("GET", "/users/@me/guilds");
