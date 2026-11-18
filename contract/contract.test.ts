@@ -84,6 +84,7 @@ describe("scenarios against the mock", () => {
       expirePoll: 200,
       expireNonPoll: 400,
       listAutoModRules: 403,
+      pruneCount: 403,
       unknownEmoji: 404,
       listStickers: 200,
       listCommandPermissions: 200,
