@@ -34,7 +34,10 @@ import {
 import { RestRouter, respond, type RestHandler } from "./rest.js";
 import { snowflake } from "./snowflake.js";
 import { DiscordState, type GuildRecord } from "./state.js";
-import { registerThreadRoutes } from "./threads.js";
+import {
+  addMentionedToPrivateThread,
+  registerThreadRoutes,
+} from "./threads.js";
 
 export { respond } from "./rest.js";
 export type { RestHandler, RestRequest, RestResponse } from "./rest.js";
@@ -1378,6 +1381,13 @@ export class DiscordMock {
           pingReplied: req.body?.allowed_mentions?.replied_user ?? true,
         });
         this.gateway.dispatchMessage("MESSAGE_CREATE", message);
+        addMentionedToPrivateThread(
+          this,
+          channel,
+          [...(message.content ?? "").matchAll(/<@!?(\d+)>/g)].map(
+            ([, id]) => id!,
+          ),
+        );
         return respond.json(message);
       }),
     );

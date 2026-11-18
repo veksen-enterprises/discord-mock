@@ -207,3 +207,18 @@ it("unarchives a thread the bot posts in, but refuses a locked one without Manag
       .catch((e: unknown) => e),
   ).toMatchObject({ code: 50083 });
 });
+
+it("adds a member the bot mentions in its private thread, so they can answer there", async () => {
+  const { channel, alice } = await startInText(
+    SEND | Permission.CreatePrivateThreads | Permission.SendMessagesInThreads,
+  );
+  const ticket = await channel.threads.create({
+    name: "ticket",
+    type: ChannelType.PrivateThread,
+  });
+
+  await ticket.send(`Hello <@${alice.id}>!`);
+
+  const record = mock.state.requireChannel(ticket.id);
+  expect(mock.as(alice).sendMessage(record, "hi").content).toBe("hi");
+});

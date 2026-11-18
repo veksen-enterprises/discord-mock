@@ -220,7 +220,7 @@ export function registerThreadRoutes(
       if (!guild.members.has(userId))
         return respond.error(404, 10007, "Unknown Member");
       if (state.addThreadMember(thread.id, userId))
-        announceMembers(thread, { added: userId });
+        announceMembers(mock, thread, { added: userId });
       return respond.noContent();
     }),
   );
@@ -241,7 +241,7 @@ export function registerThreadRoutes(
         (thread.type === ChannelType.PrivateThread && thread.owner_id === bot);
       if (!allowed) return respond.missingPermissions();
       if (state.removeThreadMember(thread.id, userId))
-        announceMembers(thread, { removed: userId });
+        announceMembers(mock, thread, { removed: userId });
       return respond.noContent();
     }),
   );
@@ -283,38 +283,57 @@ export function registerThreadRoutes(
       GatewayIntentBits.Guilds,
     );
   }
+}
 
-  // gateway-events#thread-members-update: "If the current user does not have the GUILD_MEMBERS
-  // Gateway Intent, then this event will only be sent if the current user was added to or removed
-  // from the thread." member_count is capped at 50.
-  function announceMembers(
-    thread: APIThreadChannel,
-    change: { added?: string; removed?: string },
-  ) {
-    const userId = change.added ?? change.removed!;
-    const guild = state.requireGuild(thread.guild_id!);
-    const member = guild.members.get(userId);
-    gateway.dispatch(
-      GatewayDispatchEvents.ThreadMembersUpdate,
-      {
-        id: thread.id,
-        guild_id: thread.guild_id,
-        member_count: Math.min(50, state.threadMembers(thread.id).length),
-        ...(change.added
-          ? {
-              added_members: [
-                {
-                  ...state.threadMember(thread.id, userId),
-                  member,
-                  presence: null,
-                },
-              ],
-            }
-          : { removed_member_ids: [userId] }),
-      },
-      userId === bot
-        ? GatewayIntentBits.Guilds
-        : GatewayIntentBits.GuildMembers,
-    );
-  }
+// gateway-events#thread-members-update: "If the current user does not have the GUILD_MEMBERS
+// Gateway Intent, then this event will only be sent if the current user was added to or removed
+// from the thread." member_count is capped at 50.
+export function announceMembers(
+  mock: DiscordMock,
+  thread: APIThreadChannel,
+  change: { added?: string; removed?: string },
+) {
+  const { state, gateway } = mock;
+  const bot = state.bot.id;
+  const userId = change.added ?? change.removed!;
+  const guild = state.requireGuild(thread.guild_id!);
+  const member = guild.members.get(userId);
+  gateway.dispatch(
+    GatewayDispatchEvents.ThreadMembersUpdate,
+    {
+      id: thread.id,
+      guild_id: thread.guild_id,
+      member_count: Math.min(50, state.threadMembers(thread.id).length),
+      ...(change.added
+        ? {
+            added_members: [
+              {
+                ...state.threadMember(thread.id, userId),
+                member,
+                presence: null,
+              },
+            ],
+          }
+        : { removed_member_ids: [userId] }),
+    },
+    userId === bot ? GatewayIntentBits.Guilds : GatewayIntentBits.GuildMembers,
+  );
+}
+
+// Discord's docs don't say it, but the Discord app adds a member to a private thread when a message
+// there mentions them (inferred from the app, not checked). Without it, a bot that opens a private
+// thread and greets the user by mention would fail a test it passes on Discord.
+export function addMentionedToPrivateThread(
+  mock: DiscordMock,
+  thread: APIChannel,
+  mentionedIds: string[],
+) {
+  if (thread.type !== ChannelType.PrivateThread) return;
+  const guild = mock.state.requireGuild((thread as APIThreadChannel).guild_id!);
+  for (const userId of mentionedIds)
+    if (
+      guild.members.has(userId) &&
+      mock.state.addThreadMember(thread.id, userId)
+    )
+      announceMembers(mock, thread as APIThreadChannel, { added: userId });
 }
