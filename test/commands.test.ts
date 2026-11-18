@@ -1,0 +1,100 @@
+import { once } from "node:events";
+import {
+  ChannelType,
+  Client,
+  Events,
+  GatewayIntentBits,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+} from "discord.js";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { createDiscordMock, type DiscordMock } from "../src/index.js";
+
+let mock: DiscordMock;
+let client: Client;
+
+beforeEach(async () => {
+  mock = await createDiscordMock();
+});
+
+afterEach(async () => {
+  await client?.destroy();
+  await mock.close();
+});
+
+const adminConfig = new SlashCommandBuilder()
+  .setName("admin-config")
+  .setDescription("Configure the ladder")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addSubcommand((sub) =>
+    sub
+      .setName("set")
+      .setDescription("Set the channels")
+      .addChannelOption((option) =>
+        option
+          .setName("updates")
+          .setDescription("Where results go")
+          .setRequired(true)
+          .addChannelTypes(ChannelType.GuildText),
+      ),
+  );
+
+async function start() {
+  const guild = mock.createGuild("ladder");
+  const general = mock.createTextChannel(guild, "general");
+  const category = mock.createCategory(guild, "ladders");
+  const alice = mock.createUser("alice");
+  mock.addMember(guild, alice);
+  const owner = mock.state.requireUser(guild.ownerId);
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    const updates = interaction.options.getChannel("updates", true);
+    await interaction.reply(
+      `${interaction.options.getSubcommand()} ${updates.name} ${updates.type}`,
+    );
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  await client.application!.commands.set([adminConfig.toJSON()]);
+  return { general, category, alice, owner };
+}
+
+it("runs a subcommand with a channel option, resolved for the bot", async () => {
+  const { general, owner } = await start();
+
+  const reply = await mock
+    .as(owner)
+    .slashCommand(general, "admin-config set", { updates: general.id })
+    .reply();
+
+  expect(reply.content).toBe(`set general ${ChannelType.GuildText}`);
+  mock.assertNoUnhandledRequests();
+});
+
+it("refuses a channel the option doesn't offer, and a missing subcommand", async () => {
+  const { general, category, owner } = await start();
+
+  expect(() =>
+    mock
+      .as(owner)
+      .slashCommand(general, "admin-config set", { updates: category.id }),
+  ).toThrow(/only offers channel types/);
+  expect(() =>
+    mock.as(owner).slashCommand(general, "admin-config", {}),
+  ).toThrow(/needs a subcommand: set/);
+});
+
+it("hides a command from members without its default permissions", async () => {
+  const { general, alice } = await start();
+
+  expect(() =>
+    mock
+      .as(alice)
+      .slashCommand(general, "admin-config set", { updates: general.id }),
+  ).toThrow(/can't use \/admin-config/);
+});

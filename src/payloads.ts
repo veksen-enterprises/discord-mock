@@ -20,7 +20,8 @@ export const Permission = {
 } as const;
 
 // Highest documented bit is MANAGE_OFFICIAL_MESSAGES (1 << 53): docs.discord.food/topics/permissions.
-const ALL = (1n << 54n) - 1n;
+export const ALL_PERMISSIONS = (1n << 54n) - 1n;
+const ALL = ALL_PERMISSIONS;
 
 /** Discord's permission algorithm: base from roles, then @everyone/role/member overwrites. */
 export function computePermissions(

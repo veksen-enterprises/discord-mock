@@ -17,6 +17,7 @@ import {
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
 import {
+  ALL_PERMISSIONS,
   computePermissions,
   interactionMember,
   Permission,
@@ -485,20 +486,41 @@ export class DiscordMock {
     return { thread, message };
   }
 
+  /** `name` is the command as a user types it: "ladder", or "admin-config set" for a subcommand. */
   private userRunsCommand(
     user: APIUser,
     channel: APIChannel,
     name: string,
     input: Record<string, unknown>,
   ) {
+    const [commandName, ...path] = name.split(" ");
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
-    const command = this.state.findCommand(guildId, name);
+    const command = this.state.findCommand(guildId, commandName!);
     if (!command) {
       throw new Error(
-        `discord-mock: /${name} isn't registered (bot never PUT it to /applications/.../commands)`,
+        `discord-mock: /${commandName} isn't registered (bot never PUT it to /applications/.../commands)`,
       );
     }
-    const options = buildOptions(command.options ?? [], input, name);
+    const guild = guildId ? this.state.requireGuild(guildId) : undefined;
+    // Discord's docs, interactions/application-commands#permissions: default_member_permissions
+    // is what a member needs to use the command; "0" leaves only admins. Discord hides it from
+    // everyone else, so they can't run it at all.
+    if (guild && command.default_member_permissions != null) {
+      const needed = BigInt(command.default_member_permissions);
+      const has = computePermissions(this.state, guild, user.id, channel);
+      const allowed =
+        has === ALL_PERMISSIONS || (needed !== 0n && (has & needed) === needed);
+      if (!allowed)
+        throw new Error(
+          `discord-mock: ${user.username} can't use /${commandName}: it needs permissions ${needed}`,
+        );
+    }
+    const { options, leaf } = commandOptions(
+      command.options ?? [],
+      path,
+      input,
+      name,
+    );
     return this.dispatchInteraction(
       user,
       channel,
@@ -508,12 +530,7 @@ export class DiscordMock {
         name: command.name,
         type: command.type,
         options,
-        resolved: resolvedFor(
-          this.state,
-          command.options ?? [],
-          input,
-          guildId,
-        ),
+        resolved: resolvedFor(this.state, leaf, input, guild, user.id),
       },
     );
   }
@@ -1295,7 +1312,47 @@ const OPTION_CHECKS: Partial<
   [ApplicationCommandOptionType.Number]: (v) => typeof v === "number",
   [ApplicationCommandOptionType.Boolean]: (v) => typeof v === "boolean",
   [ApplicationCommandOptionType.User]: (v) => typeof v === "string",
+  [ApplicationCommandOptionType.Channel]: (v) => typeof v === "string",
 };
+
+const SUBCOMMAND_TYPES: ApplicationCommandOptionType[] = [
+  ApplicationCommandOptionType.Subcommand,
+  ApplicationCommandOptionType.SubcommandGroup,
+];
+
+/**
+ * Walk `path` (subcommand group, subcommand) down the registered schema, and nest the typed
+ * options under it the way Discord sends them. Returns the leaf schema for `resolved`.
+ */
+function commandOptions(
+  schema: APIApplicationCommandOption[],
+  path: string[],
+  input: Record<string, unknown>,
+  command: string,
+): { options: unknown[]; leaf: APIApplicationCommandOption[] } {
+  const subcommands = schema.filter((o) => SUBCOMMAND_TYPES.includes(o.type));
+  if (!path.length) {
+    if (subcommands.length)
+      throw new Error(
+        `discord-mock: /${command} needs a subcommand: ${subcommands.map((o) => o.name).join(", ")}`,
+      );
+    return { options: buildOptions(schema, input, command), leaf: schema };
+  }
+  const [next, ...rest] = path;
+  const sub = subcommands.find((o) => o.name === next);
+  if (!sub)
+    throw new Error(`discord-mock: /${command}: no subcommand "${next}"`);
+  const nested = commandOptions(
+    ("options" in sub ? sub.options : undefined) ?? [],
+    rest,
+    input,
+    command,
+  );
+  return {
+    options: [{ name: sub.name, type: sub.type, options: nested.options }],
+    leaf: nested.leaf,
+  };
+}
 
 /** Turn `{ text: "hi" }` into Discord's typed option list, validated against what the bot registered. */
 function buildOptions(
@@ -1340,17 +1397,16 @@ function resolvedFor(
   state: DiscordState,
   schema: APIApplicationCommandOption[],
   input: Record<string, unknown>,
-  guildId: string | undefined,
+  guild: GuildRecord | undefined,
+  invokerId: string,
 ) {
-  const users = schema
-    .filter(
-      (o) =>
-        o.type === ApplicationCommandOptionType.User &&
-        typeof input[o.name] === "string",
-    )
-    .map((o) => state.requireUser(input[o.name] as string));
-  if (!users.length) return undefined;
-  const guild = guildId ? state.requireGuild(guildId) : undefined;
+  const idsOf = (type: ApplicationCommandOptionType) =>
+    schema
+      .filter((o) => o.type === type && typeof input[o.name] === "string")
+      .map((o) => input[o.name] as string);
+  const users = idsOf(ApplicationCommandOptionType.User).map((id) =>
+    state.requireUser(id),
+  );
   // Resolved members carry no user, deaf or mute; the user is in `users`.
   const members = users.flatMap((u) => {
     const m = guild?.members.get(u.id);
@@ -1358,8 +1414,47 @@ function resolvedFor(
     const { user: _, deaf: _d, mute: _m, ...partial } = m;
     return [[u.id, partial] as const];
   });
+  // Discord's docs: a resolved channel is partial (id, name, type, permissions, parent_id, …);
+  // `permissions` are the invoker's in that channel. The option's channel_types limit what the
+  // user can pick.
+  const channelOptions = schema.filter(
+    (o) =>
+      o.type === ApplicationCommandOptionType.Channel &&
+      typeof input[o.name] === "string",
+  );
+  const channels = channelOptions.map((o) => {
+    const channel = state.requireChannel(input[o.name] as string);
+    const allowed = "channel_types" in o ? o.channel_types : undefined;
+    if (allowed?.length && !allowed.includes(channel.type as never))
+      throw new Error(
+        `discord-mock: option "${o.name}" only offers channel types ${allowed.join(", ")}`,
+      );
+    const c = channel as APIChannel & Record<string, unknown>;
+    return [
+      channel.id,
+      {
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        parent_id: c.parent_id ?? null,
+        guild_id: c.guild_id,
+        flags: c.flags ?? 0,
+        ...("position" in c ? { position: c.position } : {}),
+        ...("thread_metadata" in c
+          ? { thread_metadata: c.thread_metadata }
+          : {}),
+        permissions: String(
+          guild ? computePermissions(state, guild, invokerId, channel) : 0n,
+        ),
+      },
+    ] as const;
+  });
+  if (!users.length && !channels.length) return undefined;
   return {
-    users: Object.fromEntries(users.map((u) => [u.id, u])),
+    ...(users.length
+      ? { users: Object.fromEntries(users.map((u) => [u.id, u])) }
+      : {}),
     ...(members.length ? { members: Object.fromEntries(members) } : {}),
+    ...(channels.length ? { channels: Object.fromEntries(channels) } : {}),
   };
 }
