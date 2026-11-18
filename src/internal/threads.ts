@@ -103,8 +103,11 @@ export function registerThreadRoutes(
         thread,
       });
       state.emit("messageUpdate", message);
-      gateway.dispatchMessage("MESSAGE_UPDATE", message);
-      return respond.json(thread, 201);
+      // Discord's MESSAGE_UPDATE here leaves `thread` out, though the message has it over REST
+      // (contract run 8).
+      const { thread: _, ...dispatched } = message;
+      gateway.dispatchMessage("MESSAGE_UPDATE", dispatched as typeof message);
+      return respond.json(withBotMember(thread), 201);
     }),
   );
 
@@ -148,7 +151,7 @@ export function registerThreadRoutes(
             : undefined,
       });
       announceCreate(thread);
-      return respond.json(thread, 201);
+      return respond.json(withBotMember(thread), 201);
     }),
   );
 
@@ -283,6 +286,12 @@ export function registerThreadRoutes(
 
   // gateway-events#thread-create: "When a thread is created, includes an additional newly_created
   // boolean field". GUILDS intent.
+  // Discord's response carries the bot's thread member as `member` (contract run 8).
+  const withBotMember = (thread: APIChannel) => ({
+    ...thread,
+    member: state.threadMember(thread.id, bot),
+  });
+
   // The creator also gets THREAD_MEMBER_UPDATE for its own membership: real Discord sent it in
   // contract run 7 (gateway-events#thread-member-update: "the thread member object for the current
   // user").

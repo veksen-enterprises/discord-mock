@@ -1,4 +1,5 @@
 [
+  "rest.createRole.description: missing in mock (Discord: null)",
   "rest.editMessage.author.accent_color: missing in mock (Discord: null)",
   "rest.editMessage.author.avatar_decoration_data: missing in mock (Discord: null)",
   "rest.editMessage.author.banner: missing in mock (Discord: null)",
@@ -8,6 +9,10 @@
   "rest.editMessage.author.display_name_styles: missing in mock (Discord: null)",
   "rest.editMessage.author.flags: missing in mock (Discord: number)",
   "rest.editMessage.author.primary_guild: missing in mock (Discord: null)",
+  "rest.editMessage.thread.bitrate: missing in mock (Discord: number)",
+  "rest.editMessage.thread.rtc_region: missing in mock (Discord: null)",
+  "rest.editMessage.thread.user_limit: missing in mock (Discord: number)",
+  "rest.editRole.description: missing in mock (Discord: null)",
   "rest.listMessages.[].author.accent_color: missing in mock (Discord: null)",
   "rest.listMessages.[].author.avatar_decoration_data: missing in mock (Discord: null)",
   "rest.listMessages.[].author.banner: missing in mock (Discord: null)",
@@ -26,6 +31,9 @@
   "rest.sendMessage.author.display_name_styles: missing in mock (Discord: null)",
   "rest.sendMessage.author.flags: missing in mock (Discord: number)",
   "rest.sendMessage.author.primary_guild: missing in mock (Discord: null)",
+  "rest.startThread.bitrate: missing in mock (Discord: number)",
+  "rest.startThread.rtc_region: missing in mock (Discord: null)",
+  "rest.startThread.user_limit: missing in mock (Discord: number)",
   "rest.usersMe.accent_color: missing in mock (Discord: null)",
   "rest.usersMe.avatar_decoration_data: missing in mock (Discord: null)",
   "rest.usersMe.banner: missing in mock (Discord: null)",
@@ -89,6 +97,11 @@
   "gateway.GUILD_CREATE.theme: missing in mock (Discord: null)",
   "gateway.GUILD_CREATE.verification_role_id: missing in mock (Discord: null)",
   "gateway.GUILD_CREATE.version: missing in mock (Discord: number)",
+  "gateway.GUILD_ROLE_CREATE.role.description: missing in mock (Discord: null)",
+  "gateway.GUILD_ROLE_CREATE.role.version: missing in mock (Discord: number)",
+  "gateway.GUILD_ROLE_DELETE.version: missing in mock (Discord: number)",
+  "gateway.GUILD_ROLE_UPDATE.role.description: missing in mock (Discord: null)",
+  "gateway.GUILD_ROLE_UPDATE.role.version: missing in mock (Discord: number)",
   "gateway.MESSAGE_CREATE.author.avatar_decoration_data: missing in mock (Discord: null)",
   "gateway.MESSAGE_CREATE.author.clan: missing in mock (Discord: null)",
   "gateway.MESSAGE_CREATE.author.collectibles: missing in mock (Discord: null)",
@@ -111,5 +124,7 @@
   "gateway.READY.session_type: missing in mock (Discord: string)",
   "gateway.READY.user.clan: missing in mock (Discord: null)",
   "gateway.READY.user.primary_guild: missing in mock (Discord: null)",
-  "gateway.READY.user_settings: missing in mock (Discord: object)"
+  "gateway.READY.user_settings: missing in mock (Discord: object)",
+  "gateway.THREAD_MEMBER_UPDATE.mute_config: missing in mock (Discord: null)",
+  "gateway.THREAD_MEMBER_UPDATE.muted: missing in mock (Discord: boolean)"
 ]
