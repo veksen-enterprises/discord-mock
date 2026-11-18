@@ -34,10 +34,13 @@ async function ladderServer() {
 
 describe("/join", () => {
   it("adds the member under their server nickname and confirms privately", async () => {
+    // Arrange
     const { challengesChannel, alice, store } = await ladderServer();
 
+    // Act
     const reply = await alice.run(challengesChannel, "join");
 
+    // Assert
     expect(reply.flags! & MessageFlags.Ephemeral).toBe(MessageFlags.Ephemeral);
     expect(reply.embeds[0]).toMatchObject({
       title: "Joined the Ladder!",
@@ -47,24 +50,31 @@ describe("/join", () => {
   });
 
   it("refuses a second join", async () => {
+    // Arrange
     const { challengesChannel, alice } = await ladderServer();
     await alice.run(challengesChannel, "join");
 
+    // Act
     const again = await alice.run(challengesChannel, "join");
 
+    // Assert
     expect(again.embeds[0]?.title).toBe("Already Joined");
   });
 
   it("says so when the channel isn't in a ladder category", async () => {
+    // Arrange
     const { generalChannel, alice, store } = await ladderServer();
 
+    // Act
     const reply = await alice.run(generalChannel, "join");
 
+    // Assert
     expect(reply.embeds[0]?.title).toBe("No Ladder");
     expect(store.get("Test Ladder")?.size).toBe(0);
   });
 
   it("keeps the member joined when Discord fails the confirmation", async () => {
+    // Arrange
     const { discord, challengesChannel, alice, store, errors } =
       await ladderServer();
     discord.fail(
@@ -73,15 +83,17 @@ describe("/join", () => {
       respond.serverError(503),
     );
 
-    // discord.js retried the edit 3 times and gave up; the member is left on "thinking…"
-    await expect(alice.run(challengesChannel, "join")).rejects.toThrow(
-      /still "deferred"/,
-    );
+    // Act
+    const joining = alice.run(challengesChannel, "join");
+
+    // Assert: discord.js retried the edit 3 times and gave up, so the member is left on "thinking…"
+    await expect(joining).rejects.toThrow(/still "deferred"/);
     expect(errors[0]).toMatchObject({ status: 503 });
     expect(store.get("Test Ladder")?.get(alice.id)).toBe("Bravo");
   });
 
   it("sees a server and channels created after the bot started", async () => {
+    // Arrange
     const { discord } = await ladderServer();
     // Built after start: the bot learns about them from GUILD_CREATE and CHANNEL_CREATE.
     const lateServer = discord.guild("late");
@@ -92,8 +104,10 @@ describe("/join", () => {
     );
     const bob = discord.member(lateServer, "bob");
 
+    // Act
     const reply = await bob.run(lateChannel, "join");
 
+    // Assert
     expect(reply.embeds[0]?.title).toBe("Joined the Ladder!");
   });
 });

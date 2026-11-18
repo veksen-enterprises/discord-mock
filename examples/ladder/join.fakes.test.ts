@@ -9,6 +9,7 @@ afterEach(() => {
 });
 
 it("should add the member to the ladder", async () => {
+  // Arrange
   const store: Store = new Map([["Test Ladder", new Map()]]);
   const interaction = createMockChatInputCommandInteraction({
     displayName: "Bravo",
@@ -19,8 +20,10 @@ it("should add the member to the ladder", async () => {
     withError: vi.fn(),
   });
 
+  // Act
   await executeJoin(interaction, store);
 
+  // Assert
   expect(interaction.deferReply).toHaveBeenCalled();
   expect(store.get("Test Ladder")?.get("123456789")).toBe("Bravo");
   expect(replyModule.reply(interaction).withSuccess).toHaveBeenCalledWith({

@@ -13,6 +13,7 @@ async function startBot() {
 }
 
 it("tells the member when the bot can't post in the channel", async () => {
+  // Arrange
   const { discord, generalChannel, newsChannel, alice } = await startBot();
   discord.fail(
     "POST",
@@ -20,31 +21,39 @@ it("tells the member when the bot can't post in the channel", async () => {
     respond.missingPermissions(),
   );
 
+  // Act
   const reply = await alice.run(generalChannel, "announce", {
     channel: newsChannel.id,
   });
 
+  // Assert
   expect(reply.content).toBe("failed: 50013");
 });
 
 it("tells the member when Discord keeps answering 503", async () => {
+  // Arrange
   const { discord, generalChannel, newsChannel, alice } = await startBot();
   discord.fail("POST", "/channels/:id/messages", respond.serverError(503));
 
+  // Act
   const reply = await alice.run(generalChannel, "announce", {
     channel: newsChannel.id,
   });
 
+  // Assert
   expect(reply.content).toBe("failed: 503");
 });
 
 it("tells the member when Discord drops the connection", async () => {
+  // Arrange
   const { discord, generalChannel, newsChannel, alice } = await startBot();
   discord.fail("POST", "/channels/:id/messages", respond.connectionClosed());
 
+  // Act
   const reply = await alice.run(generalChannel, "announce", {
     channel: newsChannel.id,
   });
 
+  // Assert
   expect(reply.content).toBe("failed: UND_ERR_SOCKET");
 });
