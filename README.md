@@ -109,7 +109,7 @@ const discord = await createDiscord();
 const server = discord.guild("SIN");
 const ladderCategory = discord.category(server, "Test Ladder");
 const challengesChannel = discord.channel(server, "challenges", ladderCategory);
-const alice = discord.member(server, "alice", "Bravo");
+const alice = discord.member(server, "alice", { nickname: "Bravo" });
 const bot = createBot(store, discord.clientOptions); // the bot's only test seam
 await discord.start(bot.client, { commands });
 

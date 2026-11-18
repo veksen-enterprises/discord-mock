@@ -18,7 +18,7 @@ async function ladderServer() {
     ladderCategory,
   );
   const generalChannel = discord.channel(server, "general");
-  const alice = discord.member(server, "alice", "Bravo");
+  const alice = discord.member(server, "alice", { nickname: "Bravo" });
   const store: Store = new Map([["Test Ladder", new Map()]]);
   const bot = createBot(store, discord.clientOptions);
   await discord.start(bot.client, { commands });

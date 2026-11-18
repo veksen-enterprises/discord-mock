@@ -59,6 +59,7 @@ it("should record the result when the winner reports", async () => {
 | pick from a select menu            | `await alice.select(message, "5-2")`                                                                                              |
 | post, open a forum post, react     | `alice.post(channel, { content })`, `alice.forumPost(forum, { title, content })`, `alice.react(message, "✅")`                    |
 | DM the bot                         | `alice.dm({ content })`, then `await discord.find(alice, /text/)`                                                                 |
+| a member with permissions          | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                      |
 | change nickname, leave the server  | `alice.nickname("Al")`, `alice.leave()`                                                                                           |
 | make Discord fail a route          | `discord.fail("POST", "/channels/:id/messages", respond.serverError(503))`                                                        |
 | wait for a message                 | `await discord.find(channel, /text/)` (or a member, for their DMs); only the bot's messages written since the latest action count |
@@ -99,7 +100,7 @@ The mock names messages by their text and lists what exists. Fix the test from t
 | `can't pick "x": "…" offers A, B`                 | Wrong option label                                                   |
 | `matches 2 buttons` / `matches 2 options`         | Make the label or RegExp more specific                               |
 | `can't see "…": it's ephemeral, only alice can`   | Another member is acting on someone's private reply                  |
-| `can't use /x: it needs permissions …`            | Use `discord.owner(server)` for admin commands                       |
+| `can't use /x: it needs permissions …`            | Use `discord.owner(server)`, or a member built with `permissions`    |
 | `the bot didn't answer within 3s`                 | Discord would show "The application did not respond": a real bug     |
 | `still "deferred"`                                | The bot deferred and never answered: a real bug, or a `fail` you set |
 | `alice isn't a member of X`                       | The member acts in a server they never joined, or after `leave()`    |

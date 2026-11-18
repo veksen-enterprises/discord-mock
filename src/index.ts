@@ -162,16 +162,23 @@ class Discord {
   }
 
   /**
-   * A new user who has joined `guild`, optionally with a server nickname.
+   * A new user who has joined `guild`. `nickname` is their server nickname. `permissions` gives them
+   * a role holding those permissions, for a moderator or admin who isn't the owner.
    * @example const alice = discord.member(server, "Alice");
+   * @example const mod = discord.member(server, "Mod", { permissions: Permission.ModerateMembers });
    */
   member<G extends string>(
     guild: Guild<G>,
     name: string,
-    nick?: string,
+    options: { nickname?: string; permissions?: bigint } = {},
   ): Member<G> {
     const user = this.mock.createUser(name);
-    this.mock.addMember(this.g(guild), user, { nick });
+    const record = this.g(guild);
+    this.mock.addMember(record, user, { nick: options.nickname });
+    if (options.permissions !== undefined)
+      this.mock.createRole(record, `${name}'s role`, options.permissions, [
+        user,
+      ]);
     return this.actorFor(guild, user);
   }
 

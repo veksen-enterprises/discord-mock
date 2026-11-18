@@ -11,6 +11,7 @@ import {
   GatewayIntentBits,
   Partials,
   MessageFlags,
+  PermissionFlagsBits,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -52,6 +53,10 @@ export const commands = [
   new SlashCommandBuilder()
     .setName("thinking")
     .setDescription("Defers, then answers with followUp"),
+  new SlashCommandBuilder()
+    .setName("settings")
+    .setDescription("Server settings, for whoever can manage the server")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 ].map((c) => c.toJSON());
 
 export async function deployCommands(opts: {
@@ -110,6 +115,9 @@ export function createBot(
           await interaction.deferReply();
           await new Promise((r) => setTimeout(r, 50));
           await interaction.editReply("done thinking");
+          return;
+        case "settings":
+          await interaction.reply("settings saved");
           return;
         case "whois": {
           const member = interaction.options.getMember("user");

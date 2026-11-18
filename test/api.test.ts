@@ -1,5 +1,10 @@
 import { expect, it, vi } from "vitest";
-import { createDiscord, type Guild, type Member } from "../src/index.js";
+import {
+  createDiscord,
+  Permission,
+  type Guild,
+  type Member,
+} from "../src/index.js";
 import { commands, createBot } from "./fixtures/bot.js";
 
 async function startBot() {
@@ -7,7 +12,7 @@ async function startBot() {
   const server = discord.guild("SIN");
   const generalChannel = discord.channel(server, "general");
   const alice = discord.member(server, "alice");
-  const bob = discord.member(server, "bob", "Bobby");
+  const bob = discord.member(server, "bob", { nickname: "Bobby" });
   await discord.start(createBot(discord.clientOptions).client, { commands });
   return { discord, generalChannel, alice, bob };
 }
@@ -52,6 +57,23 @@ it("waits until the bot has gone quiet, so a check for exactly one reply holds",
     "!ping",
     "pong",
   ]);
+});
+
+it("lets a member who holds Manage Server run an admin command, and refuses one who doesn't", async () => {
+  const { discord } = await startBot();
+  const server = discord.guild("mods");
+  const modsChannel = discord.channel(server, "mods");
+  const mod = discord.member(server, "mod", {
+    permissions: Permission.ManageGuild,
+  });
+  const regular = discord.member(server, "regular");
+
+  expect((await mod.run(modsChannel, "settings")).content).toBe(
+    "settings saved",
+  );
+  await expect(regular.run(modsChannel, "settings")).rejects.toThrow(
+    "can't use /settings",
+  );
 });
 
 it("lets a member DM the bot and finds the answer in their DMs", async () => {
