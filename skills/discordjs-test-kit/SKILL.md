@@ -69,6 +69,7 @@ it("should record the result when the winner reports", async () => {
 | someone joins through an invite           | `const code = alice.invite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                      |
 | join, move, leave voice                   | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
 | create, edit, delete an event             | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
+| add, rename, delete an emoji or sticker   | `const pog = mod.addEmoji("pog")`, `mod.renameExpression(pog, "poggers")`, `mod.deleteExpression(pog)`                                              |
 | change nickname, leave the server         | `alice.nickname("Al")`, `alice.leave()`                                                                                                             |
 | change their display name                 | `alice.displayName("Alicia")`: discord.js emits `userUpdate`                                                                                        |
 | override who can use a command            | `discord.commandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                          |

@@ -474,3 +474,27 @@ it("tells a bot with the intent about a member's event, which an ordinary member
 
   expect(heard).toEqual(["Raid night"]);
 });
+
+it("tells a bot that logs expressions about a moderator's new emoji, which a member can't add", async () => {
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const alice = discord.member(server, "alice");
+  const mod = discord.member(server, "mod", {
+    permissions: Permission.CreateGuildExpressions,
+  });
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildExpressions],
+    ...discord.clientOptions,
+  });
+  const heard: string[] = [];
+  client.on(Events.GuildEmojiCreate, (e) => heard.push(e.name!));
+  client.on(Events.GuildEmojiUpdate, (_, e) => heard.push(e.name!));
+  await discord.start(client, { commands: [] });
+
+  expect(() => alice.addEmoji("pog")).toThrow("Create Expressions");
+  const pog = mod.addEmoji("pog");
+  mod.renameExpression(pog, "poggers");
+  await discord.idle();
+
+  expect(heard).toEqual(["pog", "poggers"]);
+});

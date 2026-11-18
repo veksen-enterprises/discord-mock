@@ -11,10 +11,12 @@ import {
   type UserFlags,
   type RoleFlags,
   type APIChannel,
+  type APIEmoji,
   type APIGuildMember,
   type APIGuildScheduledEvent,
   type APIMessage,
   type APIRole,
+  type APISticker,
   type APIUser,
   type APIVoiceState,
   type RESTPostAPIApplicationCommandsJSONBody,
@@ -52,6 +54,10 @@ export interface GuildRecord {
   members: Map<string, APIGuildMember>;
   bans: Map<string, APIBan>;
   channelIds: string[];
+  /** Custom emojis by id, each with the user who uploaded it. */
+  emojis: Map<string, APIEmoji & { id: string; user: APIUser }>;
+  /** Guild stickers by id, each with the user who uploaded it. */
+  stickers: Map<string, APISticker & { user: APIUser }>;
 }
 
 /**
@@ -157,6 +163,8 @@ export class DiscordState extends EventEmitter<{
       members: new Map(),
       bans: new Map(),
       channelIds: [],
+      emojis: new Map(),
+      stickers: new Map(),
     };
     this.guilds.set(id, guild);
     this.addMember(guild.id, guild.ownerId);

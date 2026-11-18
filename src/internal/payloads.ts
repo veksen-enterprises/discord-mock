@@ -69,8 +69,12 @@ export function guildPayload(guild: GuildRecord) {
     default_message_notifications: 0,
     explicit_content_filter: 0,
     roles: [...guild.roles.values()],
-    emojis: [],
-    stickers: [],
+    // The emoji object's `user` comes only from the List and Get Routes (docs.discord.food
+    // resources/emoji); the guild object leaves it out (inferred for stickers).
+    emojis: [...guild.emojis.values()].map(({ user: _, ...emoji }) => emoji),
+    stickers: [...guild.stickers.values()].map(
+      ({ user: _, ...sticker }) => sticker,
+    ),
     features: [],
     mfa_level: 0,
     application_id: null,

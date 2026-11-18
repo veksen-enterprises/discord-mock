@@ -25,6 +25,7 @@ import {
   overridesFor,
   registerCommandPermissionRoutes,
 } from "./command-permissions.js";
+import { registerExpressionRoutes } from "./expressions.js";
 import { Gateway } from "./gateway.js";
 import { registerGuildRoutes } from "./guilds.js";
 import { deleteInvite, registerInviteRoutes } from "./invites.js";
@@ -2338,6 +2339,7 @@ export class DiscordMock {
     registerInviteRoutes(this, authed);
     registerVoiceRoutes(this, authed);
     registerScheduledEventRoutes(this, authed);
+    registerExpressionRoutes(this, authed);
     registerThreadRoutes(this, authed);
   }
 

@@ -8,6 +8,11 @@ import {
 import type { Client } from "discord.js";
 import { onTestFinished } from "vitest";
 import { setCommandPermissions } from "./internal/command-permissions.js";
+import {
+  deleteExpression,
+  renameExpression,
+  uploadExpression,
+} from "./internal/expressions.js";
 import { createInvite } from "./internal/invites.js";
 import {
   createDiscordMock,
@@ -60,6 +65,10 @@ export type Forum<G extends string = string> = Handle<"forum", G>;
 export type Thread<G extends string = string> = Handle<"thread", G>;
 /** A role. Members pick it in a role select. */
 export type Role<G extends string = string> = Handle<"role", G>;
+/** A custom emoji, which members upload with `member.addEmoji`. */
+export type Emoji<G extends string = string> = Handle<"emoji", G>;
+/** A guild sticker, which members upload with `member.addSticker`. */
+export type Sticker<G extends string = string> = Handle<"sticker", G>;
 /** A scheduled event, which members create with `member.createEvent`. */
 export type ScheduledEvent<G extends string = string> = Handle<"event", G>;
 /** What a member can pick in a user, role, mentionable or channel select. */
@@ -250,6 +259,21 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   ): void;
   /** Deletes an event; the bot hears `guildScheduledEventDelete`. Like `editEvent`. */
   deleteEvent(event: ScheduledEvent<G>): void;
+  /**
+   * Uploads a custom emoji named `name` (2-32 characters), which needs Create Expressions. The bot
+   * hears `emojiCreate` with GUILD_EXPRESSIONS (GuildExpressions).
+   * @example const pog = mod.addEmoji("pog"); // a bot that logs emoji changes should post
+   */
+  addEmoji(name: string): Emoji<G>;
+  /** Uploads a sticker named `name` (2-30 characters), like `addEmoji`; the bot hears `stickerCreate`. */
+  addSticker(name: string): Sticker<G>;
+  /**
+   * Renames an emoji or sticker; the bot hears `emojiUpdate` or `stickerUpdate`. Someone else's needs
+   * Manage Expressions.
+   */
+  renameExpression(expression: Emoji<G> | Sticker<G>, name: string): void;
+  /** Deletes an emoji or sticker; the bot hears `emojiDelete` or `stickerDelete`. Like `renameExpression`. */
+  deleteExpression(expression: Emoji<G> | Sticker<G>): void;
 }
 
 const FIND_TIMEOUT_MS = 2000;
@@ -820,6 +844,62 @@ class MemberActor {
       this.user(),
       this.eventOf(event),
     );
+  }
+
+  addEmoji(name: string): Emoji {
+    this.markAction();
+    const id = uploadExpression(
+      this.mock,
+      this.guild(),
+      this.user(),
+      "emoji",
+      name,
+    );
+    return handle(id, name);
+  }
+
+  addSticker(name: string): Sticker {
+    this.markAction();
+    const id = uploadExpression(
+      this.mock,
+      this.guild(),
+      this.user(),
+      "sticker",
+      name,
+    );
+    return handle(id, name);
+  }
+
+  renameExpression(expression: Emoji | Sticker, name: string): void {
+    this.markAction();
+    const guild = this.guild();
+    renameExpression(
+      this.mock,
+      guild,
+      this.user(),
+      this.kindOf(expression),
+      expression.id,
+      name,
+    );
+  }
+
+  deleteExpression(expression: Emoji | Sticker): void {
+    this.markAction();
+    const guild = this.guild();
+    deleteExpression(
+      this.mock,
+      guild,
+      this.user(),
+      this.kindOf(expression),
+      expression.id,
+    );
+  }
+
+  private kindOf(expression: Emoji | Sticker) {
+    const guild = this.guild();
+    if (guild.emojis.has(expression.id)) return "emoji";
+    if (guild.stickers.has(expression.id)) return "sticker";
+    throw new Error(`discordjs-test-kit: ${expression.name} was deleted`);
   }
 
   private eventOf(event: ScheduledEvent) {
