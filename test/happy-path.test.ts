@@ -132,11 +132,21 @@ describe("a stock discord.js Client against the mock", () => {
     ).rejects.toMatchObject({ code: 50035, status: 400 });
   });
 
-  it("reports a gateway op the mock doesn't answer as a Gap", async () => {
-    await start();
+  it("accepts a presence update, and reports a gateway op the mock doesn't answer as a Gap", async () => {
+    const { guild } = await start();
+
     client.user!.setPresence({ status: "idle" }); // op 3 Presence Update
+    const sounds = client.guilds.fetchSoundboardSounds({
+      guildIds: [guild.id],
+      time: 50,
+    }); // op 31 Request Soundboard Sounds
+
+    await expect(sounds).rejects.toThrow();
+    // Ops are handled in the order sent, so op 3 was handled before op 31 was recorded.
     await vi.waitFor(() =>
-      expect(() => mock.assertNoUnhandledRequests()).toThrow(/gateway op 3/),
+      expect(() => mock.assertNoUnhandledRequests()).toThrow(
+        "unhandled requests:\n  gateway op 31",
+      ),
     );
   });
 

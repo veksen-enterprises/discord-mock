@@ -157,6 +157,12 @@ export class Gateway {
         case GatewayOpcodes.RequestGuildMembers:
           if (session) this.requestGuildMembers(session, d);
           return;
+        // docs.discord.food/topics/gateway-events, Update Presence: no reply to the sender is
+        // documented, and discord.js's ClientPresence.set doesn't wait for one. Nothing in the Model
+        // shows a presence, so it is accepted and dropped. The 5 per 20s limit isn't modelled.
+        // Inferred, not checked against Discord.
+        case GatewayOpcodes.PresenceUpdate:
+          return;
         default:
           this.options.recordGap(`gateway op ${op}`);
       }
