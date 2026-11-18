@@ -3,6 +3,9 @@
 Add new lessons at the top, one bullet each: the rule, then the incident in a
 few words.
 
+- **Gate the commit on the checks with `&&`.** Running typecheck, lint and tests
+  as separate commands then committing lets a failure through. b2b2440 landed on
+  `main` with a type error in a test (2026-11-18).
 - **Read the reference before citing it.** If a source can't be fetched, say so
   and stop; don't model from memory under its name. The spike cited
   docs.discord.food in the README without one page of it being read (2026-11-17).
