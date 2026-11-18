@@ -4,6 +4,10 @@ import {
   DiscordAPIError,
   Events,
   GatewayIntentBits,
+  LabelBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   type TextChannel,
 } from "discord.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -144,4 +148,41 @@ it("refuses option values the Discord app wouldn't send: below min_value, over m
   expect(() =>
     mock.as(alice).slashCommand(general, "limit", { max: 3, note: "too long" }),
   ).toThrow('/limit option "note" must be at most 5 characters');
+});
+
+it("refuses a modal with 6 components, which discord.js's ModalBuilder lets through", async () => {
+  const channel = await start();
+  const alice = mock.createUser("alice");
+  mock.addMember(mock.state.requireGuild(channel.guildId), alice);
+  const errors: unknown[] = [];
+  client.on(Events.InteractionCreate, (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    const field = (i: number) =>
+      new LabelBuilder()
+        .setLabel(`#${i}`)
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId(`f${i}`)
+            .setStyle(TextInputStyle.Short),
+        );
+    interaction
+      .showModal(
+        new ModalBuilder()
+          .setCustomId("big")
+          .setTitle("Big")
+          .addLabelComponents([1, 2, 3, 4, 5, 6].map(field)),
+      )
+      .catch((e) => errors.push(e));
+  });
+  await client.application!.commands.set(
+    [{ name: "big", description: "Opens a big form" }],
+    channel.guildId,
+  );
+
+  const run = mock
+    .as(alice)
+    .slashCommand(mock.state.requireChannel(channel.id), "big");
+
+  await expect(run.reply()).rejects.toThrow("didn't answer within 0.2s");
+  expect(errors[0]).toMatchObject({ code: 50035 });
 });

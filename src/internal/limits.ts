@@ -11,7 +11,38 @@ import type { RestResponse } from "./rest.js";
 type Problem = { path: (string | number)[]; message: string };
 
 export function messageLimitError(body: unknown): RestResponse | undefined {
-  const problems = messageProblems(body as MessageBody | undefined);
+  return limitError(messageProblems(body as MessageBody | undefined));
+}
+
+// interactions/receiving-and-responding#interaction-response-object-modal: title max 45 characters,
+// custom_id 1-100, "Between 1 and 5 (inclusive) components". discord.js's ModalBuilder doesn't check
+// the 5, so a bot can send 6. The field codes are inferred, as above.
+export function modalLimitError(body: unknown): RestResponse | undefined {
+  const modal = (body ?? {}) as {
+    title?: unknown;
+    custom_id?: unknown;
+    components?: unknown[];
+  };
+  const problems: Problem[] = [];
+  if (typeof modal.title === "string" && modal.title.length > 45)
+    problems.push({
+      path: ["title"],
+      message: "Must be 45 or fewer in length.",
+    });
+  if (typeof modal.custom_id === "string" && modal.custom_id.length > 100)
+    problems.push({
+      path: ["custom_id"],
+      message: "Must be 100 or fewer in length.",
+    });
+  if ((modal.components?.length ?? 0) > 5)
+    problems.push({
+      path: ["components"],
+      message: "Must be 5 or fewer in length.",
+    });
+  return limitError(problems);
+}
+
+function limitError(problems: Problem[]): RestResponse | undefined {
   if (problems.length === 0) return undefined;
   const errors: Record<string, unknown> = {};
   for (const { path, message } of problems) {

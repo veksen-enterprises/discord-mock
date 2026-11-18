@@ -187,3 +187,43 @@ it("names the registered apps of that kind when the app isn't one", async () => 
     'the user app "Quote" isn\'t registered. Registered user apps: "View Nickname"',
   );
 });
+
+it("fills the form a command opens, and gets the bot's answer to it", async () => {
+  const { generalChannel, alice } = await startBot();
+
+  const thanks = await alice.run(
+    generalChannel,
+    "feedback",
+    {},
+    { Topic: "ladder" },
+  );
+
+  expect(thanks.content).toBe('thanks for "ladder"');
+});
+
+it("fills the form a button opens, and sees the message the bot updated", async () => {
+  const { generalChannel, alice } = await startBot();
+  const sign = await alice.run(generalChannel, "sign");
+
+  const after = await alice.click(sign, "Rename", { "New text": "Closed" });
+
+  expect(after).toBe(sign);
+  expect(sign.content).toBe("Closed");
+});
+
+it("refuses a form the Discord app wouldn't submit, and says when the bot opened one", async () => {
+  const { generalChannel, alice } = await startBot();
+
+  await expect(alice.run(generalChannel, "feedback")).rejects.toThrow(
+    'the bot opened the form "Feedback" (fields "Topic", "Details") instead of replying',
+  );
+  await expect(
+    alice.run(generalChannel, "feedback", {}, { Details: "no topic" }),
+  ).rejects.toThrow('field "Topic" of "Feedback"');
+  await expect(
+    alice.run(generalChannel, "feedback", {}, { Topic: "x".repeat(21) }),
+  ).rejects.toThrow("takes at most 20 characters");
+  await expect(
+    alice.run(generalChannel, "feedback", {}, { Title: "x" }),
+  ).rejects.toThrow('has no field "Title"');
+});

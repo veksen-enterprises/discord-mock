@@ -11,7 +11,11 @@ import {
   ContextMenuCommandBuilder,
   Events,
   GatewayIntentBits,
+  LabelBuilder,
+  ModalBuilder,
   Partials,
+  TextInputBuilder,
+  TextInputStyle,
   MessageFlags,
   PermissionFlagsBits,
   REST,
@@ -59,6 +63,12 @@ export const commands = [
     .setName("settings")
     .setDescription("Server settings, for whoever can manage the server")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  new SlashCommandBuilder()
+    .setName("feedback")
+    .setDescription("Opens a feedback form"),
+  new SlashCommandBuilder()
+    .setName("sign")
+    .setDescription("Posts a sign with a Rename button"),
   new ContextMenuCommandBuilder()
     .setName("View Nickname")
     .setType(ApplicationCommandType.User),
@@ -109,6 +119,34 @@ export function createBot(
         await interaction.update({ content: `count ${n}` });
         return;
       }
+      if (interaction.isButton() && interaction.customId === "rename") {
+        // The deprecated shape: a text input in an action row, labelled by its own label.
+        await interaction.showModal(
+          new ModalBuilder()
+            .setCustomId("rename")
+            .setTitle("Rename the sign")
+            .addComponents(
+              new ActionRowBuilder<TextInputBuilder>().addComponents(
+                new TextInputBuilder()
+                  .setCustomId("text")
+                  .setLabel("New text")
+                  .setStyle(TextInputStyle.Short),
+              ),
+            ),
+        );
+        return;
+      }
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId === "rename" && interaction.isFromMessage())
+          await interaction.update({
+            content: interaction.fields.getTextInputValue("text"),
+          });
+        if (interaction.customId === "feedback")
+          await interaction.reply(
+            `thanks for "${interaction.fields.getTextInputValue("topic")}"`,
+          );
+        return;
+      }
       if (interaction.isUserContextMenuCommand()) {
         const member = interaction.targetMember;
         await interaction.reply(
@@ -136,6 +174,44 @@ export function createBot(
           await interaction.deferReply();
           await new Promise((r) => setTimeout(r, 50));
           await interaction.editReply("done thinking");
+          return;
+        case "feedback":
+          await interaction.showModal(
+            new ModalBuilder()
+              .setCustomId("feedback")
+              .setTitle("Feedback")
+              .addLabelComponents(
+                new LabelBuilder()
+                  .setLabel("Topic")
+                  .setTextInputComponent(
+                    new TextInputBuilder()
+                      .setCustomId("topic")
+                      .setStyle(TextInputStyle.Short)
+                      .setMaxLength(20),
+                  ),
+                new LabelBuilder()
+                  .setLabel("Details")
+                  .setTextInputComponent(
+                    new TextInputBuilder()
+                      .setCustomId("details")
+                      .setStyle(TextInputStyle.Paragraph)
+                      .setRequired(false),
+                  ),
+              ),
+          );
+          return;
+        case "sign":
+          await interaction.reply({
+            content: "Open",
+            components: [
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId("rename")
+                  .setLabel("Rename")
+                  .setStyle(ButtonStyle.Secondary),
+              ),
+            ],
+          });
           return;
         case "settings":
           await interaction.reply("settings saved");

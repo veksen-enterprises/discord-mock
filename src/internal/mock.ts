@@ -18,7 +18,7 @@ import {
   type APIUser,
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
-import { messageLimitError } from "./limits.js";
+import { messageLimitError, modalLimitError } from "./limits.js";
 import { registerMemberRoutes } from "./members.js";
 import {
   ALL_PERMISSIONS,
@@ -53,7 +53,7 @@ export interface DiscordMockOptions {
   interactionDeadlineMs?: number;
 }
 
-type InteractionState = "pending" | "deferred" | "replied";
+type InteractionState = "pending" | "deferred" | "replied" | "modal";
 
 /** A user-triggered interaction, and what the bot did with it. */
 export class InteractionRun extends EventEmitter<{ change: [] }> {
@@ -63,6 +63,8 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   /** The message @original points at: the reply, or the clicked message for component updates. */
   originalMessageId?: string;
   ephemeral = false;
+  /** The modal the bot opened (callback type 9), while state is "modal". */
+  modal?: Modal;
   readonly followups: APIMessage[] = [];
   readonly createdAt = Date.now();
 
@@ -114,18 +116,27 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     });
   }
 
-  /** The visible reply: waits through a defer until the bot edits in real content. */
-  async reply(timeoutMs?: number): Promise<APIMessage> {
+  /** Waits for the bot's first callback, within the deadline Discord gives it. */
+  async acknowledged(): Promise<this> {
     // Discord gives the bot the whole deadline to acknowledge, so a shorter wait would fail a bot
     // that works on Discord. The margin covers the callback request landing just inside it.
     const deadlineMs = this.mock.interactionDeadlineMs;
-    await this.waitUntil((r) => r.state !== "pending", deadlineMs + 250).catch(
+    return this.waitUntil((r) => r.state !== "pending", deadlineMs + 250).catch(
       () => {
         throw new Error(
           `discordjs-test-kit: the bot didn't answer within ${deadlineMs / 1000}s, so Discord shows the user "The application did not respond"`,
         );
       },
     );
+  }
+
+  /** The visible reply: waits through a defer until the bot edits in real content. */
+  async reply(timeoutMs?: number): Promise<APIMessage> {
+    await this.acknowledged();
+    if (this.modal)
+      throw new Error(
+        `discordjs-test-kit: the bot opened the form ${describeModal(this.modal)} instead of replying. Pass the values to fill it in`,
+      );
     await this.waitUntil(
       (r) =>
         r.state === "replied" &&
@@ -489,6 +500,9 @@ export class DiscordMock {
       /** Presses the button labelled `label` (or showing that emoji, when it has no label). */
       clickButton: (message: APIMessage, label: string | RegExp) =>
         this.userClicksButton(user, message, label),
+      /** Fills the form the bot opened in answer to `run`, by field label, and submits it. */
+      submitForm: (run: InteractionRun, values: Record<string, string>) =>
+        this.userSubmitsForm(user, run, values),
       /** Picks the option labelled `label` from the string select on `message` that offers it. */
       selectOption: (message: APIMessage, label: string | RegExp) =>
         this.userSelectsOption(user, message, label),
@@ -803,6 +817,86 @@ export class DiscordMock {
         values: [option.value],
       },
       message,
+    );
+  }
+
+  // docs.discord.food/interactions/receiving-and-responding#modal-submit-component-data-structure:
+  // the bot gets MODAL_SUBMIT (type 5) with the modal's custom_id and its components echoed back,
+  // each text input carrying `value`; `message` only when a component opened the modal.
+  // components/reference#text-input: `required` defaults to true, and min_length/max_length bound
+  // what the Discord app lets the user submit.
+  private userSubmitsForm(
+    user: APIUser,
+    run: InteractionRun,
+    values: Record<string, string>,
+  ) {
+    const modal = run.modal;
+    if (!modal || run.userId !== user.id)
+      throw new Error(
+        `discordjs-test-kit: the bot didn't open a form for ${user.username}`,
+      );
+    const fields = modalFields(modal);
+    const unknown = Object.keys(values).filter(
+      (label) => !fields.some((f) => f.label === label),
+    );
+    if (unknown.length)
+      throw new Error(
+        `discordjs-test-kit: the form ${describeModal(modal)} has no field ${unknown.map((l) => `"${l}"`).join(", ")}`,
+      );
+    for (const { label, input } of fields) {
+      const value = values[label] ?? "";
+      if (input.type !== ComponentType.TextInput)
+        throw new Error(
+          `discordjs-test-kit: field "${label}" is a component of type ${input.type}; only text inputs are modelled in forms`,
+        );
+      const at = `field "${label}" of ${describeModal(modal)}`;
+      if ((input.required ?? true) && value === "")
+        throw new Error(
+          `discordjs-test-kit: ${at} is required, so the Discord app won't submit the form without it`,
+        );
+      if (value !== "" && value.length < (input.min_length ?? 0))
+        throw new Error(
+          `discordjs-test-kit: ${at} needs at least ${input.min_length} characters`,
+        );
+      if (value.length > (input.max_length ?? 4000))
+        throw new Error(
+          `discordjs-test-kit: ${at} takes at most ${input.max_length ?? 4000} characters`,
+        );
+    }
+    // Discord numbers components it wasn't given an id for; the order here is inferred, not checked.
+    let nextId = 1;
+    const id = (c: any) => c.id ?? nextId++;
+    const input = (c: any, label: string) => ({
+      type: c.type,
+      id: id(c),
+      custom_id: c.custom_id,
+      value: values[label] ?? "",
+    });
+    const submitted = (modal.components as any[]).map((top) => {
+      if (top.type === ComponentType.ActionRow)
+        return {
+          type: top.type,
+          id: id(top),
+          components: top.components.map((c: any) => input(c, c.label)),
+        };
+      if (top.type === ComponentType.Label)
+        return {
+          type: top.type,
+          id: id(top),
+          component: input(top.component, top.label),
+        };
+      return { type: top.type, id: id(top) };
+    });
+    run.modal = undefined;
+    const source = run.sourceMessageId
+      ? this.state.requireMessage(run.channelId, run.sourceMessageId)
+      : undefined;
+    return this.dispatchInteraction(
+      user,
+      this.state.requireChannel(run.channelId),
+      InteractionType.ModalSubmit,
+      { custom_id: modal.custom_id, components: submitted },
+      source,
     );
   }
 
@@ -1349,7 +1443,10 @@ export class DiscordMock {
         type: InteractionResponseType;
         data?: any;
       };
-      const overLimit = messageLimitError(data);
+      const overLimit =
+        type === InteractionResponseType.Modal
+          ? modalLimitError(data)
+          : messageLimitError(data);
       if (overLimit) return overLimit;
       const ephemeral = !!((data?.flags ?? 0) & MessageFlags.Ephemeral);
       run.responseType = type;
@@ -1391,6 +1488,17 @@ export class DiscordMock {
           run.state = "replied";
           break;
         }
+        // docs.discord.food/interactions/receiving-and-responding: MODAL (9) is allowed by
+        // APPLICATION_COMMAND and MESSAGE_COMPONENT only. What Discord answers otherwise is unchecked.
+        case InteractionResponseType.Modal:
+          if (
+            run.type !== InteractionType.ApplicationCommand &&
+            run.type !== InteractionType.MessageComponent
+          )
+            return rest.gap(`callback type 9 on a ${run.type} interaction`);
+          run.modal = data as Modal;
+          run.state = "modal";
+          break;
         default:
           return rest.gap(`interaction callback type ${type}`);
       }
@@ -1774,4 +1882,33 @@ export function matches(
 
 export function quote(label: string | RegExp) {
   return typeof label === "string" ? JSON.stringify(label) : String(label);
+}
+
+/** The modal a bot opens with callback type 9: docs.discord.food/interactions/receiving-and-responding#modal. */
+export interface Modal {
+  custom_id: string;
+  title: string;
+  components: unknown[];
+}
+
+/**
+ * A modal's fields as the user sees them: each Label's input (components/reference#label), or a
+ * text input in a deprecated action row, labelled by its own `label`.
+ */
+function modalFields(modal: Modal): { label: string; input: any }[] {
+  return (modal.components as any[]).flatMap((top) => {
+    if (top.type === ComponentType.Label)
+      return [{ label: top.label as string, input: top.component }];
+    if (top.type === ComponentType.ActionRow)
+      return (top.components as any[]).map((input) => ({
+        label: input.label as string,
+        input,
+      }));
+    return [];
+  });
+}
+
+function describeModal(modal: Modal): string {
+  const labels = modalFields(modal).map((f) => `"${f.label}"`);
+  return `"${modal.title}" (fields ${labels.join(", ") || "none"})`;
 }

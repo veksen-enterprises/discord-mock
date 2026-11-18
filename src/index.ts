@@ -13,6 +13,7 @@ import {
   readable,
   shown,
   type DiscordMock,
+  type InteractionRun,
   type UserMessage,
 } from "./internal/mock.js";
 import type { RestResponse } from "./internal/rest.js";
@@ -49,6 +50,14 @@ export type Thread<G extends string = string> = Handle<"thread", G>;
 /** A message as Discord stores it. The object is live: edits, reactions and updates show up on it. */
 export type Message = APIMessage;
 
+/**
+ * What the member types into the form (modal) the bot opens, by each field's label. Pass it as the
+ * last argument of the action that opens the form; the action then resolves with the bot's answer
+ * to the submitted form.
+ * @example await alice.click(panel, "Report", { Reason: "spam" });
+ */
+export type Form = Record<string, string>;
+
 /** What a slash command option can be given: a value, or a handle where the option is a user or channel. */
 export type OptionValue<G extends string = string> =
   | string
@@ -71,6 +80,7 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     channel: TextChannel<G> | Thread<G>,
     command: string,
     options?: Record<string, OptionValue<G>>,
+    form?: Form,
   ): Promise<Message>;
   /**
    * Picks the app `command` from the Apps menu of `target` (a member or a message) while in
@@ -81,19 +91,28 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     channel: TextChannel<G> | Thread<G>,
     target: Member<G> | Message,
     command: string,
+    form?: Form,
   ): Promise<Message>;
   /**
    * Presses the button labelled `label` on `message` (or showing that emoji, when it has no label).
    * Resolves with the message visible afterwards: the same one when the bot updates it in place.
    * @example await alice.click(panel, "Join Ladder");
    */
-  click(message: Message, label: string | RegExp): Promise<Message>;
+  click(
+    message: Message,
+    label: string | RegExp,
+    form?: Form,
+  ): Promise<Message>;
   /**
    * Picks the option labelled `label` from the select menu on `message`. Resolves with the message
    * visible afterwards: the same one when the bot updates it in place.
    * @example await bob.select(reportMenu, "5-2");
    */
-  select(message: Message, label: string | RegExp): Promise<Message>;
+  select(
+    message: Message,
+    label: string | RegExp,
+    form?: Form,
+  ): Promise<Message>;
   /**
    * Posts in `channel`. Files are served by the mock, so the bot can download them.
    * @example alice.post(isoChannel, { content: "ISO Shako" });
@@ -340,6 +359,7 @@ class MemberActor {
     channel: TextChannel | Thread,
     command: string,
     options: Record<string, OptionValue> = {},
+    form?: Form,
   ): Promise<Message> {
     // Handles become the ids Discord sends for user and channel options.
     const values = Object.fromEntries(
@@ -348,34 +368,60 @@ class MemberActor {
         typeof value === "object" ? value.id : value,
       ]),
     );
-    return this.actor()
-      .slashCommand(this.mock.state.requireChannel(channel.id), command, values)
-      .reply();
+    return this.answer(
+      this.actor().slashCommand(
+        this.mock.state.requireChannel(channel.id),
+        command,
+        values,
+      ),
+      form,
+    );
   }
 
   async runApp(
     channel: TextChannel | Thread,
     target: Member | Message,
     command: string,
+    form?: Form,
   ): Promise<Message> {
     const state = this.mock.state;
-    return this.actor()
-      .contextMenu(
+    return this.answer(
+      this.actor().contextMenu(
         state.requireChannel(channel.id),
         "channel_id" in target
           ? state.requireMessage(target.channel_id, target.id)
           : state.requireUser(target.id),
         command,
-      )
-      .reply();
+      ),
+      form,
+    );
   }
 
-  async click(message: Message, label: string | RegExp): Promise<Message> {
-    return this.actor().clickButton(message, label).reply();
+  async click(
+    message: Message,
+    label: string | RegExp,
+    form?: Form,
+  ): Promise<Message> {
+    return this.answer(this.actor().clickButton(message, label), form);
   }
 
-  async select(message: Message, label: string | RegExp): Promise<Message> {
-    return this.actor().selectOption(message, label).reply();
+  async select(
+    message: Message,
+    label: string | RegExp,
+    form?: Form,
+  ): Promise<Message> {
+    return this.answer(this.actor().selectOption(message, label), form);
+  }
+
+  /** The visible reply to `run`, filling and submitting the form first when the bot opens one. */
+  private async answer(run: InteractionRun, form?: Form): Promise<Message> {
+    await run.acknowledged();
+    if (!form) return run.reply();
+    if (!run.modal)
+      throw new Error(
+        `discordjs-test-kit: ${this.name} was given a form to fill, but the bot answered without opening one`,
+      );
+    return this.mock.as(this.user()).submitForm(run, form).reply();
   }
 
   post(channel: TextChannel | Thread, message: UserMessage): Message {
