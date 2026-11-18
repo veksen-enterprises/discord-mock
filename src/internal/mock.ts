@@ -20,6 +20,7 @@ import {
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
 import {
+  channelEditError,
   choicesLimitError,
   messageLimitError,
   modalLimitError,
@@ -1358,6 +1359,102 @@ export class DiscordMock {
       }),
     );
 
+    // resources/channel#modify-channel-json-params-guild-channel: MANAGE_CHANNELS; overwrites also
+    // need MANAGE_ROLES, and "only permissions your bot has in the guild or parent channel can be
+    // allowed/denied (unless your bot has a MANAGE_ROLES overwrite in the channel)". Fires
+    // CHANNEL_UPDATE. Threads have their own Route; fields not listed here are a Gap. Slowmode is
+    // stored, but members' posts don't wait for it yet.
+    rest.route(
+      "PATCH",
+      "/channels/:channelId",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        if ("thread_metadata" in channel || !("guild_id" in channel))
+          return undefined;
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const known = [
+          "name",
+          "topic",
+          "nsfw",
+          "rate_limit_per_user",
+          "parent_id",
+          "permission_overwrites",
+          "lock_permissions",
+        ];
+        const other = Object.keys(body).find((key) => !known.includes(key));
+        if (other) return rest.gap(`PATCH channel ${other}`);
+        const overwrites = body.permission_overwrites as
+          | { id: string; type: 0 | 1; allow?: string; deny?: string }[]
+          | undefined;
+        const denied = this.checkBotPerms(
+          channel,
+          Permission.ManageChannels |
+            (overwrites || body.lock_permissions ? Permission.ManageRoles : 0n),
+        );
+        if (denied) return denied;
+        const invalid = channelEditError(body);
+        if (invalid) return invalid;
+        const guild = state.requireGuild(channel.guild_id!);
+        const parentId =
+          "parent_id" in body ? body.parent_id : channel.parent_id;
+        const parent =
+          typeof parentId === "string"
+            ? state.channels.get(parentId)
+            : undefined;
+        if (
+          typeof parentId === "string" &&
+          (parent?.type !== ChannelType.GuildCategory ||
+            !("guild_id" in parent) ||
+            parent.guild_id !== guild.id)
+        )
+          return respond.invalidFormBody();
+        if (overwrites) {
+          // Read as either: what the bot holds guild-wide, or in the parent (inferred, not checked).
+          const held =
+            computePermissions(state, guild, state.bot.id) |
+            computePermissions(state, guild, state.bot.id, parent);
+          const managesRolesHere = (channel.permission_overwrites ?? []).some(
+            (o) =>
+              BigInt(o.allow) & Permission.ManageRoles &&
+              (o.id === state.bot.id ||
+                guild.members.get(state.bot.id)?.roles.includes(o.id)),
+          );
+          const beyond = overwrites.some(
+            (o) => BigInt(o.allow ?? 0) & ~held || BigInt(o.deny ?? 0) & ~held,
+          );
+          if (beyond && !managesRolesHere) return respond.missingPermissions();
+        }
+        const lockTo =
+          body.lock_permissions && parent && "permission_overwrites" in parent
+            ? structuredClone(parent.permission_overwrites ?? [])
+            : undefined;
+        Object.assign(channel, {
+          ...pick(body, ["name", "topic", "nsfw", "rate_limit_per_user"]),
+          ...("parent_id" in body ? { parent_id: parent?.id ?? null } : {}),
+          // lock_permissions: "Sync channel permissions with the new or existing parent category"
+          ...(overwrites
+            ? {
+                permission_overwrites: overwrites.map((o) => ({
+                  id: o.id,
+                  type: o.type,
+                  allow: o.allow ?? "0",
+                  deny: o.deny ?? "0",
+                })),
+              }
+            : lockTo
+              ? { permission_overwrites: lockTo }
+              : {}),
+        });
+        this.gateway.dispatch(
+          GatewayDispatchEvents.ChannelUpdate,
+          channel,
+          GatewayIntentBits.Guilds,
+        );
+        return respond.json(channel);
+      }),
+    );
+
     // Needs MANAGE_ROLES on the channel. Inferred, not checked: Discord also refuses to
     // allow a permission the bot doesn't have itself; the mock doesn't enforce that yet.
     rest.route(
@@ -2014,6 +2111,13 @@ export async function createDiscordMock(
   options?: DiscordMockOptions,
 ): Promise<DiscordMock> {
   return new DiscordMock(options).listen();
+}
+
+/** The fields of `body` named in `keys` that it has. */
+function pick(body: Record<string, unknown>, keys: string[]) {
+  return Object.fromEntries(
+    keys.filter((k) => k in body).map((k) => [k, body[k]]),
+  );
 }
 
 function interactionMetadata(run: InteractionRun) {

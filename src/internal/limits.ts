@@ -85,6 +85,36 @@ export function threadNameError(name: unknown): RestResponse | undefined {
   ]);
 }
 
+// resources/channel#modify-channel-json-params-guild-channel: name 1-100 characters, topic 0-1024
+// (4096 in a forum, not modelled), rate_limit_per_user 0-21600. Field codes inferred, as above.
+export function channelEditError(body: {
+  name?: unknown;
+  topic?: unknown;
+  rate_limit_per_user?: unknown;
+}): RestResponse | undefined {
+  const problems: Problem[] = [];
+  const { name, topic, rate_limit_per_user: slowmode } = body;
+  if (typeof name === "string" && (name.length < 1 || name.length > 100))
+    problems.push({
+      path: ["name"],
+      message:
+        name.length > 100
+          ? "Must be 100 or fewer in length."
+          : "Must be 1 or more in length.",
+    });
+  if (typeof topic === "string" && topic.length > 1024)
+    problems.push({
+      path: ["topic"],
+      message: "Must be 1024 or fewer in length.",
+    });
+  if (typeof slowmode === "number" && (slowmode < 0 || slowmode > 21600))
+    problems.push({
+      path: ["rate_limit_per_user"],
+      message: "Must be between 0 and 21600.",
+    });
+  return limitError(problems);
+}
+
 function limitError(problems: Problem[]): RestResponse | undefined {
   if (problems.length === 0) return undefined;
   const errors: Record<string, unknown> = {};

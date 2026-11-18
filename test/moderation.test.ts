@@ -1,5 +1,13 @@
 import { once } from "node:events";
-import { Client, DiscordAPIError, Events, GatewayIntentBits } from "discord.js";
+import type { APITextChannel } from "discord-api-types/v10";
+import {
+  ChannelType,
+  Client,
+  DiscordAPIError,
+  Events,
+  GatewayIntentBits,
+  OverwriteType,
+} from "discord.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
 import { Permission } from "../src/internal/payloads.js";
@@ -194,4 +202,70 @@ it("lists every role, including one made since the bot connected", async () => {
   );
   expect(guild.roles.cache.has(added.id)).toBe(true);
   mock.assertNoUnhandledRequests();
+});
+
+it("edits a channel's name, topic and slowmode with Manage Channels, and the bot hears it", async () => {
+  const { guild, record } = await start(Permission.ManageChannels);
+  const channel = await guild.channels.fetch(
+    mock.createTextChannel(record, "general").id,
+  );
+  if (channel?.type !== ChannelType.GuildText) throw new Error("text");
+  const updated = once(client, Events.ChannelUpdate);
+
+  await channel.edit({
+    name: "rules",
+    topic: "read me",
+    rateLimitPerUser: 30,
+  });
+
+  const [, after] = await updated;
+  expect(after).toMatchObject({
+    name: "rules",
+    topic: "read me",
+    rateLimitPerUser: 30,
+  });
+  expect((await refusal(channel.setName("x".repeat(101)))).code).toBe(50035);
+  mock.assertNoUnhandledRequests();
+});
+
+it("moves a channel into a category and syncs its overwrites, but not past the bot's own permissions", async () => {
+  const { guild, record, alice } = await start(
+    Permission.ManageChannels | Permission.ManageRoles,
+  );
+  const category = mock.createCategory(record, "staff");
+  mock.setOverwrite(
+    category,
+    { id: record.id, type: 0 },
+    { deny: Permission.SendMessages },
+  );
+  const channel = await guild.channels.fetch(
+    mock.createTextChannel(record, "mods").id,
+  );
+  if (channel?.type !== ChannelType.GuildText) throw new Error("text");
+
+  await channel.setParent(category.id, { lockPermissions: true });
+
+  const stored = mock.state.requireChannel(channel.id) as APITextChannel;
+  expect(stored.parent_id).toBe(category.id);
+  expect(stored.permission_overwrites).toEqual([
+    {
+      id: record.id,
+      type: 0,
+      allow: "0",
+      deny: String(Permission.SendMessages),
+    },
+  ]);
+  expect(
+    (
+      await refusal(
+        channel.permissionOverwrites.set([
+          {
+            id: alice.id,
+            type: OverwriteType.Member,
+            allow: [Permission.BanMembers],
+          },
+        ]),
+      )
+    ).code,
+  ).toBe(50013);
 });
