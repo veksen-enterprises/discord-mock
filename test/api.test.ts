@@ -263,3 +263,26 @@ it("fails one channel by its literal path, and leaves the others working", async
   expect(failed.content).toBe("failed: 50013");
   expect(posted.content).toBe("posted");
 });
+
+it("shows the bot's suggestions while a member types, then runs the command with one", async () => {
+  const { generalChannel, alice } = await startBot();
+
+  const choices = await alice.autocomplete(
+    generalChannel,
+    "docs",
+    "query",
+    "Promise.al",
+  );
+  const reply = await alice.run(generalChannel, "docs", {
+    query: choices[1]!.value,
+  });
+
+  expect(choices.map((c) => c.name)).toEqual([
+    "Promise.all",
+    "Promise.allSettled",
+  ]);
+  expect(reply.content).toBe("docs for Promise.allSettled");
+  await expect(
+    alice.autocomplete(generalChannel, "echo", "text", "hi"),
+  ).rejects.toThrow('option "text" doesn\'t have autocomplete');
+});

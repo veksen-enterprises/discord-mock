@@ -56,6 +56,7 @@ it("should record the result when the winner reports", async () => {
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | run a slash command                 | `await alice.run(channel, "admin-config set", { ladder: "Season 1", channel: boardChannel })`                                     |
 | use an app from a context menu      | `await alice.runApp(channel, bob, "View Profile")` (or a message for a message app)                                               |
+| check autocomplete suggestions      | `const choices = await alice.autocomplete(channel, "docs", "query", "Promise.al")`                                                |
 | press a button                      | `await alice.click(message, "Join Ladder")` (its label, or its emoji)                                                             |
 | fill the form (modal) the bot opens | `await alice.click(panel, "Report", { Reason: "spam" })`: the form as the last argument, by field label                           |
 | reach a thread the bot started      | `const thread = await discord.findThread(channel, "ticket-alice")`, then `discord.find(thread, …)` or `alice.post(thread, …)`     |

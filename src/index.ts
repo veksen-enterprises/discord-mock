@@ -58,6 +58,12 @@ export type Message = APIMessage;
  */
 export type Form = Record<string, string>;
 
+/** One autocomplete suggestion: `name` is what the member sees, `value` what the command receives. */
+export interface Choice {
+  name: string;
+  value: string | number;
+}
+
 /** What a slash command option can be given: a value, or a handle where the option is a user or channel. */
 export type OptionValue<G extends string = string> =
   | string
@@ -82,6 +88,18 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
     options?: Record<string, OptionValue<G>>,
     form?: Form,
   ): Promise<Message>;
+  /**
+   * Types `typed` into `option` of `/command`, with `filled` already entered, and resolves with the
+   * choices the bot suggests (its autocomplete answer). Run the command with a choice's value after.
+   * @example const choices = await alice.autocomplete(general, "docs", "query", "Promise.al");
+   */
+  autocomplete(
+    channel: TextChannel<G> | Thread<G>,
+    command: string,
+    option: string,
+    typed: string | number,
+    filled?: Record<string, OptionValue<G>>,
+  ): Promise<Choice[]>;
   /**
    * Picks the app `command` from the Apps menu of `target` (a member or a message) while in
    * `channel`: a context-menu command, registered with type User or Message. Resolves with the reply.
@@ -404,13 +422,7 @@ class MemberActor {
     options: Record<string, OptionValue> = {},
     form?: Form,
   ): Promise<Message> {
-    // Handles become the ids Discord sends for user and channel options.
-    const values = Object.fromEntries(
-      Object.entries(options).map(([name, value]) => [
-        name,
-        typeof value === "object" ? value.id : value,
-      ]),
-    );
+    const values = optionIds(options);
     return this.answer(
       this.actor().slashCommand(
         this.mock.state.requireChannel(channel.id),
@@ -419,6 +431,24 @@ class MemberActor {
       ),
       form,
     );
+  }
+
+  async autocomplete(
+    channel: TextChannel | Thread,
+    command: string,
+    option: string,
+    typed: string | number,
+    filled: Record<string, OptionValue> = {},
+  ): Promise<Choice[]> {
+    return this.actor()
+      .autocomplete(
+        this.mock.state.requireChannel(channel.id),
+        command,
+        option,
+        typed,
+        optionIds(filled),
+      )
+      .suggestions();
   }
 
   async runApp(
@@ -522,6 +552,16 @@ class MemberActor {
   private guild() {
     return this.mock.state.requireGuild(this.guildId);
   }
+}
+
+/** Handles become the ids Discord sends for user and channel options. */
+function optionIds(options: Record<string, OptionValue>) {
+  return Object.fromEntries(
+    Object.entries(options).map(([name, value]) => [
+      name,
+      typeof value === "object" ? value.id : value,
+    ]),
+  );
 }
 
 /** Handles exist only in types; at run time they're the entity's id and name. */

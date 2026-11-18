@@ -19,7 +19,11 @@ import {
   type APIUser,
 } from "discord-api-types/v10";
 import { Gateway } from "./gateway.js";
-import { messageLimitError, modalLimitError } from "./limits.js";
+import {
+  choicesLimitError,
+  messageLimitError,
+  modalLimitError,
+} from "./limits.js";
 import { registerMemberRoutes } from "./members.js";
 import {
   ALL_PERMISSIONS,
@@ -67,6 +71,8 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   ephemeral = false;
   /** The modal the bot opened (callback type 9), while state is "modal". */
   modal?: Modal;
+  /** The choices the bot suggested (callback type 8) to an autocomplete interaction. */
+  choices?: { name: string; value: string | number }[];
   readonly followups: APIMessage[] = [];
   readonly createdAt = Date.now();
 
@@ -123,13 +129,24 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
     // Discord gives the bot the whole deadline to acknowledge, so a shorter wait would fail a bot
     // that works on Discord. The margin covers the callback request landing just inside it.
     const deadlineMs = this.mock.interactionDeadlineMs;
+    // What the Discord app shows for an unanswered autocomplete is from the app, not the docs.
+    const shown =
+      this.type === InteractionType.ApplicationCommandAutocomplete
+        ? "Loading options failed"
+        : "The application did not respond";
     return this.waitUntil((r) => r.state !== "pending", deadlineMs + 250).catch(
       () => {
         throw new Error(
-          `discordjs-test-kit: the bot didn't answer within ${deadlineMs / 1000}s, so Discord shows the user "The application did not respond"`,
+          `discordjs-test-kit: the bot didn't answer within ${deadlineMs / 1000}s, so Discord shows the user "${shown}"`,
         );
       },
     );
+  }
+
+  /** The choices the bot suggested to this autocomplete interaction. */
+  async suggestions(): Promise<{ name: string; value: string | number }[]> {
+    await this.acknowledged();
+    return this.choices!;
   }
 
   /** The visible reply: waits through a defer until the bot edits in real content. */
@@ -512,6 +529,24 @@ export class DiscordMock {
         name: string,
         options: Record<string, unknown> = {},
       ) => this.userRunsCommand(user, channel, name, options),
+      /**
+       * Types `value` into option `focused` of `/name`, with `input` already filled: an
+       * autocomplete interaction. Resolve `.suggestions()` for the bot's choices.
+       */
+      autocomplete: (
+        channel: APIChannel,
+        name: string,
+        focused: string,
+        value: string | number,
+        input: Record<string, unknown> = {},
+      ) =>
+        this.userRunsCommand(
+          user,
+          channel,
+          name,
+          { ...input, [focused]: value },
+          focused,
+        ),
       /** Picks the app `name` from the context menu of a member (or user) or a message in `channel`. */
       contextMenu: (
         channel: APIChannel,
@@ -612,6 +647,7 @@ export class DiscordMock {
     channel: APIChannel,
     name: string,
     input: Record<string, unknown>,
+    focused?: string,
   ) {
     const [commandName, ...path] = name.split(" ");
     const guildId = "guild_id" in channel ? channel.guild_id : undefined;
@@ -637,11 +673,14 @@ export class DiscordMock {
       path,
       input,
       name,
+      focused,
     );
     return this.dispatchInteraction(
       user,
       channel,
-      InteractionType.ApplicationCommand,
+      focused === undefined
+        ? InteractionType.ApplicationCommand
+        : InteractionType.ApplicationCommandAutocomplete,
       {
         id: command.id,
         name: command.name,
@@ -1599,10 +1638,21 @@ export class DiscordMock {
         type: InteractionResponseType;
         data?: any;
       };
+      // receiving-and-responding#interaction-callback-type: AUTOCOMPLETE_RESULT (8) answers an
+      // autocomplete, and an autocomplete takes nothing else. Discord's answer otherwise is unchecked.
+      const isAutocomplete =
+        run.type === InteractionType.ApplicationCommandAutocomplete;
+      if (
+        isAutocomplete !==
+        (type === InteractionResponseType.ApplicationCommandAutocompleteResult)
+      )
+        return rest.gap(`callback type ${type} on a ${run.type} interaction`);
       const overLimit =
         type === InteractionResponseType.Modal
           ? modalLimitError(data)
-          : messageLimitError(data);
+          : isAutocomplete
+            ? choicesLimitError(data)
+            : messageLimitError(data);
       if (overLimit) return overLimit;
       const ephemeral = !!((data?.flags ?? 0) & MessageFlags.Ephemeral);
       run.responseType = type;
@@ -1646,6 +1696,10 @@ export class DiscordMock {
         }
         // docs.discord.food/interactions/receiving-and-responding: MODAL (9) is allowed by
         // APPLICATION_COMMAND and MESSAGE_COMPONENT only. What Discord answers otherwise is unchecked.
+        case InteractionResponseType.ApplicationCommandAutocompleteResult:
+          run.choices = data?.choices ?? [];
+          run.state = "replied";
+          break;
         case InteractionResponseType.Modal:
           if (
             run.type !== InteractionType.ApplicationCommand &&
@@ -1825,6 +1879,7 @@ function commandOptions(
   path: string[],
   input: Record<string, unknown>,
   command: string,
+  focused?: string,
 ): { options: unknown[]; leaf: APIApplicationCommandOption[] } {
   const subcommands = schema.filter((o) => SUBCOMMAND_TYPES.includes(o.type));
   if (!path.length) {
@@ -1832,7 +1887,10 @@ function commandOptions(
       throw new Error(
         `discordjs-test-kit: /${command} needs a subcommand: ${subcommands.map((o) => o.name).join(", ")}`,
       );
-    return { options: buildOptions(schema, input, command), leaf: schema };
+    return {
+      options: buildOptions(schema, input, command, focused),
+      leaf: schema,
+    };
   }
   const [next, ...rest] = path;
   const sub = subcommands.find((o) => o.name === next);
@@ -1845,6 +1903,7 @@ function commandOptions(
     rest,
     input,
     command,
+    focused,
   );
   return {
     options: [{ name: sub.name, type: sub.type, options: nested.options }],
@@ -1852,12 +1911,25 @@ function commandOptions(
   };
 }
 
-/** Turn `{ text: "hi" }` into Discord's typed option list, validated against what the bot registered. */
+/**
+ * Turn `{ text: "hi" }` into Discord's typed option list, validated against what the bot registered.
+ * With `focused`, it's an autocomplete: interactions/application-commands#autocomplete says the
+ * focused option carries `focused: true` and may be partial, and required options "might not be
+ * present". The option must have `autocomplete` set, or the Discord app never asks the bot.
+ */
 function buildOptions(
   schema: APIApplicationCommandOption[],
   input: Record<string, unknown>,
   command: string,
+  focused?: string,
 ) {
+  if (focused !== undefined) {
+    const option = schema.find((o) => o.name === focused);
+    if (!option || !("autocomplete" in option && option.autocomplete))
+      throw new Error(
+        `discordjs-test-kit: /${command} option "${focused}" ${option ? "doesn't have autocomplete" : "doesn't exist"}, so the Discord app doesn't ask the bot for suggestions`,
+      );
+  }
   for (const key of Object.keys(input)) {
     if (!schema.some((o) => o.name === key))
       throw new Error(
@@ -1867,7 +1939,7 @@ function buildOptions(
   return schema.flatMap((opt) => {
     const value = input[opt.name];
     if (value === undefined) {
-      if ("required" in opt && opt.required)
+      if ("required" in opt && opt.required && focused === undefined)
         throw new Error(
           `discordjs-test-kit: /${command} requires option "${opt.name}"`,
         );
@@ -1910,7 +1982,11 @@ function buildOptions(
     const minLength = bound("min_length"),
       maxLength = bound("max_length");
     if (typeof value === "string") {
-      if (minLength !== undefined && value.length < minLength)
+      if (
+        minLength !== undefined &&
+        value.length < minLength &&
+        opt.name !== focused
+      )
         throw new Error(
           `discordjs-test-kit: /${command} option "${opt.name}" must be at least ${minLength} characters`,
         );
@@ -1919,7 +1995,14 @@ function buildOptions(
           `discordjs-test-kit: /${command} option "${opt.name}" must be at most ${maxLength} characters`,
         );
     }
-    return [{ name: opt.name, type: opt.type, value }];
+    return [
+      {
+        name: opt.name,
+        type: opt.type,
+        value,
+        ...(opt.name === focused ? { focused: true } : {}),
+      },
+    ];
   });
 }
 

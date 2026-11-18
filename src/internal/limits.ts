@@ -42,6 +42,33 @@ export function modalLimitError(body: unknown): RestResponse | undefined {
   return limitError(problems);
 }
 
+// receiving-and-responding#interaction-response-object-autocomplete: "max of 25 choices". A choice's
+// name and value are 1-100 characters (application-commands#application-command-option-choice-structure).
+export function choicesLimitError(body: unknown): RestResponse | undefined {
+  const choices =
+    ((body ?? {}) as { choices?: { name?: unknown; value?: unknown }[] })
+      .choices ?? [];
+  const problems: Problem[] = [];
+  if (choices.length > 25)
+    problems.push({
+      path: ["choices"],
+      message: "Must be 25 or fewer in length.",
+    });
+  choices.forEach((choice, i) => {
+    if (typeof choice.name === "string" && choice.name.length > 100)
+      problems.push({
+        path: ["choices", i, "name"],
+        message: "Must be 100 or fewer in length.",
+      });
+    if (typeof choice.value === "string" && choice.value.length > 100)
+      problems.push({
+        path: ["choices", i, "value"],
+        message: "Must be 100 or fewer in length.",
+      });
+  });
+  return limitError(problems);
+}
+
 function limitError(problems: Problem[]): RestResponse | undefined {
   if (problems.length === 0) return undefined;
   const errors: Record<string, unknown> = {};

@@ -186,3 +186,37 @@ it("refuses a modal with 6 components, which discord.js's ModalBuilder lets thro
   await expect(run.reply()).rejects.toThrow("didn't answer within 0.2s");
   expect(errors[0]).toMatchObject({ code: 50035 });
 });
+
+it("refuses 26 autocomplete choices, so the member sees none", async () => {
+  const channel = await start();
+  const alice = mock.createUser("alice");
+  mock.addMember(mock.state.requireGuild(channel.guildId), alice);
+  const errors: unknown[] = [];
+  client.on(Events.InteractionCreate, (interaction) => {
+    if (!interaction.isAutocomplete()) return;
+    const choices = Array.from({ length: 26 }, (_, i) => ({
+      name: `#${i}`,
+      value: `${i}`,
+    }));
+    interaction.respond(choices).catch((e) => errors.push(e));
+  });
+  await client.application!.commands.set(
+    [
+      {
+        name: "pick",
+        description: "Pick one",
+        options: [
+          { type: 3, name: "item", description: "item", autocomplete: true },
+        ],
+      },
+    ],
+    channel.guildId,
+  );
+
+  const run = mock
+    .as(alice)
+    .autocomplete(mock.state.requireChannel(channel.id), "pick", "item", "");
+
+  await expect(run.suggestions()).rejects.toThrow("Loading options failed");
+  expect(errors[0]).toMatchObject({ code: 50035 });
+});

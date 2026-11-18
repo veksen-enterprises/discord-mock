@@ -64,6 +64,16 @@ export const commands = [
     .setDescription("Server settings, for whoever can manage the server")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   new SlashCommandBuilder()
+    .setName("docs")
+    .setDescription("Links a docs page, suggested as you type")
+    .addStringOption((o) =>
+      o
+        .setName("query")
+        .setDescription("page")
+        .setRequired(true)
+        .setAutocomplete(true),
+    ),
+  new SlashCommandBuilder()
     .setName("remind")
     .setDescription("DMs you a reminder, or says it can't"),
   new SlashCommandBuilder()
@@ -79,6 +89,13 @@ export const commands = [
     .setName("Quote")
     .setType(ApplicationCommandType.Message),
 ].map((c) => c.toJSON());
+
+const DOC_PAGES = [
+  "Promise.all",
+  "Promise.allSettled",
+  "Promise.any",
+  "Array.from",
+];
 
 export async function deployCommands(opts: {
   token: string;
@@ -120,6 +137,16 @@ export function createBot(
       if (interaction.isButton() && interaction.customId === "count") {
         const n = Number(interaction.message.content.split(" ")[1]) + 1;
         await interaction.update({ content: `count ${n}` });
+        return;
+      }
+      if (interaction.isAutocomplete()) {
+        const typed = interaction.options.getFocused();
+        await interaction.respond(
+          DOC_PAGES.filter((page) => page.startsWith(typed)).map((page) => ({
+            name: page,
+            value: page,
+          })),
+        );
         return;
       }
       if (interaction.isButton() && interaction.customId === "rename") {
@@ -177,6 +204,11 @@ export function createBot(
           await interaction.deferReply();
           await new Promise((r) => setTimeout(r, 50));
           await interaction.editReply("done thinking");
+          return;
+        case "docs":
+          await interaction.reply(
+            `docs for ${interaction.options.getString("query", true)}`,
+          );
           return;
         case "remind":
           try {
