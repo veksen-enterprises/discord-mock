@@ -31,7 +31,12 @@ import {
   interactionMember,
   Permission,
 } from "./payloads.js";
-import { RestRouter, respond, type RestHandler } from "./rest.js";
+import {
+  RestRouter,
+  respond,
+  type RestHandler,
+  type RestRequest,
+} from "./rest.js";
 import { snowflake } from "./snowflake.js";
 import { DiscordState, type GuildRecord } from "./state.js";
 import {
@@ -77,6 +82,8 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   /** The choices the bot suggested (callback type 8) to an autocomplete interaction. */
   choices?: { name: string; value: string | number }[];
   readonly followups: APIMessage[] = [];
+  /** The bot deleted its reply (DELETE @original). */
+  replyDeleted = false;
   readonly createdAt = Date.now();
 
   constructor(
@@ -94,9 +101,9 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
   }
 
   get original(): APIMessage | undefined {
-    return this.originalMessageId
-      ? this.mock.state.requireMessage(this.channelId, this.originalMessageId)
-      : undefined;
+    return this.mock.state.messages
+      .get(this.channelId)
+      ?.find((m) => m.id === this.originalMessageId);
   }
 
   /** Resolves when `predicate` holds, re-checked after every callback/edit/followup. */
@@ -161,11 +168,16 @@ export class InteractionRun extends EventEmitter<{ change: [] }> {
       );
     await this.waitUntil(
       (r) =>
-        r.state === "replied" &&
-        !!r.original &&
-        !((r.original.flags ?? 0) & MessageFlags.Loading),
+        r.replyDeleted ||
+        (r.state === "replied" &&
+          !!r.original &&
+          !((r.original.flags ?? 0) & MessageFlags.Loading)),
       timeoutMs,
     );
+    if (this.replyDeleted)
+      throw new Error(
+        "discordjs-test-kit: the bot deleted its reply, so the user sees no answer",
+      );
     return this.original!;
   }
 }
@@ -1531,22 +1543,7 @@ export class DiscordMock {
           const denied = this.checkBotPerms(channel, Permission.ManageMessages);
           if (denied) return denied;
         }
-        state.deleteMessage(channel.id, message.id);
-        const guildId =
-          "guild_id" in channel && channel.guild_id
-            ? channel.guild_id
-            : undefined;
-        this.gateway.dispatch(
-          GatewayDispatchEvents.MessageDelete,
-          {
-            id: message.id,
-            channel_id: channel.id,
-            ...(guildId ? { guild_id: guildId } : {}),
-          },
-          guildId
-            ? GatewayIntentBits.GuildMessages
-            : GatewayIntentBits.DirectMessages,
-        );
+        this.deleteMessage(message);
         return respond.noContent();
       }),
     );
@@ -1859,6 +1856,70 @@ export class DiscordMock {
         : respond.unknownMessage();
     });
 
+    // interactions/receiving-and-responding#delete-original-interaction-response: 204.
+    rest.route(
+      "DELETE",
+      "/webhooks/:appId/:token/messages/@original",
+      (req) => {
+        const run = runFor(req);
+        if (!run || run.state === "pending") return respond.unknownWebhook();
+        const original = run.original;
+        if (!original) return respond.unknownMessage();
+        this.deleteMessage(original);
+        run.replyDeleted = true;
+        run.emit("change");
+        return respond.noContent();
+      },
+    );
+
+    // Get, Modify and Delete Followup Message "do not support ephemeral followups"; what Discord
+    // answers for one is undocumented, so it's a Gap.
+    const followupFor = (req: RestRequest) => {
+      const run = runFor(req);
+      const message = run?.followups.find((m) => m.id === req.params.messageId);
+      if (!run || !message) return { refused: respond.unknownMessage() };
+      if ((message.flags ?? 0) & MessageFlags.Ephemeral)
+        return { refused: rest.gap(`${req.method} an ephemeral followup`) };
+      return { run, message };
+    };
+
+    rest.route("GET", "/webhooks/:appId/:token/messages/:messageId", (req) => {
+      const { refused, message } = followupFor(req);
+      return refused ?? respond.json(message);
+    });
+
+    rest.route(
+      "PATCH",
+      "/webhooks/:appId/:token/messages/:messageId",
+      (req) => {
+        const { refused, run, message } = followupFor(req);
+        if (refused) return refused;
+        const overLimit = messageLimitError(req.body);
+        if (overLimit) return overLimit;
+        const updated = state.updateMessage(
+          message.channel_id,
+          message.id,
+          pickMessageFields(req.body),
+        );
+        this.gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+        run.emit("change");
+        return respond.json(updated);
+      },
+    );
+
+    rest.route(
+      "DELETE",
+      "/webhooks/:appId/:token/messages/:messageId",
+      (req) => {
+        const { refused, run, message } = followupFor(req);
+        if (refused) return refused;
+        this.deleteMessage(message);
+        run.followups.splice(run.followups.indexOf(message), 1);
+        run.emit("change");
+        return respond.noContent();
+      },
+    );
+
     rest.route("POST", "/webhooks/:appId/:token", (req) => {
       const run = runFor(req);
       if (!run || run.state === "pending") return respond.unknownWebhook();
@@ -1901,6 +1962,30 @@ export class DiscordMock {
     });
     registerMemberRoutes(this, authed);
     registerThreadRoutes(this, authed);
+  }
+
+  /**
+   * Removes `message` and announces MESSAGE_DELETE { id, channel_id, guild_id? }
+   * (gateway-events#message-delete), with GUILD_MESSAGES in guilds and DIRECT_MESSAGES in DMs. An
+   * ephemeral message lived only in the user's client, so its deletion isn't announced (inferred).
+   */
+  deleteMessage(message: APIMessage) {
+    const channel = this.state.requireChannel(message.channel_id);
+    this.state.deleteMessage(channel.id, message.id);
+    if ((message.flags ?? 0) & MessageFlags.Ephemeral) return;
+    const guildId =
+      "guild_id" in channel && channel.guild_id ? channel.guild_id : undefined;
+    this.gateway.dispatch(
+      GatewayDispatchEvents.MessageDelete,
+      {
+        id: message.id,
+        channel_id: channel.id,
+        ...(guildId ? { guild_id: guildId } : {}),
+      },
+      guildId
+        ? GatewayIntentBits.GuildMessages
+        : GatewayIntentBits.DirectMessages,
+    );
   }
 
   /** VIEW_CHANNEL first: without it "other channel permissions are effectively ignored" (docs.discord.food/topics/permissions). */
