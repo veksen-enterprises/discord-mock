@@ -9,6 +9,7 @@ import type { DiscordState, GuildRecord } from "./state.js";
 export const Permission = {
   ManageChannels: 1n << 4n,
   AddReactions: 1n << 6n,
+  ManageMessages: 1n << 13n,
   Administrator: 1n << 3n,
   ViewChannel: 1n << 10n,
   SendMessages: 1n << 11n,

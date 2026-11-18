@@ -841,6 +841,42 @@ export class DiscordMock {
       }),
     );
 
+    // Discord's docs, resources/message#delete-message: another user's message in a guild
+    // channel needs MANAGE_MESSAGES. 204, fires MESSAGE_DELETE { id, channel_id, guild_id? }.
+    rest.route(
+      "DELETE",
+      "/channels/:channelId/messages/:messageId",
+      authed((req) => {
+        const channel = state.channels.get(req.params.channelId!);
+        if (!channel) return respond.unknownChannel();
+        const message = this.messagesIn(channel).find(
+          (m) => m.id === req.params.messageId,
+        );
+        if (!message) return respond.unknownMessage();
+        if (message.author.id !== state.bot.id) {
+          const denied = this.checkBotPerms(channel, Permission.ManageMessages);
+          if (denied) return denied;
+        }
+        state.deleteMessage(channel.id, message.id);
+        const guildId =
+          "guild_id" in channel && channel.guild_id
+            ? channel.guild_id
+            : undefined;
+        this.gateway.dispatch(
+          GatewayDispatchEvents.MessageDelete,
+          {
+            id: message.id,
+            channel_id: channel.id,
+            ...(guildId ? { guild_id: guildId } : {}),
+          },
+          guildId
+            ? GatewayIntentBits.GuildMessages
+            : GatewayIntentBits.DirectMessages,
+        );
+        return respond.noContent();
+      }),
+    );
+
     // docs.discord.food/resources/message#get-message: READ_MESSAGE_HISTORY in guild channels.
     rest.route(
       "GET",

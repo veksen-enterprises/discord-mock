@@ -488,6 +488,12 @@ export class DiscordState extends EventEmitter<{
     return message;
   }
 
+  deleteMessage(channelId: string, messageId: string) {
+    const messages = this.messages.get(channelId) ?? [];
+    const index = messages.findIndex((m) => m.id === messageId);
+    if (index >= 0) messages.splice(index, 1);
+  }
+
   updateMessage(
     channelId: string,
     messageId: string,
