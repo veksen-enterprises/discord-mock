@@ -81,3 +81,39 @@ it("refuses to pin with only Manage Messages, which no longer grants it", async 
 
   expect((await refusal(channel.messages.pin(message.id))).code).toBe(50013);
 });
+
+it("bulk deletes messages, skipping unknown ids, and the bot hears one bulk event", async () => {
+  const { general, channel, alice } = await start(Permission.ManageMessages);
+  const kept = mock.as(alice).sendMessage(general, "keep");
+  const spam = [1, 2].map(() => mock.as(alice).sendMessage(general, "spam"));
+  const bulk = once(client, Events.MessageBulkDelete);
+  const unknown = SnowflakeUtil.generate().toString();
+
+  await channel.bulkDelete([...spam.map((m) => m.id), unknown]);
+
+  const [deleted] = await bulk;
+  expect([...deleted.keys()].sort()).toEqual(spam.map((m) => m.id).sort());
+  expect(mock.messagesIn(general)).toEqual([kept]);
+  mock.assertNoUnhandledRequests();
+});
+
+it("refuses a bulk delete with a message over two weeks old, or too few ids", async () => {
+  const { general, channel, alice } = await start(Permission.ManageMessages);
+  const recent = mock.as(alice).sendMessage(general, "new");
+  const old = SnowflakeUtil.generate({
+    timestamp: Date.now() - 15 * 24 * 60 * 60 * 1000,
+  }).toString();
+
+  expect(
+    (await refusal(channel.bulkDelete([recent.id, old], false))).code,
+  ).toBe(50034);
+  expect(
+    (
+      await refusal(
+        client.rest.post(`/channels/${general.id}/messages/bulk-delete`, {
+          body: { messages: [recent.id] },
+        }),
+      )
+    ).code,
+  ).toBe(50016);
+});

@@ -1,4 +1,5 @@
 import {
+  ChannelType,
   GatewayDispatchEvents,
   GatewayIntentBits,
   type APIChannel,
@@ -8,12 +9,16 @@ import type { DiscordMock } from "./mock.js";
 import { Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
 
-// Pin Routes. Sources: discord-api-docs resources/message (Get Channel
-// Pins, Pin Message, Unpin Message), topics/opcodes-and-status-codes for the
+// Pin and bulk delete Routes. Sources: discord-api-docs resources/message (Get Channel
+// Pins, Pin Message, Unpin Message, Bulk Delete Messages), topics/opcodes-and-status-codes for the
 // JSON codes, and docs.discord.food/resources/message. HTTP statuses the docs don't give are
 // inferred, not checked.
 
 const MAX_PINS = 250; // 30003 "Maximum number of pins reached for the channel (250)"
+const DISCORD_EPOCH = 1420070400000n;
+const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+
+const createdAt = (id: string) => Number((BigInt(id) >> 22n) + DISCORD_EPOCH);
 
 /**
  * Registered before the Model's message Routes: `GET /messages/pins` would otherwise match
@@ -136,6 +141,58 @@ export function registerMessageRoutes(
       message.pinned = false;
       pinnedAt.delete(message.id);
       announcePins(channel);
+      return respond.noContent();
+    }),
+  );
+
+  // Bulk Delete Messages: guild channels only, MANAGE_MESSAGES, 2 to 100 ids. Ids that don't
+  // exist "count towards the minimum and maximum" and are skipped; one older than two weeks, or a
+  // duplicate, fails the request with a 400. Fires MESSAGE_DELETE_BULK with the ids it deleted.
+  rest.route(
+    "POST",
+    "/channels/:channelId/messages/bulk-delete",
+    authed((req) => {
+      const channel = state.channels.get(req.params.channelId!);
+      if (!channel) return respond.unknownChannel();
+      const guildId = guildIdOf(channel);
+      if (!guildId || channel.type === ChannelType.GroupDM)
+        return respond.error(
+          400,
+          50003,
+          "Cannot execute action on a DM channel",
+        );
+      const denied = mock.checkBotPerms(channel, Permission.ManageMessages);
+      if (denied) return denied;
+      const ids: unknown = req.body?.messages;
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string"))
+        return respond.invalidFormBody();
+      if (ids.length < 2 || ids.length > 100)
+        return respond.error(
+          400,
+          50016,
+          "Provided too few or too many messages to delete. Must provide at least 2 and fewer than 100 messages to delete",
+        );
+      // Which code a duplicate gets isn't documented: 50035 is inferred, not checked.
+      if (new Set(ids).size !== ids.length) return respond.invalidFormBody();
+      if (ids.some((id) => Date.now() - createdAt(id) > TWO_WEEKS_MS))
+        return respond.error(
+          400,
+          50034,
+          "A message provided was too old to bulk delete",
+        );
+      const deleted = mock
+        .messagesIn(channel)
+        .filter((m) => ids.includes(m.id))
+        .map((m) => {
+          state.deleteMessage(channel.id, m.id);
+          pinnedAt.delete(m.id);
+          return m.id;
+        });
+      gateway.dispatch(
+        GatewayDispatchEvents.MessageDeleteBulk,
+        { ids: deleted, channel_id: channel.id, guild_id: guildId },
+        GatewayIntentBits.GuildMessages,
+      );
       return respond.noContent();
     }),
   );
