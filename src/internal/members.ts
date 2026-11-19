@@ -83,6 +83,62 @@ export function registerMemberRoutes(
     }),
   );
 
+  // List Guild Members (docs.discord.food/resources/guild#list-guild-members): ascending by user id,
+  // `limit` 1-1000 (default 1), `after` a user id. "Restricted according to whether the
+  // GUILD_MEMBERS Privileged Intent is enabled": what Discord answers without it is unchecked, so
+  // it's a Gap. A limit out of range answering 50035 is inferred.
+  const limitOf = (req: RestRequest) => {
+    const limit = Number(req.query.get("limit") ?? 1);
+    return Number.isInteger(limit) && limit >= 1 && limit <= 1000
+      ? limit
+      : undefined;
+  };
+  const byId = (a: APIGuildMember, b: APIGuildMember) =>
+    BigInt(a.user.id) < BigInt(b.user.id) ? -1 : 1;
+  rest.route(
+    "GET",
+    "/guilds/:guildId/members",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      if (!(mock.privilegedIntents & GatewayIntentBits.GuildMembers))
+        return rest.gap("listing members without the GUILD_MEMBERS intent");
+      const limit = limitOf(req);
+      if (!limit) return respond.invalidFormBody();
+      const after = BigInt(req.query.get("after") ?? 0);
+      const members = [...guild.members.values()]
+        .filter((m) => BigInt(m.user.id) > after)
+        .sort(byId);
+      return respond.json(members.slice(0, limit));
+    }),
+  );
+
+  // Query Guild Members (#query-guild-members): `query` against username and nickname, `limit`
+  // 1-1000 (default 1). docs.discord.food says "contains" but also "functionally identical" to
+  // gateway op 8, which matches a prefix; discord.js documents a prefix. The mock matches a
+  // case-insensitive prefix of either: inferred, not checked. Registered before
+  // /members/:userId, which would otherwise answer "search" as a user id.
+  rest.route(
+    "GET",
+    "/guilds/:guildId/members/search",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const query = req.query.get("query");
+      const limit = limitOf(req);
+      if (query === null || !limit) return respond.invalidFormBody();
+      const prefix = query.toLowerCase();
+      const matches = (name: string | null | undefined) =>
+        !!name && name.toLowerCase().startsWith(prefix);
+      return respond.json(
+        [...guild.members.values()]
+          .filter((m) => matches(m.user.username) || matches(m.nick))
+          .sort(byId)
+          .slice(0, limit),
+      );
+    }),
+  );
+
   rest.route(
     "GET",
     "/guilds/:guildId/members/:userId",
@@ -331,6 +387,50 @@ export function registerMemberRoutes(
     }),
   );
 
+  // Bulk Guild Ban (#bulk-guild-ban, deprecated for /bulk-ban/v2, which discord.js 14 doesn't
+  // call): BAN_MEMBERS and MANAGE_GUILD, at most 200 ids. A ban fails "if the user is already
+  // banned, the user has a higher role than the current user, the user is the owner of the
+  // guild, or the user is the current user"; none banned is 500000. The HTTP status for 500000,
+  // and 10013 for an id that names no user, are inferred, not checked.
+  rest.route(
+    "POST",
+    "/guilds/:guildId/bulk-ban",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const body = (req.body ?? {}) as {
+        user_ids?: string[];
+        delete_message_seconds?: number;
+      };
+      const ids = body.user_ids;
+      if (!Array.isArray(ids) || ids.length === 0 || ids.length > 200)
+        return respond.invalidFormBody();
+      if (!botHas(guild, Permission.BanMembers | Permission.ManageGuild))
+        return respond.missingPermissions();
+      if ((body.delete_message_seconds ?? 0) > 0)
+        return rest.gap("bulk ban with delete_message_seconds");
+      const banned: string[] = [];
+      const failed: string[] = [];
+      for (const id of ids) {
+        const user = state.users.get(id);
+        if (
+          !user ||
+          id === bot ||
+          guild.bans.has(id) ||
+          (guild.members.has(id) && !outranks(guild, id))
+        )
+          failed.push(id);
+        else {
+          banUser(mock, guild, user, bot, reasonOf(req));
+          banned.push(id);
+        }
+      }
+      if (!banned.length)
+        return respond.error(400, 500000, "Failed to ban users");
+      return respond.json({ banned_users: banned, failed_users: failed });
+    }),
+  );
+
   const canReadBans = (guild: GuildRecord) =>
     botHas(guild, Permission.BanMembers) ||
     botHas(guild, Permission.ViewAuditLog);
@@ -393,6 +493,94 @@ export function registerMemberRoutes(
     authed((req) => {
       const guild = guildOf(req);
       return guild ? respond.json([...guild.roles.values()]) : unknownGuild();
+    }),
+  );
+
+  // Get Guild Role Member Counts (#get-guild-role-member-counts): role id to member count. The
+  // example leaves out @everyone, and discord.js says so (RoleManager#fetchMemberCounts: "This
+  // does not include the @everyone role"). Registered before /roles/:roleId,
+  // which would otherwise answer "member-counts" as an unknown role.
+  rest.route(
+    "GET",
+    "/guilds/:guildId/roles/member-counts",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const members = [...guild.members.values()];
+      return respond.json(
+        Object.fromEntries(
+          [...guild.roles.keys()]
+            .filter((id) => id !== guild.id)
+            .map((id) => [
+              id,
+              members.filter((m) => m.roles.includes(id)).length,
+            ]),
+        ),
+      );
+    }),
+  );
+
+  // Get Guild Role (#get-guild-role): the role, else 10011 Unknown Role.
+  rest.route(
+    "GET",
+    "/guilds/:guildId/roles/:roleId",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      const role = guild.roles.get(req.params.roleId!);
+      return role ? respond.json(role) : unknownRole();
+    }),
+  );
+
+  // Modify Guild Role Positions (#modify-guild-role-positions): an array of { id, position },
+  // MANAGE_ROLES, answers every role, fires GUILD_ROLE_UPDATE for each role that moved. How
+  // Discord reorders the rest isn't documented: the mock sorts by the requested positions, the
+  // moved roles ahead on a tie, and renumbers from 1 (inferred). The bot moving a role at or above
+  // its own highest, or onto such a position, is refused like any role edit (50013, inferred).
+  rest.route(
+    "PATCH",
+    "/guilds/:guildId/roles",
+    authed((req) => {
+      const guild = guildOf(req);
+      if (!guild) return unknownGuild();
+      if (!Array.isArray(req.body)) return respond.invalidFormBody();
+      const moves = new Map<string, number>();
+      for (const entry of req.body as {
+        id?: string;
+        position?: number | null;
+      }[]) {
+        if (!entry.id || !guild.roles.has(entry.id)) return unknownRole();
+        if (entry.position != null) moves.set(entry.id, entry.position);
+      }
+      const top = highest(guild, bot);
+      const moved = [...moves].filter(
+        ([id, position]) => guild.roles.get(id)!.position !== position,
+      );
+      if (
+        !botHas(guild, Permission.ManageRoles) ||
+        (guild.ownerId !== bot &&
+          moved.some(
+            ([id, position]) =>
+              guild.roles.get(id)!.position >= top || position >= top,
+          ))
+      )
+        return respond.missingPermissions();
+      const before = new Map(
+        [...guild.roles.values()].map((r) => [r.id, r.position]),
+      );
+      const ranked = [...guild.roles.values()]
+        .filter((r) => r.id !== guild.id)
+        .map((r) => ({
+          role: r,
+          key: moves.get(r.id) ?? r.position,
+          mover: moves.has(r.id),
+        }))
+        .sort((a, b) => a.key - b.key || Number(a.mover) - Number(b.mover));
+      ranked.forEach(({ role }, index) => (role.position = index + 1));
+      for (const role of guild.roles.values())
+        if (before.get(role.id) !== role.position)
+          announceRole(guild, GatewayDispatchEvents.GuildRoleUpdate, { role });
+      return respond.json([...guild.roles.values()]);
     }),
   );
 

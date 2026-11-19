@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import type { APITextChannel } from "discord-api-types/v10";
+import type { APIChannel, APITextChannel } from "discord-api-types/v10";
 import {
   ChannelType,
   Client,
@@ -7,6 +7,7 @@ import {
   Events,
   GatewayIntentBits,
   OverwriteType,
+  type TextChannel,
 } from "discord.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { createDiscordMock, type DiscordMock } from "../src/internal/mock.js";
@@ -302,4 +303,105 @@ it("fetches a user who isn't cached", async () => {
 
   // Assert
   expect(user.username).toBe("alice");
+});
+
+it("fetches one role by id", async () => {
+  // Arrange
+  const { guild, record } = await start(0n);
+  const helpers = mock.createRole(record, "helpers", 0n);
+
+  // Act
+  const role = await guild.roles.fetch(helpers.id, { force: true });
+
+  // Assert
+  expect(role?.name).toBe("helpers");
+});
+
+it("counts each role's members, leaving out @everyone", async () => {
+  // Arrange
+  const { guild, record } = await start(0n);
+  const admins = [...record.roles.values()].find((r) => r.name === "admins")!;
+
+  // Act
+  const counts = await guild.roles.fetchMemberCounts();
+
+  // Assert
+  expect(counts.get(admins.id)).toBe(1);
+  expect(counts.has(guild.id)).toBe(false);
+});
+
+it("moves a role up past another below the bot, and the bot hears it", async () => {
+  // Arrange
+  const { guild, record } = await start(Permission.ManageRoles);
+  const helpers = await guild.roles.create({ name: "helpers" });
+  const mods = await guild.roles.create({ name: "mods" });
+  const updated = once(client, Events.GuildRoleUpdate);
+
+  // Act
+  await mods.setPosition(2);
+
+  // Assert
+  expect([
+    record.roles.get(mods.id)!.position,
+    record.roles.get(helpers.id)!.position,
+  ]).toEqual([2, 1]);
+  await updated;
+});
+
+it("refuses to move a role up to the bot's own", async () => {
+  // Arrange
+  const { guild } = await start(Permission.ManageRoles);
+  const helpers = await guild.roles.create({ name: "helpers" });
+  const top = guild.members.me!.roles.highest.position;
+
+  // Act
+  const moved = helpers.setPosition(top);
+
+  // Assert
+  expect((await refusal(moved)).code).toBe(50013);
+});
+
+it("bans several users at once and reports the ones it couldn't", async () => {
+  // Arrange
+  const { guild, record, alice } = await start(
+    Permission.BanMembers | Permission.ManageGuild,
+  );
+
+  // Act
+  const result = await guild.members.bulkBan([alice.id, client.user!.id]);
+
+  // Assert
+  expect(result).toEqual({
+    bannedUsers: [alice.id],
+    failedUsers: [client.user!.id],
+  });
+  expect(record.bans.has(alice.id)).toBe(true);
+});
+
+it("refuses a bulk ban that bans nobody", async () => {
+  // Arrange
+  const { guild } = await start(Permission.BanMembers | Permission.ManageGuild);
+
+  // Act
+  const result = guild.members.bulkBan([client.user!.id]);
+
+  // Assert
+  expect((await refusal(result)).code).toBe(500000);
+});
+
+it("reorders channels with Manage Channels, and the bot hears each move", async () => {
+  // Arrange
+  const { guild, record } = await start(Permission.ManageChannels);
+  const general = mock.createTextChannel(record, "general");
+  const rules = mock.createTextChannel(record, "rules");
+  const channel = (await guild.channels.fetch(rules.id)) as TextChannel;
+  const updated = once(client, Events.ChannelUpdate);
+
+  // Act
+  await channel.setPosition(0);
+
+  // Assert
+  const position = (c: APIChannel) => (c as APITextChannel).position;
+  expect(position(rules)).toBeLessThan(position(general));
+  await updated;
 });

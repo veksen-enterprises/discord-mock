@@ -168,3 +168,52 @@ it("tells a bot it was kicked, and leaves the guild out when it reconnects", asy
   await ready;
   expect(client.guilds.cache.has(guild.id)).toBe(false);
 });
+
+it("lists members in id order, a page at a time", async () => {
+  // Arrange
+  const guild = await start([GatewayIntentBits.Guilds]);
+  const ids = [...mock.state.guilds.get(guild.id)!.members.keys()].sort(
+    (a, b) => (BigInt(a) < BigInt(b) ? -1 : 1),
+  );
+
+  // Act
+  const page = await guild.members.list({ limit: 2, after: ids[0] });
+
+  // Assert
+  expect([...page.keys()]).toEqual(ids.slice(1, 3));
+});
+
+it("searches members by the start of their name", async () => {
+  // Arrange
+  const guild = await start([GatewayIntentBits.Guilds]);
+
+  // Act
+  const found = await guild.members.search({ query: "AL", limit: 10 });
+
+  // Assert
+  expect(found.map((m) => m.user.username).sort()).toEqual(["albert", "alice"]);
+});
+
+it("finds a member by nickname", async () => {
+  // Arrange
+  const record = mock.createGuild("ladder");
+  mock.addMember(record, mock.createUser("bob"), { nick: "Champion" });
+  const guild = await login(record.id);
+
+  // Act
+  const found = await guild.members.search({ query: "champ" });
+
+  // Assert
+  expect(found.map((m) => m.user.username)).toEqual(["bob"]);
+});
+
+async function login(guildId: string) {
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...mock.clientOptions,
+  });
+  const ready = once(client, Events.ClientReady);
+  await client.login(mock.token);
+  await ready;
+  return client.guilds.cache.get(guildId)!;
+}

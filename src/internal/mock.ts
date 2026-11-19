@@ -331,17 +331,19 @@ export class DiscordMock {
   private inFlight = 0;
   readonly activity = new EventEmitter<{ change: [] }>();
   readonly interactionDeadlineMs: number;
+  readonly privilegedIntents: number;
   apiUrl = "";
 
   constructor(options: DiscordMockOptions = {}) {
     this.interactionDeadlineMs = options.interactionDeadlineMs ?? 3_000;
+    this.privilegedIntents =
+      options.privilegedIntents ??
+      GatewayIntentBits.GuildMembers |
+        GatewayIntentBits.GuildPresences |
+        GatewayIntentBits.MessageContent;
     this.gateway = new Gateway(this.state, {
       token: this.token,
-      privilegedIntents:
-        options.privilegedIntents ??
-        GatewayIntentBits.GuildMembers |
-          GatewayIntentBits.GuildPresences |
-          GatewayIntentBits.MessageContent,
+      privilegedIntents: this.privilegedIntents,
       recordGap: (what) => void this.rest.gap(what),
       onDispatch: () => this.activity.emit("change"),
       onVoiceStateUpdate: (d, reply) =>
@@ -1986,6 +1988,79 @@ export class DiscordMock {
             .flatMap((c) => ("parent_id" in c ? [c.id, c.parent_id] : [c.id])),
         );
         return respond.json(channels.filter((c) => viewable.has(c.id)));
+      }),
+    );
+
+    // docs.discord.food/resources/channel#modify-guild-channel-positions: an array of { id,
+    // position?, lock_permissions?, parent_id? }, MANAGE_CHANNELS, 204, CHANNEL_UPDATE per channel.
+    // The sorting conventions "are not required or enforced by the API", so positions are stored
+    // as sent. MANAGE_CHANNELS is checked on each channel, and an unknown or foreign channel is
+    // 10003; both are inferred, not checked.
+    rest.route(
+      "PATCH",
+      "/guilds/:guildId/channels",
+      authed((req) => {
+        const guild = state.guilds.get(req.params.guildId!);
+        if (!guild) return respond.error(404, 10004, "Unknown Guild");
+        if (!Array.isArray(req.body)) return respond.invalidFormBody();
+        const entries = req.body as {
+          id?: string;
+          position?: number | null;
+          lock_permissions?: boolean | null;
+          parent_id?: string | null;
+        }[];
+        const changes = [];
+        for (const entry of entries) {
+          const channel = entry.id ? state.channels.get(entry.id) : undefined;
+          if (
+            !channel ||
+            !("guild_id" in channel) ||
+            channel.guild_id !== guild.id
+          )
+            return respond.unknownChannel();
+          const denied = this.checkBotPerms(
+            channel,
+            Permission.ManageChannels |
+              (entry.lock_permissions ? Permission.ManageRoles : 0n),
+          );
+          if (denied) return denied;
+          const parent =
+            typeof entry.parent_id === "string"
+              ? state.channels.get(entry.parent_id)
+              : undefined;
+          if (
+            typeof entry.parent_id === "string" &&
+            (parent?.type !== ChannelType.GuildCategory ||
+              !("guild_id" in parent) ||
+              parent.guild_id !== guild.id)
+          )
+            return respond.invalidFormBody();
+          changes.push({ channel, entry, parent });
+        }
+        for (const { channel, entry, parent } of changes) {
+          const target = channel as {
+            position?: number;
+            parent_id?: string | null;
+          };
+          if (entry.position != null) target.position = entry.position;
+          if ("parent_id" in entry) target.parent_id = parent?.id ?? null;
+          if (
+            entry.lock_permissions &&
+            parent &&
+            "permission_overwrites" in parent
+          )
+            Object.assign(channel, {
+              permission_overwrites: structuredClone(
+                parent.permission_overwrites ?? [],
+              ),
+            });
+          this.gateway.dispatch(
+            GatewayDispatchEvents.ChannelUpdate,
+            channel,
+            GatewayIntentBits.Guilds,
+          );
+        }
+        return respond.noContent();
       }),
     );
 
