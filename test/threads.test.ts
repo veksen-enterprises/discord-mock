@@ -280,3 +280,50 @@ it("refuses to delete a member's thread without Manage Threads", async () => {
 
   expect(error).toMatchObject({ code: 50013 });
 });
+
+async function threadWithAlice() {
+  const ctx = await startInText(
+    SEND |
+      Permission.CreatePublicThreads |
+      Permission.SendMessagesInThreads |
+      Permission.ManageThreads,
+  );
+  const thread = await ctx.channel.threads.create({ name: "help" });
+  await thread.members.add(ctx.alice.id);
+  return { ...ctx, thread };
+}
+
+it("fetches one member of a thread", async () => {
+  // Arrange
+  const { thread, alice } = await threadWithAlice();
+
+  // Act
+  const member = await thread.members.fetch({ member: alice.id, force: true });
+
+  // Assert
+  expect(member.id).toBe(alice.id);
+});
+
+it("removes a member from a thread with Manage Threads", async () => {
+  // Arrange
+  const { thread, alice } = await threadWithAlice();
+
+  // Act
+  await thread.members.remove(alice.id);
+
+  // Assert
+  expect((await thread.members.fetch()).map((m) => m.id)).toEqual([
+    client.user!.id,
+  ]);
+});
+
+it("leaves a thread", async () => {
+  // Arrange
+  const { thread, alice } = await threadWithAlice();
+
+  // Act
+  await thread.leave();
+
+  // Assert
+  expect((await thread.members.fetch()).map((m) => m.id)).toEqual([alice.id]);
+});

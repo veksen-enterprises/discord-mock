@@ -143,3 +143,70 @@ it("answers 201 for a new command and 200 for an existing name, as Discord's doc
   expect((await post()).status).toBe(201);
   expect((await post()).status).toBe(200);
 });
+
+it("lists the global commands the bot registered", async () => {
+  // Arrange
+  await start();
+
+  // Act
+  const commands = await client.application!.commands.fetch();
+
+  // Assert
+  expect(commands.map((c) => c.name)).toEqual(["admin-config"]);
+});
+
+it("fetches one global command by id", async () => {
+  // Arrange
+  await start();
+  const [id] = client.application!.commands.cache.keys();
+
+  // Act
+  const command = await client.application!.commands.fetch(id!, {
+    force: true,
+  });
+
+  // Assert
+  expect(command.name).toBe("admin-config");
+});
+
+it("edits a global command's description and keeps its name", async () => {
+  // Arrange
+  await start();
+  const [id] = client.application!.commands.cache.keys();
+
+  // Act
+  const edited = await client.application!.commands.edit(id!, {
+    description: "Configure the season",
+  });
+
+  // Assert
+  expect([edited.name, edited.description]).toEqual([
+    "admin-config",
+    "Configure the season",
+  ]);
+});
+
+it("deletes a global command, so the list no longer has it", async () => {
+  // Arrange
+  await start();
+  const [id] = client.application!.commands.cache.keys();
+
+  // Act
+  await client.application!.commands.delete(id!);
+
+  // Assert
+  expect((await client.application!.commands.fetch()).size).toBe(0);
+});
+
+it("fetches one guild command by id", async () => {
+  // Arrange
+  const { guild } = await start();
+  const commands = client.guilds.cache.get(guild.id)!.commands;
+  const [created] = (await commands.set([adminConfig.toJSON()])).values();
+
+  // Act
+  const command = await commands.fetch(created!.id, { force: true });
+
+  // Assert
+  expect(command.guildId).toBe(guild.id);
+});

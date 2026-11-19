@@ -160,3 +160,35 @@ it("removes another user's reaction, an emoji's, then all, lists who reacted, an
   expect(posted.reactions).toEqual([]);
   mock.assertNoUnhandledRequests();
 });
+
+it("unpins through the deprecated route", async () => {
+  // Arrange
+  const { general, channel, alice } = await start(Permission.PinMessages);
+  const message = mock.as(alice).sendMessage(general, "rules");
+  await client.rest.put(Routes.channelPin(channel.id, message.id));
+
+  // Act
+  await client.rest.delete(Routes.channelPin(channel.id, message.id));
+
+  // Assert
+  expect((await channel.messages.fetchPins()).items).toEqual([]);
+});
+
+it("removes the bot's own reaction and announces it", async () => {
+  // Arrange
+  const { general, channel, alice } = await start(
+    Permission.ViewChannel |
+      Permission.ReadMessageHistory |
+      Permission.AddReactions,
+  );
+  const posted = mock.as(alice).sendMessage(general, "vote");
+  const message = await channel.messages.fetch(posted.id);
+  const reaction = await message.react("👍");
+  const removed = once(client, Events.MessageReactionRemove);
+
+  // Act
+  await reaction.users.remove();
+
+  // Assert
+  expect((await removed)[1].id).toBe(client.user!.id);
+});

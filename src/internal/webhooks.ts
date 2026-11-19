@@ -5,7 +5,7 @@ import {
   type APIChannel,
 } from "discord-api-types/v10";
 import { messageLimitError } from "./limits.js";
-import type { DiscordMock } from "./mock.js";
+import { pickMessageFields, pollEditGap, type DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
 import { respond, type RestHandler, type RestRequest } from "./rest.js";
 import { snowflake } from "./snowflake.js";
@@ -145,17 +145,34 @@ export function registerWebhookRoutes(
     return refused ?? respond.json(payload(webhook, false));
   });
 
-  // Modify Webhook: only `name` is modelled; avatar and channel_id (and channel_id with a token,
-  // which the docs forbid) are a Gap.
+  // Modify Webhook: `name`, and `channel_id` without a token ("this call ... does not accept a
+  // channel_id parameter" with one; docs.discord.food/resources/webhook#modify-webhook-with-token).
+  // `avatar` is a Gap. Moving needs MANAGE_WEBHOOKS in the new channel too, and a channel in the
+  // same guild; both are inferred, not checked. WEBHOOKS_UPDATE goes out for each channel.
   const modify = (req: RestRequest) => {
     const { refused, webhook } = named(req);
     if (refused) return refused;
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const other = Object.keys(body).find((key) => key !== "name");
+    const fields = req.params.token ? ["name"] : ["name", "channel_id"];
+    const other = Object.keys(body).find((key) => !fields.includes(key));
     if (other) return rest.gap(`PATCH webhook ${other}`);
-    if ("name" in body) {
-      if (nameError(body.name)) return invalidName();
-      webhook.name = body.name as string;
+    if ("name" in body && nameError(body.name)) return invalidName();
+    let target: APIChannel | undefined;
+    if ("channel_id" in body) {
+      target = state.channels.get(body.channel_id as string);
+      if (
+        !target ||
+        !("guild_id" in target) ||
+        target.guild_id !== webhook.guildId
+      )
+        return respond.unknownChannel();
+      const denied = canManage(target);
+      if (denied) return denied;
+    }
+    if ("name" in body) webhook.name = body.name as string;
+    if (target && target.id !== webhook.channelId) {
+      announce(webhook);
+      webhook.channelId = target.id;
     }
     announce(webhook);
     return respond.json(payload(webhook, !req.params.token));
@@ -237,14 +254,60 @@ export function registerWebhookRoutes(
       : respond.noContent();
   });
 
-  // Get, Edit and Delete Webhook Message for a channel webhook aren't modelled yet.
-  for (const method of ["GET", "PATCH", "DELETE"])
-    rest.route(
-      method,
-      "/webhooks/:webhookId/:token/messages/:messageId",
-      (req) =>
-        isApp(req)
-          ? undefined
-          : rest.gap(`${method} a channel webhook's message`),
-    );
+  // Get, Edit and Delete Webhook Message (docs.discord.food/resources/webhook): a message this
+  // webhook sent, else 10008 Unknown Message (pairing inferred). A message in a thread
+  // (`thread_id`) is a Gap, like executing into one.
+  const sentBy = (req: RestRequest) => {
+    if (req.query.get("thread_id"))
+      return {
+        refused: rest.gap(`${req.method} a webhook message in a thread`),
+      };
+    const { refused, webhook } = named(req);
+    if (refused) return { refused };
+    const message = state.messages
+      .get(webhook.channelId)
+      ?.find(
+        (m) => m.id === req.params.messageId && m.webhook_id === webhook.id,
+      );
+    return message ? { message } : { refused: respond.unknownMessage() };
+  };
+  rest.route(
+    "GET",
+    "/webhooks/:webhookId/:token/messages/:messageId",
+    (req) => {
+      if (isApp(req)) return undefined;
+      const { refused, message } = sentBy(req);
+      return refused ?? respond.json(message);
+    },
+  );
+  rest.route(
+    "PATCH",
+    "/webhooks/:webhookId/:token/messages/:messageId",
+    (req) => {
+      if (isApp(req)) return undefined;
+      const { refused, message } = sentBy(req);
+      if (refused) return refused;
+      const overLimit =
+        pollEditGap(rest, message, req.body) ?? messageLimitError(req.body);
+      if (overLimit) return overLimit;
+      const updated = state.updateMessage(
+        message.channel_id,
+        message.id,
+        pickMessageFields(req.body),
+      );
+      gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+      return respond.json(updated);
+    },
+  );
+  rest.route(
+    "DELETE",
+    "/webhooks/:webhookId/:token/messages/:messageId",
+    (req) => {
+      if (isApp(req)) return undefined;
+      const { refused, message } = sentBy(req);
+      if (refused) return refused;
+      mock.deleteMessage(message);
+      return respond.noContent();
+    },
+  );
 }

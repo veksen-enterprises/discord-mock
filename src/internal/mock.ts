@@ -2962,7 +2962,11 @@ function interactionMetadata(run: InteractionRun) {
  * removing buttons) is unchecked, so editing a poll message is a Gap, as is adding a poll to a
  * message that isn't a deferred reply still loading (that one becomes the reply, inferred).
  */
-function pollEditGap(rest: RestRouter, message: APIMessage, raw: unknown) {
+export function pollEditGap(
+  rest: RestRouter,
+  message: APIMessage,
+  raw: unknown,
+) {
   const body = raw as RESTPostAPIChannelMessageJSONBody | undefined;
   if (message.poll) return rest.gap("editing a poll message");
   if (body?.poll && !((message.flags ?? 0) & MessageFlags.Loading))
@@ -2970,7 +2974,7 @@ function pollEditGap(rest: RestRouter, message: APIMessage, raw: unknown) {
   return undefined;
 }
 
-function pickMessageFields(raw: unknown) {
+export function pickMessageFields(raw: unknown) {
   // The widest edit body: an interaction's webhook edit is the one that can carry a poll.
   const body = raw as RESTPatchAPIWebhookWithTokenMessageJSONBody | undefined;
   if (!body) return {};

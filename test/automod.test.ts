@@ -179,3 +179,72 @@ it("refuses the bot AutoMod without Manage Server, and a timeout action without 
   expect((await rules.fetch()).size).toBe(1);
   mock.assertNoUnhandledRequests();
 });
+
+const keywordRule = {
+  name: "No rats",
+  eventType: AutoModerationRuleEventType.MessageSend,
+  triggerType: AutoModerationRuleTriggerType.Keyword,
+  triggerMetadata: { keywordFilter: ["rat"] },
+  actions: [{ type: AutoModerationActionType.BlockMessage }],
+  enabled: true,
+};
+
+async function loginForRules() {
+  const { guild } = world();
+  mock.grantBot(Permission.ManageGuild);
+  await login([
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.AutoModerationConfiguration,
+  ]);
+  return client.guilds.cache.get(guild.id)!.autoModerationRules;
+}
+
+it("tells the bot when it creates a rule", async () => {
+  // Arrange
+  const rules = await loginForRules();
+  const created = once(client, Events.AutoModerationRuleCreate);
+
+  // Act
+  const rule = await rules.create(keywordRule);
+
+  // Assert
+  expect((await created)[0].id).toBe(rule.id);
+});
+
+it("tells the bot when it edits a rule", async () => {
+  // Arrange
+  const rules = await loginForRules();
+  const rule = await rules.create(keywordRule);
+  const updated = once(client, Events.AutoModerationRuleUpdate);
+
+  // Act
+  await rule.setName("No rodents");
+
+  // Assert
+  expect((await updated)[1].name).toBe("No rodents");
+});
+
+it("fetches one rule by id", async () => {
+  // Arrange
+  const rules = await loginForRules();
+  const { id } = await rules.create(keywordRule);
+
+  // Act
+  const rule = await rules.fetch({ autoModerationRule: id, force: true });
+
+  // Assert
+  expect(rule.name).toBe("No rats");
+});
+
+it("deletes a rule and tells the bot", async () => {
+  // Arrange
+  const rules = await loginForRules();
+  const rule = await rules.create(keywordRule);
+  const deleted = once(client, Events.AutoModerationRuleDelete);
+
+  // Act
+  await rule.delete();
+
+  // Assert
+  expect((await deleted)[0].id).toBe(rule.id);
+});

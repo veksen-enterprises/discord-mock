@@ -116,3 +116,19 @@ it("lets the bot create, list, restrict and delete emojis with Create Expression
   );
   mock.assertNoUnhandledRequests();
 });
+
+it("fetches one guild sticker by id", async () => {
+  // Arrange
+  const guild = mock.createGuild("g");
+  const mod = mock.createUser("mod");
+  mock.addMember(guild, mod);
+  mock.createRole(guild, "mods", Permission.CreateGuildExpressions, [mod]);
+  const wave = uploadExpression(mock, guild, mod, "sticker", "wave");
+  await login([GatewayIntentBits.Guilds, GatewayIntentBits.GuildExpressions]);
+
+  // Act
+  const sticker = await client.guilds.cache.get(guild.id)!.stickers.fetch(wave);
+
+  // Assert
+  expect(sticker.name).toBe("wave");
+});

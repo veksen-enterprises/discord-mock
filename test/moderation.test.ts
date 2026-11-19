@@ -269,3 +269,37 @@ it("moves a channel into a category and syncs its overwrites, but not past the b
     ).code,
   ).toBe(50013);
 });
+
+it("lists the guild's bans", async () => {
+  // Arrange
+  const { guild, alice } = await start(Permission.BanMembers);
+  await guild.members.ban(alice.id, { reason: "spam" });
+
+  // Act
+  const bans = await guild.bans.fetch();
+
+  // Assert
+  expect(bans.map((b) => [b.user.id, b.reason])).toEqual([[alice.id, "spam"]]);
+});
+
+it("sets the bot's own nickname with Change Nickname", async () => {
+  // Arrange
+  const { guild, record } = await start(Permission.ChangeNickname);
+
+  // Act
+  await guild.members.me!.setNickname("Ladder Bot");
+
+  // Assert
+  expect(record.members.get(client.user!.id)?.nick).toBe("Ladder Bot");
+});
+
+it("fetches a user who isn't cached", async () => {
+  // Arrange
+  const { alice } = await start(0n);
+
+  // Act
+  const user = await client.users.fetch(alice.id, { force: true });
+
+  // Assert
+  expect(user.username).toBe("alice");
+});
