@@ -68,6 +68,8 @@ export interface GuildRecord {
   stickers: Map<string, APISticker & { user: APIUser }>;
   /** Soundboard sounds by id, each with the user who uploaded it. */
   soundboardSounds: Map<string, APISoundboardSound & { user: APIUser }>;
+  /** The widget settings; disabled with no invite channel until changed (inferred, not checked). */
+  widget: { enabled: boolean; channel_id: string | null };
   /** When members were last seen, by user id; a member not listed was seen just now. */
   lastSeen: Map<string, number>;
 }
@@ -197,6 +199,7 @@ export class DiscordState extends EventEmitter<{
       emojis: new Map(),
       stickers: new Map(),
       soundboardSounds: new Map(),
+      widget: { enabled: false, channel_id: null },
       lastSeen: new Map(),
     };
     this.guilds.set(id, guild);

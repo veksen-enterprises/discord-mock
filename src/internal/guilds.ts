@@ -89,4 +89,48 @@ export function registerGuildRoutes(
       return respond.json(guildPayload(guild));
     }),
   );
+
+  // Get Guild Widget Settings and Modify Guild Widget (docs.discord.food/resources/guild), both
+  // with Manage Server. 50013 without it is inferred, not checked. A channel that isn't one of the
+  // guild's has no documented code: a Gap. The 30042 limit on changes isn't modelled.
+  const widgetGuild = (guildId: string) => {
+    const guild = state.guilds.get(guildId);
+    if (!guild) return { refused: unknownGuild() };
+    if (!(computePermissions(state, guild, bot) & Permission.ManageGuild))
+      return { refused: respond.missingPermissions() };
+    return { guild };
+  };
+  rest.route(
+    "GET",
+    "/guilds/:guildId/widget",
+    authed((req) => {
+      const { refused, guild } = widgetGuild(req.params.guildId!);
+      return refused ?? respond.json(guild!.widget);
+    }),
+  );
+  rest.route(
+    "PATCH",
+    "/guilds/:guildId/widget",
+    authed((req) => {
+      const { refused, guild } = widgetGuild(req.params.guildId!);
+      if (refused) return refused;
+      const body = (req.body ?? {}) as {
+        enabled?: boolean;
+        channel_id?: string | null;
+      };
+      const other = Object.keys(body).find(
+        (k) => k !== "enabled" && k !== "channel_id",
+      );
+      if (other) return rest.gap(`PATCH widget ${other}`);
+      if (
+        typeof body.channel_id === "string" &&
+        !guild!.channelIds.includes(body.channel_id)
+      )
+        return rest.gap("a widget channel outside the guild");
+      if (body.enabled !== undefined) guild!.widget.enabled = body.enabled;
+      if (body.channel_id !== undefined)
+        guild!.widget.channel_id = body.channel_id;
+      return respond.json(guild!.widget);
+    }),
+  );
 }

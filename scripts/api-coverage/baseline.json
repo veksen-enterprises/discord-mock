@@ -1,7 +1,7 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 153,
+    "covered": 155,
     "botCallable": 213,
     "notBotCallable": 15
   },
@@ -93,6 +93,7 @@
     "GET /guilds/:/voice-states/:",
     "GET /guilds/:/voice-states/@me",
     "GET /guilds/:/webhooks",
+    "GET /guilds/:/widget",
     "GET /invites/:",
     "GET /stage-instances/:",
     "GET /users/:",
@@ -121,6 +122,7 @@
     "PATCH /guilds/:/stickers/:",
     "PATCH /guilds/:/voice-states/:",
     "PATCH /guilds/:/voice-states/@me",
+    "PATCH /guilds/:/widget",
     "PATCH /stage-instances/:",
     "PATCH /users/@me",
     "PATCH /webhooks/:",

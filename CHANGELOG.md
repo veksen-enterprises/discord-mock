@@ -11,6 +11,7 @@ More of Discord's API works when your bot calls it, instead of failing the test 
 - Soundboard: the bot can upload, list, edit and delete guild sounds, and hears each change. `client.guilds.fetchSoundboardSounds()` works.
 - Threads: `threads.fetchArchived({ type: "private" })`, with or without `fetchAll`. The public list no longer includes private threads.
 - Webhooks: moving a webhook to another channel, and fetching, editing or deleting a message it sent.
+- Widget: `guild.fetchWidgetSettings()` and `setWidgetSettings()`, with Manage Server.
 - The bot's account: `client.user.setUsername()` and `setAvatar()`, heard as `userUpdate`.
 - Announcements: new `discord.announcementChannel(server, name)`. The bot can follow it into another channel and crosspost posts to its followers.
 - Presence: new `member.setPresence({ status, activity })`. A bot with the GuildPresences intent hears `presenceUpdate`, and sees members who were already online when it connects.

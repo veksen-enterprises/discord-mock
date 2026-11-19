@@ -83,3 +83,31 @@ it("tells the bot when someone else renames the guild", async () => {
 
   expect((await updated)[1].name).toBe("new");
 });
+
+it("turns the widget on with an invite channel, with Manage Server", async () => {
+  // Arrange
+  const record = mock.createGuild("g");
+  const welcome = mock.createTextChannel(record, "welcome");
+  mock.grantBot(Permission.ManageGuild);
+  await login();
+  const guild = client.guilds.cache.get(record.id)!;
+
+  // Act
+  await guild.setWidgetSettings({ enabled: true, channel: welcome.id });
+
+  // Assert
+  const settings = await guild.fetchWidgetSettings();
+  expect([settings.enabled, settings.channel?.id]).toEqual([true, welcome.id]);
+});
+
+it("refuses to read the widget settings without Manage Server", async () => {
+  // Arrange
+  const record = mock.createGuild("g");
+  await login();
+
+  // Act
+  const settings = client.guilds.cache.get(record.id)!.fetchWidgetSettings();
+
+  // Assert
+  await expect(settings).rejects.toMatchObject({ code: 50013 });
+});
