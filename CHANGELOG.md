@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `discord.skipTime(ms)` ends every collector whose `time` or `idle` runs out within `ms`, so a test can let a menu time out. The bot's own `setTimeout` calls don't fire.
+
 ## 0.2.0
 
 Breaking: every name now says what the method does, what it returns and whether it waits. Methods that wait for the bot start with `waitFor`. Rename your calls with this table; nothing else in a test changes.

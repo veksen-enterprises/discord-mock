@@ -7,6 +7,7 @@ import {
 } from "discord-api-types/v10";
 import type { Client } from "discord.js";
 import { onTestFinished } from "vitest";
+import { hookCollectors, skip } from "./internal/clock.js";
 import { setCommandPermissions } from "./internal/command-permissions.js";
 import {
   deleteExpression,
@@ -500,6 +501,7 @@ class Discord {
   ): Promise<void> {
     this.client = client;
     this.markAction();
+    hookCollectors(client);
     if (options.appOwner) this.mock.developerId = options.appOwner.id;
     if (options.permissions !== undefined)
       this.mock.grantBot(options.permissions);
@@ -665,6 +667,20 @@ class Discord {
       allow: allow | (perms.allow ?? 0n),
       deny: deny | (perms.deny ?? 0n),
     });
+  }
+
+  /**
+   * Time passes for the bot's collectors: every collector whose `time` or `idle` runs out within
+   * `ms` ends now, as it would then. Waits for the bot to go quiet before and after, like a click
+   * does. The bot's own `setTimeout` calls don't fire.
+   * @example await discord.skipTime(60_000); expect(menu.content).toBe("Timed out.");
+   */
+  async skipTime(ms: number): Promise<void> {
+    // The bot may still be setting its timers after its reply, as a collector starts after it.
+    await this.mock.waitForIdle({ quietMs: this.quietTimeMs });
+    this.markAction();
+    skip(ms);
+    await this.mock.waitForIdle({ quietMs: this.quietTimeMs });
   }
 
   /** Discord archives `thread` for inactivity: it moves from the active list to the archived one. */

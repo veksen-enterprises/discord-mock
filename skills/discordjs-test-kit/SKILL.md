@@ -98,6 +98,7 @@ it("should record the result when the winner reports", async () => {
 | lose the gateway session                         | `discord.disconnect()`, act, `await discord.reconnect()` (give the test a 10 s timeout)                                                             |
 | wait for a message                               | `await discord.waitForMessage(channel, /text/)`, or `waitForDM(member, /text/)`; only the bot's messages written since the latest action count      |
 | check the bot sent nothing more                  | `await discord.waitForIdle()`, then assert                                                                                                          |
+| let a menu or collector time out                 | `await discord.skipTime(60_000)`, then assert                                                                                                       |
 | wait for anything else, or absence               | `await vi.waitFor(() => expect(…).…)`                                                                                                               |
 | read what's there now                            | `discord.messages(channel)`, `discord.dms(member)`                                                                                                  |
 
