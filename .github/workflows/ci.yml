@@ -47,6 +47,19 @@ jobs:
         run: npx -y npm@11 install --no-save ${{ matrix.floor }}
       - run: npm test
 
+  # Counts the Discord API the tests reach and fails when it differs from the committed baseline,
+  # so coverage can't drop unnoticed and a gain is written down.
+  api-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run coverage:api
+
   # The docs site has its own install so Astro never reaches the kit's. It still needs the kit's
   # node_modules: TypeDoc resolves discord.js's types from ../src when it builds the API reference.
   # On main, once the kit's checks pass, the build goes to Cloudflare Pages by direct upload. The
