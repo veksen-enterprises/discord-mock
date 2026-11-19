@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
-- `discord.skipTime(ms)` ends every collector whose `time` or `idle` runs out within `ms`, so a test can let a menu time out. The bot's own `setTimeout` calls don't fire.
+- `discord.skipTime(ms)` ends every collector whose `time` or `idle` runs out within `ms`, so a test can let a menu time out. It needs no setup. The bot's own `setTimeout` calls don't fire.
+- `createDiscord({ quietTimeMs })` sets how long the bot must be quiet before a click or pick goes through. The default stays 100. Lower it only for a bot that does nothing between sending a message and listening for its buttons; otherwise the click arrives before the bot listens.
 
 ## 0.2.0
 
