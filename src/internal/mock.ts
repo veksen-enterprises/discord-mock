@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -1788,6 +1789,10 @@ export class DiscordMock {
     registerWebhookRoutes(this, authed);
     registerAuditLogRoutes(this, authed);
 
+    // gateway/using-gateway#get-gateway: unauthenticated, `{ url }` only.
+    rest.route("GET", "/gateway", () =>
+      respond.json({ url: this.gateway.url }),
+    );
     rest.route(
       "GET",
       "/gateway/bot",
@@ -1808,6 +1813,41 @@ export class DiscordMock {
       "GET",
       "/users/@me",
       authed(() => respond.json(state.bot)),
+    );
+    // docs.discord.food/resources/user#modify-current-user: returns the user and fires USER_UPDATE
+    // (gateway-events#user-update, no intent). A bot changes `username` (2-32 characters) and
+    // `avatar` (image data or null); the other fields are for user accounts or premium, so they're
+    // a Gap. The `token` field the docs add is a user account's new token: a bot's doesn't change,
+    // so it's left out (inferred). A bad username or image answering 50035 is inferred.
+    rest.route(
+      "PATCH",
+      "/users/@me",
+      authed((req) => {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const other = Object.keys(body).find(
+          (key) => key !== "username" && key !== "avatar",
+        );
+        if (other) return rest.gap(`PATCH the bot user's ${other}`);
+        if (
+          "username" in body &&
+          (typeof body.username !== "string" ||
+            body.username.length < 2 ||
+            body.username.length > 32)
+        )
+          return respond.invalidFormBody();
+        if (
+          "avatar" in body &&
+          body.avatar !== null &&
+          !/^data:image\/(png|jpeg|gif|webp);base64,/.test(String(body.avatar))
+        )
+          return respond.invalidFormBody();
+        if ("username" in body) state.bot.username = body.username as string;
+        if ("avatar" in body)
+          state.bot.avatar =
+            body.avatar === null ? null : randomBytes(16).toString("hex");
+        this.gateway.dispatch(GatewayDispatchEvents.UserUpdate, state.bot);
+        return respond.json(state.bot);
+      }),
     );
     // docs.discord.food/resources/application, Get Current Application: "Returns the application
     // object associated with the requestor." Fields per the Application Structure table; the owner
@@ -2623,45 +2663,85 @@ export class DiscordMock {
       }),
     );
 
-    // docs.discord.food/resources/channel#list-public-archived-threads: READ_MESSAGE_HISTORY,
-    // newest archive_timestamp first, `before` an ISO timestamp, `limit` 2-100 (default 50).
-    rest.route(
-      "GET",
-      "/channels/:channelId/threads/archived/public",
-      authed((req) => {
-        const channel = state.channels.get(req.params.channelId!);
-        if (!channel) return respond.unknownChannel();
-        const denied = this.checkBotPerms(
-          channel,
-          Permission.ReadMessageHistory,
-        );
-        if (denied) return denied;
-        const before = req.query.get("before");
-        const limit = Number(req.query.get("limit") ?? 50);
-        const archived = [...state.channels.values()]
-          .filter(
-            (c) =>
-              "thread_metadata" in c &&
-              c.parent_id === channel.id &&
-              !!c.thread_metadata?.archived &&
-              (!before ||
-                c.thread_metadata.archive_timestamp <
-                  new Date(before).toISOString()),
-          )
-          .sort((a, b) =>
-            (
-              b as { thread_metadata: { archive_timestamp: string } }
-            ).thread_metadata.archive_timestamp.localeCompare(
-              (a as { thread_metadata: { archive_timestamp: string } })
-                .thread_metadata.archive_timestamp,
+    // docs.discord.food/resources/channel#list-public-archived-threads, #list-private-archived-threads
+    // and #list-joined-private-archived-threads: archived threads of the channel, `limit` 2-100
+    // (default 50). Public lists public and announcement threads, private lists private threads
+    // and also needs MANAGE_THREADS; both go newest archive_timestamp first with `before` an ISO
+    // timestamp. Joined lists the private threads the bot is in, newest id first with `before` an
+    // id. `members` has the bot's thread member for each thread it joined.
+    type Thread = APIChannel & {
+      parent_id?: string | null;
+      thread_metadata: { archived: boolean; archive_timestamp: string };
+    };
+    const archivedRoute = (
+      path: string,
+      needed: bigint,
+      include: (thread: Thread) => boolean,
+      ordered: (threads: Thread[], before: string | null) => Thread[],
+    ) =>
+      rest.route(
+        "GET",
+        path,
+        authed((req) => {
+          const channel = state.channels.get(req.params.channelId!);
+          if (!channel) return respond.unknownChannel();
+          const denied = this.checkBotPerms(channel, needed);
+          if (denied) return denied;
+          const limit = Number(req.query.get("limit") ?? 50);
+          const archived = ordered(
+            [...state.channels.values()].filter(
+              (c): c is Thread =>
+                "thread_metadata" in c &&
+                c.parent_id === channel.id &&
+                !!c.thread_metadata?.archived &&
+                include(c as Thread),
             ),
+            req.query.get("before"),
           );
-        return respond.json({
-          threads: archived.slice(0, limit),
-          members: [],
-          has_more: archived.length > limit,
-        });
-      }),
+          const threads = archived.slice(0, limit);
+          return respond.json({
+            threads,
+            members: threads.flatMap(
+              (t) => state.threadMember(t.id, state.bot.id) ?? [],
+            ),
+            has_more: archived.length > limit,
+          });
+        }),
+      );
+    const byArchiveTime = (threads: Thread[], before: string | null) =>
+      threads
+        .filter(
+          (t) =>
+            !before ||
+            t.thread_metadata.archive_timestamp <
+              new Date(before).toISOString(),
+        )
+        .sort((a, b) =>
+          b.thread_metadata.archive_timestamp.localeCompare(
+            a.thread_metadata.archive_timestamp,
+          ),
+        );
+    const isPrivate = (t: Thread) => t.type === ChannelType.PrivateThread;
+    archivedRoute(
+      "/channels/:channelId/threads/archived/public",
+      Permission.ReadMessageHistory,
+      (t) => !isPrivate(t),
+      byArchiveTime,
+    );
+    archivedRoute(
+      "/channels/:channelId/threads/archived/private",
+      Permission.ReadMessageHistory | Permission.ManageThreads,
+      isPrivate,
+      byArchiveTime,
+    );
+    archivedRoute(
+      "/channels/:channelId/users/@me/threads/archived/private",
+      Permission.ReadMessageHistory,
+      (t) => isPrivate(t) && !!state.threadMember(t.id, state.bot.id),
+      (threads, before) =>
+        threads
+          .filter((t) => !before || BigInt(t.id) < BigInt(before))
+          .sort((a, b) => (BigInt(b.id) > BigInt(a.id) ? 1 : -1)),
     );
 
     // docs.discord.food/resources/user#get-user. 10013 Unknown User is from Discord's code table.

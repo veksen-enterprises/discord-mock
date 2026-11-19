@@ -327,3 +327,76 @@ it("leaves a thread", async () => {
   // Assert
   expect((await thread.members.fetch()).map((m) => m.id)).toEqual([alice.id]);
 });
+
+async function archivedPrivateThread(botPermissions: bigint) {
+  const ctx = await startInText(
+    SEND |
+      Permission.CreatePrivateThreads |
+      Permission.SendMessagesInThreads |
+      botPermissions,
+  );
+  const thread = await ctx.channel.threads.create({
+    name: "mods only",
+    type: ChannelType.PrivateThread,
+  });
+  mock.archiveThread(mock.state.requireChannel(thread.id));
+  return { ...ctx, thread };
+}
+
+it("lists every archived private thread with Manage Threads", async () => {
+  // Arrange
+  const { channel, thread } = await archivedPrivateThread(
+    Permission.ReadMessageHistory | Permission.ManageThreads,
+  );
+
+  // Act
+  const archived = await channel.threads.fetchArchived({
+    type: "private",
+    fetchAll: true,
+  });
+
+  // Assert
+  expect([...archived.threads.keys()]).toEqual([thread.id]);
+});
+
+it("refuses every archived private thread without Manage Threads", async () => {
+  // Arrange
+  const { channel } = await archivedPrivateThread(
+    Permission.ReadMessageHistory,
+  );
+
+  // Act
+  const archived = channel.threads.fetchArchived({
+    type: "private",
+    fetchAll: true,
+  });
+
+  // Assert
+  await expect(archived).rejects.toMatchObject({ code: 50013 });
+});
+
+it("lists the archived private threads the bot joined", async () => {
+  // Arrange
+  const { channel, thread } = await archivedPrivateThread(
+    Permission.ReadMessageHistory,
+  );
+
+  // Act
+  const archived = await channel.threads.fetchArchived({ type: "private" });
+
+  // Assert
+  expect([...archived.threads.keys()]).toEqual([thread.id]);
+});
+
+it("leaves archived private threads out of the public list", async () => {
+  // Arrange
+  const { channel } = await archivedPrivateThread(
+    Permission.ReadMessageHistory,
+  );
+
+  // Act
+  const archived = await channel.threads.fetchArchived({ type: "public" });
+
+  // Assert
+  expect(archived.threads.size).toBe(0);
+});

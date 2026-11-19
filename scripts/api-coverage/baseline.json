@@ -1,12 +1,12 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 123,
+    "covered": 127,
     "botCallable": 213,
     "notBotCallable": 15
   },
   "gateway": {
-    "covered": 54,
+    "covered": 55,
     "total": 79
   },
   "restCovered": [
@@ -52,8 +52,11 @@
     "GET /channels/:/polls/:/answers/:",
     "GET /channels/:/thread-members",
     "GET /channels/:/thread-members/:",
+    "GET /channels/:/threads/archived/private",
     "GET /channels/:/threads/archived/public",
+    "GET /channels/:/users/@me/threads/archived/private",
     "GET /channels/:/webhooks",
+    "GET /gateway",
     "GET /gateway/bot",
     "GET /guilds/:",
     "GET /guilds/:/audit-logs",
@@ -101,6 +104,7 @@
     "PATCH /guilds/:/members/@me",
     "PATCH /guilds/:/roles",
     "PATCH /guilds/:/roles/:",
+    "PATCH /users/@me",
     "PATCH /webhooks/:",
     "PATCH /webhooks/:/:/messages/:",
     "PATCH /webhooks/:/:/messages/@original",
@@ -186,6 +190,7 @@
     "THREAD_MEMBER_UPDATE",
     "THREAD_UPDATE",
     "TYPING_START",
+    "USER_UPDATE",
     "VOICE_SERVER_UPDATE",
     "VOICE_STATE_UPDATE",
     "WEBHOOKS_UPDATE"
