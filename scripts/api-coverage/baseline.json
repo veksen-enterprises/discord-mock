@@ -1,7 +1,7 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 142,
+    "covered": 144,
     "botCallable": 213,
     "notBotCallable": 15
   },
@@ -122,8 +122,10 @@
     "POST /applications/:/commands",
     "POST /applications/:/emojis",
     "POST /applications/:/guilds/:/commands",
+    "POST /channels/:/followers",
     "POST /channels/:/invites",
     "POST /channels/:/messages",
+    "POST /channels/:/messages/:/crosspost",
     "POST /channels/:/messages/:/threads",
     "POST /channels/:/messages/bulk-delete",
     "POST /channels/:/polls/:/expire",

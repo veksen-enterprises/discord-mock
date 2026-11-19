@@ -451,6 +451,13 @@ export class DiscordMock {
     );
   }
 
+  /** An announcement channel: other servers' channels can follow it, and posts get crossposted. */
+  createAnnouncementChannel(guild: GuildRecord, name: string) {
+    return this.announceChannel(
+      this.state.createTextChannel(guild.id, { name, announcement: true }),
+    );
+  }
+
   /** A voice channel: members join it with `joinVoice`. */
   createVoiceChannel(guild: GuildRecord, name: string) {
     return this.announceChannel(

@@ -47,7 +47,10 @@ export interface WebhookRecord {
   channelId: string;
   creatorId: string;
   name: string;
-  token: string;
+  /** Incoming webhooks only; a channel follower webhook has none. */
+  token?: string;
+  /** The announcement channel a channel follower webhook copies posts from. */
+  sourceChannelId?: string;
 }
 
 export interface GuildRecord {
@@ -274,12 +277,14 @@ export class DiscordState extends EventEmitter<{
 
   createTextChannel(
     guildId: string,
-    input: { name: string; parentId?: string },
+    input: { name: string; parentId?: string; announcement?: boolean },
   ): APIChannel {
     const guild = this.requireGuild(guildId);
     const channel = {
       id: snowflake(),
-      type: ChannelType.GuildText,
+      type: input.announcement
+        ? ChannelType.GuildAnnouncement
+        : ChannelType.GuildText,
       guild_id: guild.id,
       name: input.name,
       position: guild.channelIds.length,

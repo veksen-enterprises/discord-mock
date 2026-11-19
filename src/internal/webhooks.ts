@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import {
+  ChannelType,
   GatewayDispatchEvents,
   GatewayIntentBits,
+  MessageFlags,
   type APIChannel,
 } from "discord-api-types/v10";
 import { messageLimitError } from "./limits.js";
@@ -35,17 +37,38 @@ export function registerWebhookRoutes(
   const { rest, state, gateway } = mock;
   const bot = state.bot.id;
 
-  const payload = (webhook: WebhookRecord, withUser = true) => ({
-    id: webhook.id,
-    type: 1,
-    guild_id: webhook.guildId,
-    channel_id: webhook.channelId,
-    ...(withUser ? { user: state.requireUser(webhook.creatorId) } : {}),
-    name: webhook.name,
-    avatar: null,
-    token: webhook.token,
-    application_id: webhook.creatorId === bot ? state.applicationId : null,
-  });
+  // A channel follower webhook (type 2) carries source_guild and source_channel and no token
+  // (resources/webhook#webhook-object).
+  const payload = (webhook: WebhookRecord, withUser = true) => {
+    const source = webhook.sourceChannelId
+      ? state.requireChannel(webhook.sourceChannelId)
+      : undefined;
+    const sourceGuild =
+      source && "guild_id" in source
+        ? state.requireGuild(source.guild_id!)
+        : undefined;
+    return {
+      id: webhook.id,
+      type: source ? 2 : 1,
+      guild_id: webhook.guildId,
+      channel_id: webhook.channelId,
+      ...(withUser ? { user: state.requireUser(webhook.creatorId) } : {}),
+      name: webhook.name,
+      avatar: null,
+      ...(webhook.token ? { token: webhook.token } : {}),
+      application_id: webhook.creatorId === bot ? state.applicationId : null,
+      ...(source && sourceGuild
+        ? {
+            source_guild: {
+              id: sourceGuild.id,
+              name: sourceGuild.name,
+              icon: null,
+            },
+            source_channel: { id: source.id, name: source.name },
+          }
+        : {}),
+    };
+  };
   const announce = (webhook: WebhookRecord) =>
     gateway.dispatch(
       GatewayDispatchEvents.WebhooksUpdate,
@@ -309,5 +332,115 @@ export function registerWebhookRoutes(
       mock.deleteMessage(message);
       return respond.noContent();
     },
+  );
+
+  // Follow Channel (docs.discord.food/resources/channel#follow-channel): an announcement channel's
+  // posts go to `webhook_channel_id` through a new channel follower webhook. Needs MANAGE_WEBHOOKS
+  // in the target; returns the followed channel object { channel_id, webhook_id } and fires
+  // WEBHOOKS_UPDATE for the target. The webhook takes the source channel's name, and following a
+  // channel that isn't an announcement channel answers 50024 (RESTJSONErrorCodes
+  // CannotExecuteActionOnThisChannelType); both are inferred, not checked.
+  rest.route(
+    "POST",
+    "/channels/:channelId/followers",
+    authed((req) => {
+      const source = state.channels.get(req.params.channelId!);
+      if (!source) return respond.unknownChannel();
+      const body = (req.body ?? {}) as { webhook_channel_id?: string };
+      const target = body.webhook_channel_id
+        ? state.channels.get(body.webhook_channel_id)
+        : undefined;
+      if (!target) return respond.unknownChannel();
+      if (source.type !== ChannelType.GuildAnnouncement)
+        return respond.error(
+          400,
+          50024,
+          "Cannot execute action on this channel type",
+        );
+      if (!("guild_id" in target) || !target.guild_id)
+        return rest.gap("following into a DM channel");
+      const denied = canManage(target);
+      if (denied) return denied;
+      const webhook: WebhookRecord = {
+        id: snowflake(),
+        guildId: target.guild_id,
+        channelId: target.id,
+        creatorId: bot,
+        name: source.name ?? "announcements",
+        sourceChannelId: source.id,
+      };
+      state.webhooks.set(webhook.id, webhook);
+      announce(webhook);
+      return respond.json({ channel_id: source.id, webhook_id: webhook.id });
+    }),
+  );
+
+  // Crosspost Message (docs.discord.food/resources/message#crosspost-message): SEND_MESSAGES for
+  // the bot's own message, MANAGE_MESSAGES as well for anyone else's. Sets CROSSPOSTED (1 << 0),
+  // fires MESSAGE_UPDATE, and each following channel gets a copy flagged IS_CROSSPOST (1 << 1)
+  // with a message_reference to the original (resources/message#message-flags,
+  // #message-reference-object). A second crosspost is 40033 (RESTJSONErrorCodes
+  // ThisMessageWasAlreadyCrossposted); a channel that isn't an announcement channel is 50024 as
+  // above. The copy's author being the follower webhook named after the source is inferred.
+  rest.route(
+    "POST",
+    "/channels/:channelId/messages/:messageId/crosspost",
+    authed((req) => {
+      const channel = state.channels.get(req.params.channelId!);
+      if (!channel) return respond.unknownChannel();
+      const message = state.messages
+        .get(channel.id)
+        ?.find((m) => m.id === req.params.messageId);
+      if (!message) return respond.unknownMessage();
+      if (channel.type !== ChannelType.GuildAnnouncement)
+        return respond.error(
+          400,
+          50024,
+          "Cannot execute action on this channel type",
+        );
+      const denied = mock.checkBotPerms(
+        channel,
+        Permission.SendMessages |
+          (message.author.id === bot ? 0n : Permission.ManageMessages),
+      );
+      if (denied) return denied;
+      if ((message.flags ?? 0) & MessageFlags.Crossposted)
+        return respond.error(
+          400,
+          40033,
+          "This message has already been crossposted.",
+        );
+      const updated = state.updateMessage(channel.id, message.id, {
+        flags: (message.flags ?? 0) | MessageFlags.Crossposted,
+      });
+      gateway.dispatchMessage("MESSAGE_UPDATE", updated);
+      for (const follower of state.webhooks.values()) {
+        if (follower.sourceChannelId !== channel.id) continue;
+        const copy = state.createMessage({
+          channelId: follower.channelId,
+          authorId: bot,
+          content: message.content,
+          embeds: message.embeds,
+          webhookId: follower.id,
+          flags: MessageFlags.IsCrosspost,
+        });
+        copy.author = {
+          id: follower.id,
+          username: follower.name,
+          discriminator: "0000",
+          global_name: null,
+          avatar: null,
+          bot: true,
+        };
+        copy.message_reference = {
+          type: 0,
+          message_id: message.id,
+          channel_id: channel.id,
+          guild_id: channel.guild_id,
+        };
+        gateway.dispatchMessage("MESSAGE_CREATE", copy);
+      }
+      return respond.json(updated);
+    }),
   );
 }

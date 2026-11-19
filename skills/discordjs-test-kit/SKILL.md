@@ -93,6 +93,7 @@ it("should record the result when the winner reports", async () => {
 | kick the bot from the server                     | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
 | a Discord outage                                 | `discord.startOutage(server)`, then `discord.endOutage(server)`: `guildUnavailable`, then `guildAvailable`                                          |
 | open and end a stage                             | `const hall = discord.stageChannel(server, "hall")`, `mod.startStage(hall, "Q&A")`, `mod.endStage(hall)`                                            |
+| a bot crossposts announcements                   | `const news = discord.announcementChannel(server, "patch-notes")`; the bot follows it and crossposts                                                |
 | rename the server                                | `discord.owner(server).renameGuild("SIN 2")`: the bot gets `guildUpdate`                                                                            |
 | a bot that logs through a `WebhookClient`        | build it with `new WebhookClient({ id, token }, discord.clientOptions)`                                                                             |
 | make Discord fail a route                        | `discord.answerWith("POST", "/channels/:id/messages", respond.serverError(503))`                                                                    |

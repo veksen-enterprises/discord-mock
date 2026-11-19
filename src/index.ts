@@ -420,6 +420,20 @@ class Discord {
     );
   }
 
+  /**
+   * An announcement channel: the bot can crosspost its posts to the channels that follow it.
+   * @example const news = discord.announcementChannel(server, "patch-notes");
+   */
+  announcementChannel<G extends string>(
+    guild: Guild<G>,
+    name: string,
+  ): TextChannel<G> {
+    return handle(
+      this.mock.createAnnouncementChannel(this.g(guild), name).id,
+      name,
+    );
+  }
+
   voiceChannel<G extends string>(
     guild: Guild<G>,
     name: string,
