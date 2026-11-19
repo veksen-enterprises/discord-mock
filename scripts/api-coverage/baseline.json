@@ -1,12 +1,12 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 144,
+    "covered": 149,
     "botCallable": 213,
     "notBotCallable": 15
   },
   "gateway": {
-    "covered": 59,
+    "covered": 63,
     "total": 79
   },
   "restCovered": [
@@ -31,6 +31,7 @@
     "DELETE /guilds/:/members/:/roles/:",
     "DELETE /guilds/:/roles/:",
     "DELETE /guilds/:/scheduled-events/:",
+    "DELETE /guilds/:/soundboard-sounds/:",
     "DELETE /guilds/:/stickers/:",
     "DELETE /invites/:",
     "DELETE /stage-instances/:",
@@ -84,6 +85,8 @@
     "GET /guilds/:/scheduled-events",
     "GET /guilds/:/scheduled-events/:",
     "GET /guilds/:/scheduled-events/:/users",
+    "GET /guilds/:/soundboard-sounds",
+    "GET /guilds/:/soundboard-sounds/:",
     "GET /guilds/:/stickers",
     "GET /guilds/:/threads/active",
     "GET /guilds/:/voice-states/:",
@@ -113,6 +116,7 @@
     "PATCH /guilds/:/roles",
     "PATCH /guilds/:/roles/:",
     "PATCH /guilds/:/scheduled-events/:",
+    "PATCH /guilds/:/soundboard-sounds/:",
     "PATCH /guilds/:/stickers/:",
     "PATCH /stage-instances/:",
     "PATCH /users/@me",
@@ -139,6 +143,7 @@
     "POST /guilds/:/prune",
     "POST /guilds/:/roles",
     "POST /guilds/:/scheduled-events",
+    "POST /guilds/:/soundboard-sounds",
     "POST /guilds/:/stickers",
     "POST /interactions/:/:/callback",
     "POST /stage-instances",
@@ -183,6 +188,9 @@
     "GUILD_SCHEDULED_EVENT_UPDATE",
     "GUILD_SCHEDULED_EVENT_USER_ADD",
     "GUILD_SCHEDULED_EVENT_USER_REMOVE",
+    "GUILD_SOUNDBOARD_SOUND_CREATE",
+    "GUILD_SOUNDBOARD_SOUND_DELETE",
+    "GUILD_SOUNDBOARD_SOUND_UPDATE",
     "GUILD_STICKERS_UPDATE",
     "GUILD_UPDATE",
     "INTERACTION_CREATE",
@@ -201,6 +209,7 @@
     "PRESENCE_UPDATE",
     "READY",
     "RESUMED",
+    "SOUNDBOARD_SOUNDS",
     "STAGE_INSTANCE_CREATE",
     "STAGE_INSTANCE_DELETE",
     "STAGE_INSTANCE_UPDATE",

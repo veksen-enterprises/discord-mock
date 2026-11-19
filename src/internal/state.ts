@@ -20,6 +20,7 @@ import {
   type APIMessage,
   type APIRole,
   type APIStageInstance,
+  type APISoundboardSound,
   type APISticker,
   type APIUser,
   type APIVoiceState,
@@ -65,6 +66,8 @@ export interface GuildRecord {
   emojis: Map<string, APIEmoji & { id: string; user: APIUser }>;
   /** Guild stickers by id, each with the user who uploaded it. */
   stickers: Map<string, APISticker & { user: APIUser }>;
+  /** Soundboard sounds by id, each with the user who uploaded it. */
+  soundboardSounds: Map<string, APISoundboardSound & { user: APIUser }>;
   /** When members were last seen, by user id; a member not listed was seen just now. */
   lastSeen: Map<string, number>;
 }
@@ -193,6 +196,7 @@ export class DiscordState extends EventEmitter<{
       channelIds: [],
       emojis: new Map(),
       stickers: new Map(),
+      soundboardSounds: new Map(),
       lastSeen: new Map(),
     };
     this.guilds.set(id, guild);

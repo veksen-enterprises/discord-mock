@@ -151,7 +151,7 @@ export function guildCreatePayload(
     guild_scheduled_events: [...state.scheduledEvents.values()].filter(
       (event) => event.guild_id === guild.id,
     ),
-    soundboard_sounds: [],
+    soundboard_sounds: soundboardSoundsOf(guild),
   };
 }
 
@@ -167,4 +167,13 @@ export function interactionMember(
       computePermissions(state, guild, member.user.id, channel),
     ),
   };
+}
+
+/**
+ * The guild's sounds as GUILD_CREATE and SOUNDBOARD_SOUNDS carry them. Whether `user` is included
+ * there is undocumented; it's left out, as the docs list it only where a sound is created or
+ * updated, or fetched over REST. Inferred, not checked against Discord.
+ */
+export function soundboardSoundsOf(guild: GuildRecord) {
+  return [...guild.soundboardSounds.values()].map(({ user: _, ...s }) => s);
 }

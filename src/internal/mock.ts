@@ -69,6 +69,7 @@ import {
 } from "./rest.js";
 import { registerScheduledEventRoutes } from "./scheduled-events.js";
 import { snowflake } from "./snowflake.js";
+import { registerSoundboardRoutes } from "./soundboard.js";
 import { endStage, registerStageRoutes, startStage } from "./stages.js";
 import { DiscordState, type GuildRecord } from "./state.js";
 import {
@@ -3044,6 +3045,7 @@ export class DiscordMock {
     registerVoiceRoutes(this, authed);
     registerScheduledEventRoutes(this, authed);
     registerExpressionRoutes(this, authed);
+    registerSoundboardRoutes(this, authed);
     registerAutoModRoutes(this, authed);
     registerPollRoutes(this, authed);
     registerTypingRoute(this, authed);

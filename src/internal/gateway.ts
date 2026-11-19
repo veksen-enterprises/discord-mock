@@ -12,7 +12,7 @@ import {
   type GatewayVoiceStateUpdateData,
 } from "discord-api-types/v10";
 import { WebSocketServer, type WebSocket } from "ws";
-import { guildCreatePayload } from "./payloads.js";
+import { guildCreatePayload, soundboardSoundsOf } from "./payloads.js";
 import type { DiscordState, GuildRecord } from "./state.js";
 
 const PRIVILEGED =
@@ -197,6 +197,11 @@ export class Gateway {
         // Inferred, not checked against Discord.
         case GatewayOpcodes.PresenceUpdate:
           return;
+        // docs.discord.food/gateway/gateway-events#request-soundboard-sounds: a Soundboard Sounds
+        // event "for every guild in response". A guild the bot doesn't hear is unchecked: a Gap.
+        case GatewayOpcodes.RequestSoundboardSounds:
+          if (session) this.requestSoundboardSounds(session, d);
+          return;
         // topics/voice-connections#retrieving-voice-server-information: the bot joins, moves or
         // leaves voice; Discord answers with VOICE_STATE_UPDATE and VOICE_SERVER_UPDATE.
         case GatewayOpcodes.VoiceStateUpdate:
@@ -275,6 +280,23 @@ export class Gateway {
         ...(notFound?.length && index === 0 ? { not_found: notFound } : {}),
         ...(d.nonce !== undefined ? { nonce: d.nonce } : {}),
       });
+  }
+
+  private requestSoundboardSounds(
+    session: Session,
+    d: { guild_ids: string[] },
+  ) {
+    for (const guildId of d.guild_ids) {
+      const guild = this.state.guilds.get(guildId);
+      if (!guild || !this.hears(guildId)) {
+        this.options.recordGap(`gateway op 31 for guild ${guildId}`);
+        continue;
+      }
+      this.send(session, GatewayDispatchEvents.SoundboardSounds, {
+        guild_id: guild.id,
+        soundboard_sounds: soundboardSoundsOf(guild),
+      });
+    }
   }
 
   private send(session: Session, t: string, d: unknown) {

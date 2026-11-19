@@ -142,20 +142,22 @@ describe("a stock discord.js Client against the mock", () => {
     ).rejects.toMatchObject({ code: 50035, status: 400 });
   });
 
-  it("accepts a presence update, and reports a gateway op the mock doesn't answer as a Gap", async () => {
-    const { guild } = await start();
+  it("accepts a presence update, and reports a gateway request the mock can't answer as a Gap", async () => {
+    await start();
+    const elsewhere = mock.createGuild("not the bot's").id;
+    mock.removeBot(mock.state.requireGuild(elsewhere));
 
     client.user!.setPresence({ status: "idle" }); // op 3 Presence Update
     const sounds = client.guilds.fetchSoundboardSounds({
-      guildIds: [guild.id],
+      guildIds: [elsewhere],
       time: 50,
-    }); // op 31 Request Soundboard Sounds
+    }); // op 31 Request Soundboard Sounds, for a guild the bot isn't in
 
     await expect(sounds).rejects.toThrow();
     // Ops are handled in the order sent, so op 3 was handled before op 31 was recorded.
     await vi.waitFor(() =>
       expect(() => mock.assertNoUnhandledRequests()).toThrow(
-        "unhandled requests:\n  gateway op 31",
+        `unhandled requests:\n  gateway op 31 for guild ${elsewhere}`,
       ),
     );
   });
