@@ -127,7 +127,9 @@ it("fetches one guild sticker by id", async () => {
   await login([GatewayIntentBits.Guilds, GatewayIntentBits.GuildExpressions]);
 
   // Act
-  const sticker = await client.guilds.cache.get(guild.id)!.stickers.fetch(wave);
+  const sticker = await client.guilds.cache
+    .get(guild.id)!
+    .stickers.fetch(wave, { force: true });
 
   // Assert
   expect(sticker.name).toBe("wave");

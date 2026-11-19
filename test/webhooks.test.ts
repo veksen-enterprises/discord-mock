@@ -75,6 +75,20 @@ it("sends through a WebhookClient built from the webhook's id and token", async 
   mock.assertNoUnhandledRequests();
 });
 
+it("renames a webhook through a WebhookClient, with its token", async () => {
+  // Arrange
+  const { channel } = await start(Permission.ManageWebhooks);
+  const { id, token } = await channel.createWebhook({ name: "Logs" });
+  const logs = new WebhookClient({ id, token: token! }, mock.clientOptions);
+
+  // Act
+  await logs.edit({ name: "Audit" });
+
+  // Assert
+  expect((await channel.fetchWebhooks()).get(id)?.name).toBe("Audit");
+  logs.destroy();
+});
+
 it("refuses a webhook without Manage Webhooks, or named after Discord", async () => {
   const { channel } = await start(0n);
   await expect(channel.createWebhook({ name: "Relay" })).rejects.toMatchObject({
