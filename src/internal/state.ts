@@ -111,6 +111,8 @@ export class DiscordState extends EventEmitter<{
   readonly autoModRules = new Map<string, APIAutoModerationRule>();
   /** Guild scheduled events by id. */
   readonly scheduledEvents = new Map<string, APIGuildScheduledEvent>();
+  /** Who marked each scheduled event Interested, by event id. */
+  readonly eventSubscribers = new Map<string, Set<string>>();
 
   readonly applicationId: string;
   /** The app's description, which a bot can rewrite with PATCH /applications/@me. */

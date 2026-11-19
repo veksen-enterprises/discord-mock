@@ -1,12 +1,12 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 127,
+    "covered": 131,
     "botCallable": 213,
     "notBotCallable": 15
   },
   "gateway": {
-    "covered": 55,
+    "covered": 57,
     "total": 79
   },
   "restCovered": [
@@ -29,6 +29,7 @@
     "DELETE /guilds/:/members/:",
     "DELETE /guilds/:/members/:/roles/:",
     "DELETE /guilds/:/roles/:",
+    "DELETE /guilds/:/scheduled-events/:",
     "DELETE /invites/:",
     "DELETE /users/@me/guilds/:",
     "DELETE /webhooks/:",
@@ -77,6 +78,7 @@
     "GET /guilds/:/roles/member-counts",
     "GET /guilds/:/scheduled-events",
     "GET /guilds/:/scheduled-events/:",
+    "GET /guilds/:/scheduled-events/:/users",
     "GET /guilds/:/stickers",
     "GET /guilds/:/threads/active",
     "GET /guilds/:/voice-states/:",
@@ -104,6 +106,7 @@
     "PATCH /guilds/:/members/@me",
     "PATCH /guilds/:/roles",
     "PATCH /guilds/:/roles/:",
+    "PATCH /guilds/:/scheduled-events/:",
     "PATCH /users/@me",
     "PATCH /webhooks/:",
     "PATCH /webhooks/:/:/messages/:",
@@ -124,6 +127,7 @@
     "POST /guilds/:/emojis",
     "POST /guilds/:/prune",
     "POST /guilds/:/roles",
+    "POST /guilds/:/scheduled-events",
     "POST /interactions/:/:/callback",
     "POST /users/@me/channels",
     "POST /webhooks/:/:",
@@ -164,6 +168,8 @@
     "GUILD_SCHEDULED_EVENT_CREATE",
     "GUILD_SCHEDULED_EVENT_DELETE",
     "GUILD_SCHEDULED_EVENT_UPDATE",
+    "GUILD_SCHEDULED_EVENT_USER_ADD",
+    "GUILD_SCHEDULED_EVENT_USER_REMOVE",
     "GUILD_STICKERS_UPDATE",
     "GUILD_UPDATE",
     "INTERACTION_CREATE",

@@ -32,6 +32,7 @@ import {
   createScheduledEvent,
   deleteScheduledEvent,
   editScheduledEvent,
+  setInterest,
 } from "./internal/scheduled-events.js";
 
 export { respond } from "./internal/rest.js";
@@ -325,6 +326,13 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
   ): void;
   /** Deletes an event; the bot hears `guildScheduledEventDelete`. Like `editEvent`. */
   deleteEvent(event: ScheduledEvent<G>): void;
+  /**
+   * Marks an event Interested; the bot hears `guildScheduledEventUserAdd` with
+   * GUILD_SCHEDULED_EVENTS. Marking it twice does nothing.
+   */
+  markInterested(event: ScheduledEvent<G>): void;
+  /** Takes back Interested; the bot hears `guildScheduledEventUserRemove`. */
+  unmarkInterested(event: ScheduledEvent<G>): void;
   /**
    * Uploads a custom emoji named `name` (2-32 characters), which needs Create Expressions. The bot
    * hears `emojiCreate` with GUILD_EXPRESSIONS (GuildExpressions).
@@ -1243,6 +1251,28 @@ class MemberActor {
       this.guild(),
       this.user(),
       this.eventOf(event),
+    );
+  }
+
+  markInterested(event: ScheduledEvent): void {
+    this.markAction();
+    setInterest(
+      this.mock,
+      this.guild(),
+      this.user(),
+      this.eventOf(event),
+      true,
+    );
+  }
+
+  unmarkInterested(event: ScheduledEvent): void {
+    this.markAction();
+    setInterest(
+      this.mock,
+      this.guild(),
+      this.user(),
+      this.eventOf(event),
+      false,
     );
   }
 

@@ -3,6 +3,7 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  Partials,
   RoleSelectMenuBuilder,
 } from "discord.js";
 import { expect, it, vi } from "vitest";
@@ -487,6 +488,35 @@ it("tells a bot with the intent about a member's event, which an ordinary member
   await discord.waitForIdle();
 
   expect(heard).toEqual(["Raid night"]);
+});
+
+it("tells an event bot who marks an event Interested", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  const server = discord.guild("SIN");
+  const lobby = discord.voiceChannel(server, "lobby");
+  const alice = discord.member(server, "alice");
+  const host = discord.member(server, "host", {
+    permissions: Permission.CreateEvents,
+  });
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildScheduledEvents],
+    partials: [Partials.User],
+    ...discord.clientOptions,
+  });
+  const interested: string[] = [];
+  client.on(Events.GuildScheduledEventUserAdd, (_, user) =>
+    interested.push(user.id),
+  );
+  await discord.start(client, { commands: [] });
+  const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"));
+
+  // Act
+  alice.markInterested(raid);
+
+  // Assert
+  await discord.waitForIdle();
+  expect(interested).toEqual([alice.id]);
 });
 
 it("tells a bot that logs expressions about a moderator's new emoji, which a member can't add", async () => {
