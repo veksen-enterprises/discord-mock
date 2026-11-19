@@ -11,6 +11,7 @@ More of Discord's API works when your bot calls it, instead of failing the test 
 - Threads: `threads.fetchArchived({ type: "private" })`, with or without `fetchAll`. The public list no longer includes private threads.
 - Webhooks: moving a webhook to another channel, and fetching, editing or deleting a message it sent.
 - The bot's account: `client.user.setUsername()` and `setAvatar()`, heard as `userUpdate`.
+- Presence: new `member.setPresence({ status, activity })`. A bot with the GuildPresences intent hears `presenceUpdate`, and sees members who were already online when it connects.
 
 ## 0.3.0
 

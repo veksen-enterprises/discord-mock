@@ -132,7 +132,17 @@ export function guildCreatePayload(
         c.guild_id === guild.id &&
         !c.thread_metadata?.archived,
     ),
-    presences: [],
+    // Footnote 2: a bot with GUILD_PRESENCES "receive[s] all presences if the guild has less than
+    // large_threshold members". Members who never came online send none (inferred).
+    presences:
+      intents & GatewayIntentBits.GuildPresences
+        ? [...guild.members.keys()].flatMap((id) => {
+            const presence = state.presences.get(id);
+            return presence && presence.status !== "offline"
+              ? [{ ...presence, guild_id: guild.id }]
+              : [];
+          })
+        : [],
     // "Array of partial voice state objects" without guild_id (gateway-events#guild-create).
     voice_states: voiceStates.map(({ guild_id: _, ...voice }) => voice),
     stage_instances: [...state.stageInstances.values()].filter(

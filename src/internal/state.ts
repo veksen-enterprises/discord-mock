@@ -14,6 +14,7 @@ import {
   type RoleFlags,
   type APIChannel,
   type APIEmoji,
+  type GatewayPresenceUpdate,
   type APIGuildMember,
   type APIGuildScheduledEvent,
   type APIMessage,
@@ -111,6 +112,11 @@ export class DiscordState extends EventEmitter<{
   readonly autoModRules = new Map<string, APIAutoModerationRule>();
   /** Guild scheduled events by id. */
   readonly scheduledEvents = new Map<string, APIGuildScheduledEvent>();
+  /** Each user's presence once they set one; nobody in it is offline. */
+  readonly presences = new Map<
+    string,
+    Omit<GatewayPresenceUpdate, "guild_id">
+  >();
   /** Emojis the app uploaded for its own use, by id. */
   readonly applicationEmojis = new Map<string, APIEmoji>();
   /** Who marked each scheduled event Interested, by event id. */

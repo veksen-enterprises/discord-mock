@@ -27,6 +27,7 @@ import {
   type UserMessage,
 } from "./internal/mock.js";
 import { computePermissions, Permission } from "./internal/payloads.js";
+import { setPresence, type PresenceInput } from "./internal/presence.js";
 import type { RestResponse } from "./internal/rest.js";
 import {
   createScheduledEvent,
@@ -256,6 +257,13 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    * @example alice.closeDMs(); await alice.runCommand(general, "remind-me"); // the bot should say it can't DM
    */
   closeDMs(): void;
+  /**
+   * Sets their status, and what they're doing if `activity` is given. The bot hears
+   * `presenceUpdate` in each server they share, with the GuildPresences intent. Everyone starts
+   * offline.
+   * @example alice.setPresence({ status: "online", activity: { name: "Diablo II", type: ActivityType.Playing } });
+   */
+  setPresence(presence: PresenceInput): void;
   /** Sets their server nickname; null goes back to their name. */
   setNickname(nick: string | null): void;
   /**
@@ -1113,6 +1121,11 @@ class MemberActor {
   closeDMs(): void {
     this.markAction();
     this.mock.state.closedDms.add(this.id);
+  }
+
+  setPresence(presence: PresenceInput): void {
+    this.markAction();
+    setPresence(this.mock, this.user(), presence);
   }
 
   setNickname(nick: string | null): void {

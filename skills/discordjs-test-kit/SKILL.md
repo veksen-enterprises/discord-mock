@@ -87,6 +87,7 @@ it("should record the result when the winner reports", async () => {
 | a moderator locks a thread                       | `mod.lockThread(thread)`, which needs Manage Threads                                                                                                |
 | change nickname, leave the server                | `alice.setNickname("Al")`, `alice.leaveGuild()`                                                                                                     |
 | change their display name                        | `alice.setDisplayName("Alicia")`: discord.js emits `userUpdate`                                                                                     |
+| come online, go idle, start playing              | `alice.setPresence({ status: "online", activity: { name: "Diablo II", type: ActivityType.Playing } })`                                              |
 | override who can use a command                   | `discord.setCommandPermissions(server, "ban", [{ target: mod, allow: true }])`, after `start`                                                       |
 | a moderator kicks or bans someone                | `mod.kick(alice, "spam")`, `mod.ban(alice)`: the audit log names `mod`                                                                              |
 | kick the bot from the server                     | `discord.kickBot(server)`: the bot gets `guildDelete`                                                                                               |
