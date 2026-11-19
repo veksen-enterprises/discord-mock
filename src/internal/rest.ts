@@ -234,7 +234,13 @@ async function parseBody(
       (v): v is UploadedFile => typeof v !== "string",
     );
     const json = form.get("payload_json");
-    return { body: typeof json === "string" ? JSON.parse(json) : {}, files };
+    if (typeof json === "string") return { body: JSON.parse(json), files };
+    // Without payload_json the fields are the body, as @discordjs/rest sends them with
+    // `appendToFormData` (GuildStickerManager#create).
+    const fields = [...form.entries()].filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    );
+    return { body: Object.fromEntries(fields), files };
   }
   return { body: JSON.parse(raw.toString("utf8")), files: [] };
 }

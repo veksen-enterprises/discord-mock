@@ -19,8 +19,8 @@ import type { GuildRecord } from "./state.js";
 // Guild Stickers Update carry the guild's whole list), events/gateway (GUILD_EXPRESSIONS),
 // resources/audit-log (EMOJI_CREATE 60 to 62, STICKER_CREATE 90 to 92), opcodes-and-status-codes
 // (30008, 30039), docs.discord.food/resources/emoji (names 2-32 characters, 50 emojis without
-// boosts, `user` only from List and Get). The bot creating, editing or deleting stickers
-// (multipart uploads) has no Route yet, so it's a Gap.
+// boosts, `user` only from List and Get), docs.discord.food/resources/sticker (the bot's Create,
+// Modify and Delete Guild Sticker).
 
 export type ExpressionKind = "emoji" | "sticker";
 
@@ -104,7 +104,14 @@ function add(
   user: APIUser,
   kind: ExpressionKind,
   name: string,
-  opts: { animated?: boolean; roles?: string[]; reason?: string } = {},
+  opts: {
+    animated?: boolean;
+    roles?: string[];
+    reason?: string;
+    description?: string | null;
+    tags?: string;
+    formatType?: StickerFormatType;
+  } = {},
 ) {
   const id = snowflake();
   if (kind === "emoji")
@@ -122,10 +129,10 @@ function add(
     guild.stickers.set(id, {
       id,
       name,
-      description: null,
-      tags: name,
+      description: opts.description ?? null,
+      tags: opts.tags ?? name,
       type: StickerType.Guild,
-      format_type: StickerFormatType.PNG,
+      format_type: opts.formatType ?? StickerFormatType.PNG,
       available: true,
       guild_id: guild.id,
       user,
@@ -404,6 +411,108 @@ export function registerExpressionRoutes(
       if (!mayChange(mock, guild, state.bot.id, emoji.user.id))
         return respond.missingPermissions();
       remove(mock, guild, bot(), "emoji", emoji.id, reasonOf(req));
+      return respond.noContent();
+    }),
+  );
+
+  // Create Guild Sticker: multipart, CREATE_EXPRESSIONS; name 2-30, description up to 100, tags
+  // 1-200 characters, and a PNG, APNG, GIF or Lottie JSON `file`. An APNG can't be told from a PNG
+  // by its type, so it's stored as PNG (inferred). Lottie needs the VERIFIED or PARTNERED
+  // feature, which the World doesn't give, and a file over 500 KiB "will fail with a 400 bad
+  // request" with no JSON code: both are a Gap. Bad fields answering 50035 is inferred.
+  const STICKER_FORMATS: Record<string, StickerFormatType> = {
+    "image/png": StickerFormatType.PNG,
+    "image/gif": StickerFormatType.GIF,
+  };
+  const stickerFieldsBad = (body: Record<string, unknown>, creating: boolean) =>
+    ((creating || "name" in body) && badName("sticker", body.name)) ||
+    ("description" in body &&
+      body.description !== null &&
+      (typeof body.description !== "string" ||
+        body.description.length > 100)) ||
+    ((creating || "tags" in body) &&
+      (typeof body.tags !== "string" ||
+        body.tags.length < 1 ||
+        body.tags.length > 200));
+  rest.route(
+    "POST",
+    "/guilds/:guildId/stickers",
+    authed((req) => {
+      const guild = guildOf(req.params.guildId!);
+      if (!guild) return unknownGuild();
+      if (!can(guild, Permission.CreateGuildExpressions))
+        return respond.missingPermissions();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const file = req.files[0];
+      if (!file || stickerFieldsBad(body, true))
+        return respond.invalidFormBody();
+      if (file.type === "application/json") return rest.gap("a Lottie sticker");
+      const formatType = STICKER_FORMATS[file.type];
+      if (formatType === undefined) return respond.invalidFormBody();
+      if (file.size > 500 * 1024) return rest.gap("a sticker over 500 KiB");
+      if (full(guild, "sticker", false))
+        return respond.error(
+          400,
+          30039,
+          `Maximum number of stickers reached (${STICKER_LIMIT})`,
+        );
+      const id = add(mock, guild, bot(), "sticker", body.name as string, {
+        description: (body.description as string) || null,
+        tags: body.tags as string,
+        formatType,
+        reason: reasonOf(req),
+      });
+      return respond.json(guild.stickers.get(id));
+    }),
+  );
+
+  // Modify Guild Sticker: name, description and tags. Like emojis, the bot's own sticker needs
+  // CREATE or MANAGE_EXPRESSIONS, someone else's MANAGE_EXPRESSIONS.
+  rest.route(
+    "PATCH",
+    "/guilds/:guildId/stickers/:stickerId",
+    authed((req) => {
+      const guild = guildOf(req.params.guildId!);
+      if (!guild) return unknownGuild();
+      const sticker = guild.stickers.get(req.params.stickerId!);
+      if (!sticker) return unknownSticker();
+      if (!mayChange(mock, guild, state.bot.id, sticker.user.id))
+        return respond.missingPermissions();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const other = Object.keys(body).find(
+        (k) => !["name", "description", "tags"].includes(k),
+      );
+      if (other) return rest.gap(`PATCH sticker ${other}`);
+      if (stickerFieldsBad(body, false)) return respond.invalidFormBody();
+      if ("description" in body)
+        sticker.description = (body.description as string | null) || null;
+      if ("tags" in body) sticker.tags = body.tags as string;
+      if ("name" in body && body.name !== sticker.name)
+        rename(
+          mock,
+          guild,
+          bot(),
+          "sticker",
+          sticker.id,
+          body.name as string,
+          reasonOf(req),
+        );
+      else announce(mock, guild, "sticker");
+      return respond.json(sticker);
+    }),
+  );
+
+  rest.route(
+    "DELETE",
+    "/guilds/:guildId/stickers/:stickerId",
+    authed((req) => {
+      const guild = guildOf(req.params.guildId!);
+      if (!guild) return unknownGuild();
+      const sticker = guild.stickers.get(req.params.stickerId!);
+      if (!sticker) return unknownSticker();
+      if (!mayChange(mock, guild, state.bot.id, sticker.user.id))
+        return respond.missingPermissions();
+      remove(mock, guild, bot(), "sticker", sticker.id, reasonOf(req));
       return respond.noContent();
     }),
   );

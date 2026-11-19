@@ -132,3 +132,95 @@ it("fetches one guild sticker by id", async () => {
   // Assert
   expect(sticker.name).toBe("wave");
 });
+
+const PNG_FILE = Buffer.from(PNG.split(",")[1]!, "base64");
+
+async function botWithStickers(botPermissions: bigint) {
+  const record = mock.createGuild("g");
+  mock.grantBot(botPermissions);
+  await login([GatewayIntentBits.Guilds, GatewayIntentBits.GuildExpressions]);
+  return client.guilds.cache.get(record.id)!;
+}
+
+it("lets the bot upload a sticker with Create Expressions, and hears it", async () => {
+  // Arrange
+  const guild = await botWithStickers(Permission.CreateGuildExpressions);
+  const created = once(client, Events.GuildStickerCreate);
+
+  // Act
+  const sticker = await guild.stickers.create({
+    file: PNG_FILE,
+    name: "wave",
+    tags: "wave",
+    description: "Hello!",
+  });
+
+  // Assert
+  expect([sticker.name, sticker.description]).toEqual(["wave", "Hello!"]);
+  expect((await created)[0].id).toBe(sticker.id);
+});
+
+it("refuses a sticker upload without Create Expressions", async () => {
+  // Arrange
+  const guild = await botWithStickers(0n);
+
+  // Act
+  const created = guild.stickers.create({
+    file: PNG_FILE,
+    name: "wave",
+    tags: "wave",
+  });
+
+  // Assert
+  await expect(created).rejects.toMatchObject({ code: 50013 });
+});
+
+it("refuses a sixth sticker", async () => {
+  // Arrange
+  const guild = await botWithStickers(Permission.CreateGuildExpressions);
+  for (const name of ["s1", "s2", "s3", "s4", "s5"])
+    await guild.stickers.create({ file: PNG_FILE, name, tags: name });
+
+  // Act
+  const created = guild.stickers.create({
+    file: PNG_FILE,
+    name: "s6",
+    tags: "s6",
+  });
+
+  // Assert
+  await expect(created).rejects.toMatchObject({ code: 30039 });
+});
+
+it("renames the bot's sticker", async () => {
+  // Arrange
+  const guild = await botWithStickers(Permission.CreateGuildExpressions);
+  const sticker = await guild.stickers.create({
+    file: PNG_FILE,
+    name: "wave",
+    tags: "wave",
+  });
+
+  // Act
+  const renamed = await sticker.edit({ name: "hello" });
+
+  // Assert
+  expect(renamed.name).toBe("hello");
+});
+
+it("deletes the bot's sticker, and hears it", async () => {
+  // Arrange
+  const guild = await botWithStickers(Permission.CreateGuildExpressions);
+  const sticker = await guild.stickers.create({
+    file: PNG_FILE,
+    name: "wave",
+    tags: "wave",
+  });
+  const deleted = once(client, Events.GuildStickerDelete);
+
+  // Act
+  await sticker.delete();
+
+  // Assert
+  expect((await deleted)[0].id).toBe(sticker.id);
+});
