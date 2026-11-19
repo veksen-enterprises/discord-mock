@@ -1,12 +1,12 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 131,
+    "covered": 134,
     "botCallable": 213,
     "notBotCallable": 15
   },
   "gateway": {
-    "covered": 57,
+    "covered": 58,
     "total": 79
   },
   "restCovered": [
@@ -31,6 +31,7 @@
     "DELETE /guilds/:/roles/:",
     "DELETE /guilds/:/scheduled-events/:",
     "DELETE /invites/:",
+    "DELETE /stage-instances/:",
     "DELETE /users/@me/guilds/:",
     "DELETE /webhooks/:",
     "DELETE /webhooks/:/:",
@@ -107,6 +108,7 @@
     "PATCH /guilds/:/roles",
     "PATCH /guilds/:/roles/:",
     "PATCH /guilds/:/scheduled-events/:",
+    "PATCH /stage-instances/:",
     "PATCH /users/@me",
     "PATCH /webhooks/:",
     "PATCH /webhooks/:/:/messages/:",
@@ -129,6 +131,7 @@
     "POST /guilds/:/roles",
     "POST /guilds/:/scheduled-events",
     "POST /interactions/:/:/callback",
+    "POST /stage-instances",
     "POST /users/@me/channels",
     "POST /webhooks/:/:",
     "PUT /applications/:/commands",
@@ -189,6 +192,7 @@
     "RESUMED",
     "STAGE_INSTANCE_CREATE",
     "STAGE_INSTANCE_DELETE",
+    "STAGE_INSTANCE_UPDATE",
     "THREAD_CREATE",
     "THREAD_DELETE",
     "THREAD_LIST_SYNC",

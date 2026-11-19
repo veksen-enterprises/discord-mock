@@ -45,3 +45,72 @@ it("tells the bot when a moderator opens and ends a stage, as Zeppelin's logs ex
   });
   expect(log.entries.first()?.executor?.username).toBe("mod");
 });
+
+const MODERATOR =
+  Permission.ManageChannels | Permission.MuteMembers | Permission.MoveMembers;
+
+async function botOnStage(permissions: bigint) {
+  const discord = await createDiscord();
+  const server = discord.guild("g");
+  const townHall = discord.stageChannel(server, "town-hall");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+    ...discord.clientOptions,
+  });
+  await discord.start(client, { permissions });
+  const guild = client.guilds.cache.get(server.id)!;
+  return { client, guild, townHall };
+}
+
+it("opens a stage as its moderator, and hears it open", async () => {
+  // Arrange
+  const { client, guild, townHall } = await botOnStage(MODERATOR);
+  const opened = once(client, Events.StageInstanceCreate);
+
+  // Act
+  const stage = await guild.stageInstances.create(townHall.id, {
+    topic: "Patch notes",
+  });
+
+  // Assert
+  expect(stage.topic).toBe("Patch notes");
+  expect(((await opened) as [StageInstance])[0].channelId).toBe(townHall.id);
+});
+
+it("refuses to open a stage without being its moderator", async () => {
+  // Arrange
+  const { guild, townHall } = await botOnStage(Permission.ManageChannels);
+
+  // Act
+  const opened = guild.stageInstances.create(townHall.id, { topic: "Q&A" });
+
+  // Assert
+  await expect(opened).rejects.toMatchObject({ code: 50013 });
+});
+
+it("changes the topic of its stage, and hears the update", async () => {
+  // Arrange
+  const { client, guild, townHall } = await botOnStage(MODERATOR);
+  await guild.stageInstances.create(townHall.id, { topic: "Q&A" });
+  const updated = once(client, Events.StageInstanceUpdate);
+
+  // Act
+  await guild.stageInstances.edit(townHall.id, { topic: "Q&A, part 2" });
+
+  // Assert
+  const [, after] = (await updated) as [StageInstance | null, StageInstance];
+  expect(after.topic).toBe("Q&A, part 2");
+});
+
+it("ends its stage", async () => {
+  // Arrange
+  const { client, guild, townHall } = await botOnStage(MODERATOR);
+  await guild.stageInstances.create(townHall.id, { topic: "Q&A" });
+  const closed = once(client, Events.StageInstanceDelete);
+
+  // Act
+  await guild.stageInstances.delete(townHall.id);
+
+  // Assert
+  expect(((await closed) as [StageInstance])[0].channelId).toBe(townHall.id);
+});
