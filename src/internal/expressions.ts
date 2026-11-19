@@ -4,12 +4,13 @@ import {
   GatewayIntentBits,
   StickerFormatType,
   StickerType,
+  type APIEmoji,
   type APIUser,
 } from "discord-api-types/v10";
 import { reasonOf, recordAudit } from "./audit.js";
 import type { DiscordMock } from "./mock.js";
 import { computePermissions, Permission } from "./payloads.js";
-import { respond, type RestHandler } from "./rest.js";
+import { respond, type RestHandler, type RestRequest } from "./rest.js";
 import { snowflake } from "./snowflake.js";
 import type { GuildRecord } from "./state.js";
 
@@ -514,6 +515,100 @@ export function registerExpressionRoutes(
         return respond.missingPermissions();
       remove(mock, guild, bot(), "sticker", sticker.id, reasonOf(req));
       return respond.noContent();
+    }),
+  );
+
+  // Application emojis (docs.discord.food/resources/emoji#list-application-emojis and the routes
+  // after it): up to 2,000, names 2-32 characters and unique, never role-locked, `user` always
+  // included (the bot, inferred). A duplicate name and the 2,000 limit have no documented error,
+  // so they're a Gap, as is another application's id (the World has one app).
+  const ofApp = (req: RestRequest) =>
+    req.params.appId === state.applicationId
+      ? undefined
+      : rest.gap("another application's emojis");
+  const nameTaken = (name: unknown, exceptId?: string) =>
+    [...state.applicationEmojis.values()].some(
+      (e) => e.name === name && e.id !== exceptId,
+    );
+  rest.route(
+    "GET",
+    "/applications/:appId/emojis",
+    authed(
+      (req) =>
+        ofApp(req) ??
+        respond.json({ items: [...state.applicationEmojis.values()] }),
+    ),
+  );
+  rest.route(
+    "GET",
+    "/applications/:appId/emojis/:emojiId",
+    authed((req) => {
+      const refused = ofApp(req);
+      if (refused) return refused;
+      const emoji = state.applicationEmojis.get(req.params.emojiId!);
+      return emoji ? respond.json(emoji) : unknownEmoji();
+    }),
+  );
+  rest.route(
+    "POST",
+    "/applications/:appId/emojis",
+    authed((req) => {
+      const refused = ofApp(req);
+      if (refused) return refused;
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const image = typeof body.image === "string" ? body.image : "";
+      const match = /^data:(image\/[a-z]+);base64,(.*)$/.exec(image);
+      if (!match) return rest.gap("an emoji image that isn't a data URI");
+      if (Buffer.from(match[2]!, "base64").length > 256 * 1024)
+        return rest.gap("an emoji image over 256 KiB");
+      if (badName("emoji", body.name)) return respond.invalidFormBody();
+      if (nameTaken(body.name))
+        return rest.gap("a duplicate application emoji name");
+      if (state.applicationEmojis.size >= 2000)
+        return rest.gap("more than 2,000 application emojis");
+      const emoji: APIEmoji = {
+        id: snowflake(),
+        name: body.name as string,
+        roles: [],
+        user: state.bot,
+        require_colons: true,
+        managed: false,
+        animated: match[1] === "image/gif",
+        available: true,
+      };
+      state.applicationEmojis.set(emoji.id!, emoji);
+      return respond.json(emoji);
+    }),
+  );
+  rest.route(
+    "PATCH",
+    "/applications/:appId/emojis/:emojiId",
+    authed((req) => {
+      const refused = ofApp(req);
+      if (refused) return refused;
+      const emoji = state.applicationEmojis.get(req.params.emojiId!);
+      if (!emoji) return unknownEmoji();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const other = Object.keys(body).find((k) => k !== "name");
+      if (other) return rest.gap(`PATCH application emoji ${other}`);
+      if ("name" in body) {
+        if (badName("emoji", body.name)) return respond.invalidFormBody();
+        if (nameTaken(body.name, emoji.id!))
+          return rest.gap("a duplicate application emoji name");
+        emoji.name = body.name as string;
+      }
+      return respond.json(emoji);
+    }),
+  );
+  rest.route(
+    "DELETE",
+    "/applications/:appId/emojis/:emojiId",
+    authed((req) => {
+      const refused = ofApp(req);
+      if (refused) return refused;
+      return state.applicationEmojis.delete(req.params.emojiId!)
+        ? respond.noContent()
+        : unknownEmoji();
     }),
   );
 }

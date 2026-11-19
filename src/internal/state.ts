@@ -111,6 +111,8 @@ export class DiscordState extends EventEmitter<{
   readonly autoModRules = new Map<string, APIAutoModerationRule>();
   /** Guild scheduled events by id. */
   readonly scheduledEvents = new Map<string, APIGuildScheduledEvent>();
+  /** Emojis the app uploaded for its own use, by id. */
+  readonly applicationEmojis = new Map<string, APIEmoji>();
   /** Who marked each scheduled event Interested, by event id. */
   readonly eventSubscribers = new Map<string, Set<string>>();
 

@@ -1,7 +1,7 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 137,
+    "covered": 142,
     "botCallable": 213,
     "notBotCallable": 15
   },
@@ -11,6 +11,7 @@
   },
   "restCovered": [
     "DELETE /applications/:/commands/:",
+    "DELETE /applications/:/emojis/:",
     "DELETE /applications/:/guilds/:/commands/:",
     "DELETE /channels/:",
     "DELETE /channels/:/messages/:",
@@ -40,6 +41,8 @@
     "DELETE /webhooks/:/:/messages/@original",
     "GET /applications/:/commands",
     "GET /applications/:/commands/:",
+    "GET /applications/:/emojis",
+    "GET /applications/:/emojis/:",
     "GET /applications/:/guilds/:/commands",
     "GET /applications/:/guilds/:/commands/:",
     "GET /applications/:/guilds/:/commands/:/permissions",
@@ -96,6 +99,7 @@
     "GET /webhooks/:/:/messages/:",
     "GET /webhooks/:/:/messages/@original",
     "PATCH /applications/:/commands/:",
+    "PATCH /applications/:/emojis/:",
     "PATCH /applications/:/guilds/:/commands/:",
     "PATCH /applications/@me",
     "PATCH /channels/:",
@@ -116,6 +120,7 @@
     "PATCH /webhooks/:/:/messages/:",
     "PATCH /webhooks/:/:/messages/@original",
     "POST /applications/:/commands",
+    "POST /applications/:/emojis",
     "POST /applications/:/guilds/:/commands",
     "POST /channels/:/invites",
     "POST /channels/:/messages",

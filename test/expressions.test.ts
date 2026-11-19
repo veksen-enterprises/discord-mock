@@ -224,3 +224,74 @@ it("deletes the bot's sticker, and hears it", async () => {
   // Assert
   expect((await deleted)[0].id).toBe(sticker.id);
 });
+
+it("uploads an emoji to the bot's application", async () => {
+  // Arrange
+  await login([GatewayIntentBits.Guilds]);
+
+  // Act
+  const emoji = await client.application!.emojis.create({
+    attachment: PNG,
+    name: "check",
+  });
+
+  // Assert
+  expect([emoji.name, emoji.author?.id]).toEqual(["check", client.user!.id]);
+});
+
+it("lists the application's emojis", async () => {
+  // Arrange
+  await login([GatewayIntentBits.Guilds]);
+  await client.application!.emojis.create({ attachment: PNG, name: "check" });
+
+  // Act
+  const emojis = await client.application!.emojis.fetch();
+
+  // Assert
+  expect(emojis.map((e) => e.name)).toEqual(["check"]);
+});
+
+it("fetches one application emoji by id", async () => {
+  // Arrange
+  await login([GatewayIntentBits.Guilds]);
+  const { id } = await client.application!.emojis.create({
+    attachment: PNG,
+    name: "check",
+  });
+
+  // Act
+  const emoji = await client.application!.emojis.fetch(id, { force: true });
+
+  // Assert
+  expect(emoji.name).toBe("check");
+});
+
+it("renames an application emoji", async () => {
+  // Arrange
+  await login([GatewayIntentBits.Guilds]);
+  const emoji = await client.application!.emojis.create({
+    attachment: PNG,
+    name: "check",
+  });
+
+  // Act
+  const renamed = await emoji.edit({ name: "tick" });
+
+  // Assert
+  expect(renamed.name).toBe("tick");
+});
+
+it("deletes an application emoji", async () => {
+  // Arrange
+  await login([GatewayIntentBits.Guilds]);
+  const emoji = await client.application!.emojis.create({
+    attachment: PNG,
+    name: "check",
+  });
+
+  // Act
+  await emoji.delete();
+
+  // Assert
+  expect((await client.application!.emojis.fetch()).size).toBe(0);
+});
