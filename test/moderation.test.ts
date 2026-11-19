@@ -323,11 +323,15 @@ it("counts each role's members, leaving out @everyone", async () => {
   const admins = [...record.roles.values()].find((r) => r.name === "admins")!;
 
   // Act
-  const counts = await guild.roles.fetchMemberCounts();
+  // The route discord.js's roles.fetchMemberCounts() calls; that method is missing in 14.26.4,
+  // the oldest version the kit supports.
+  const counts = (await client.rest.get(
+    `/guilds/${guild.id}/roles/member-counts`,
+  )) as Record<string, number>;
 
   // Assert
-  expect(counts.get(admins.id)).toBe(1);
-  expect(counts.has(guild.id)).toBe(false);
+  expect(counts[admins.id]).toBe(1);
+  expect(guild.id in counts).toBe(false);
 });
 
 it("moves a role up past another below the bot, and the bot hears it", async () => {
