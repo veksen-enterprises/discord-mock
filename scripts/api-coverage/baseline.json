@@ -1,7 +1,7 @@
 {
   "discordApiTypes": "0.38.59",
   "rest": {
-    "covered": 151,
+    "covered": 153,
     "botCallable": 213,
     "notBotCallable": 15
   },
@@ -119,6 +119,8 @@
     "PATCH /guilds/:/scheduled-events/:",
     "PATCH /guilds/:/soundboard-sounds/:",
     "PATCH /guilds/:/stickers/:",
+    "PATCH /guilds/:/voice-states/:",
+    "PATCH /guilds/:/voice-states/@me",
     "PATCH /stage-instances/:",
     "PATCH /users/@me",
     "PATCH /webhooks/:",

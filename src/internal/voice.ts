@@ -12,7 +12,8 @@ import type { GuildRecord } from "./state.js";
 // Voice states, the members' and the bot's. Sources: discord-api-docs resources/voice (the voice
 // state object, Get Current User Voice State, Get User Voice State),
 // events/gateway-events#voice-state-update ("Sent when someone joins/leaves/moves voice
-// channels"), events/gateway (GUILD_VOICE_STATES), topics/voice-connections (the bot's op 4).
+// channels"), events/gateway (GUILD_VOICE_STATES), topics/voice-connections (the bot's op 4),
+// docs.discord.food/resources/voice (Modify Current User Voice State, Modify User Voice State).
 
 /** `userId`'s voice state in `guild`, if they're in a voice channel. */
 export function voiceStateOf(
@@ -37,6 +38,8 @@ export function setVoiceState(
     deaf?: boolean;
     selfMute?: boolean;
     selfDeaf?: boolean;
+    suppress?: boolean;
+    requestToSpeakTimestamp?: string | null;
   },
 ) {
   const { state } = mock;
@@ -64,6 +67,9 @@ export function setVoiceState(
   if (change.deaf !== undefined) voice.deaf = member.deaf = change.deaf;
   if (change.selfMute !== undefined) voice.self_mute = change.selfMute;
   if (change.selfDeaf !== undefined) voice.self_deaf = change.selfDeaf;
+  if (change.suppress !== undefined) voice.suppress = change.suppress;
+  if (change.requestToSpeakTimestamp !== undefined)
+    voice.request_to_speak_timestamp = change.requestToSpeakTimestamp;
   if (voice.channel_id) states.set(userId, voice);
   else states.delete(userId);
   mock.gateway.dispatch(
@@ -164,6 +170,62 @@ export function registerVoiceRoutes(
       if (!(perms & Permission.ViewChannel)) return respond.missingAccess();
       if (!(perms & Permission.Connect)) return respond.missingPermissions();
       return respond.json(voice);
+    }),
+  );
+
+  // Modify (Current) User Voice State, on a stage. The caveats: `channel_id` must be the stage the
+  // user is in; Mute Members to unsuppress yourself or anyone else, though you can always suppress
+  // yourself; Request to Speak to raise your hand, though you can always lower it; suppressing
+  // clears the request; unsuppressing a user who isn't a bot sets their request to now. Answers 204
+  // with VOICE_STATE_UPDATE. 10065 for someone not in voice is inferred as for Get; 50013 for a
+  // missing permission is inferred. A channel that isn't the user's stage has no documented code:
+  // a Gap. The "present or future" check on a raised hand isn't modelled, since discord.js stamps
+  // it before sending.
+  rest.route(
+    "PATCH",
+    "/guilds/:guildId/voice-states/:userId",
+    authed((req) => {
+      const guild = state.guilds.get(req.params.guildId!);
+      if (!guild) return respond.error(404, 10004, "Unknown Guild");
+      const self = req.params.userId === "@me";
+      const userId = self ? state.bot.id : req.params.userId!;
+      const voice = voiceStateOf(mock, guild, userId);
+      if (!voice) return respond.error(404, 10065, "Unknown Voice State");
+      const body = (req.body ?? {}) as {
+        channel_id?: string;
+        suppress?: boolean;
+        request_to_speak_timestamp?: string | null;
+        silent?: boolean;
+      };
+      const allowed = self
+        ? ["channel_id", "suppress", "request_to_speak_timestamp", "silent"]
+        : ["channel_id", "suppress"];
+      const other = Object.keys(body).find((k) => !allowed.includes(k));
+      if (other) return rest.gap(`PATCH voice state ${other}`);
+      const channel = state.requireChannel(voice.channel_id!);
+      if (
+        body.channel_id !== channel.id ||
+        channel.type !== ChannelType.GuildStageVoice
+      )
+        return rest.gap("a voice state change outside the user's stage");
+      const perms = computePermissions(state, guild, state.bot.id, channel);
+      const unsuppressing = body.suppress === false;
+      if ((!self || unsuppressing) && !(perms & Permission.MuteMembers))
+        return respond.missingPermissions();
+      const raising = !!body.request_to_speak_timestamp;
+      if (raising && !(perms & Permission.RequestToSpeak))
+        return respond.missingPermissions();
+      const isBot = !!state.users.get(userId)?.bot;
+      setVoiceState(mock, guild, userId, {
+        suppress: body.suppress,
+        requestToSpeakTimestamp:
+          body.suppress === true
+            ? null
+            : unsuppressing && !isBot
+              ? new Date().toISOString()
+              : body.request_to_speak_timestamp,
+      });
+      return respond.noContent();
     }),
   );
 }

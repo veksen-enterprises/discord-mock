@@ -5,6 +5,7 @@ import {
   Events,
   GatewayIntentBits,
   type StageInstance,
+  type VoiceState,
 } from "discord.js";
 import { expect, it } from "vitest";
 import { createDiscord, Permission } from "../src/index.js";
@@ -113,4 +114,84 @@ it("ends its stage", async () => {
 
   // Assert
   expect(((await closed) as [StageInstance])[0].channelId).toBe(townHall.id);
+});
+
+it("brings a member on stage up to speak with Mute Members, and hears it", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  const server = discord.guild("g");
+  const townHall = discord.stageChannel(server, "town-hall");
+  const alice = discord.member(server, "alice");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    ...discord.clientOptions,
+  });
+  await discord.start(client, { permissions: Permission.MuteMembers });
+  const joined = once(client, Events.VoiceStateUpdate);
+  alice.joinVoice(townHall);
+  const [, voice] = (await joined) as [unknown, VoiceState];
+  const updated = once(client, Events.VoiceStateUpdate);
+
+  // Act
+  await voice.setSuppressed(false);
+
+  // Assert
+  const [, after] = (await updated) as [unknown, VoiceState];
+  expect(after.suppress).toBe(false);
+  // Discord stamps a member's raised hand when they're brought up.
+  expect(after.requestToSpeakTimestamp).not.toBeNull();
+});
+
+it("refuses to bring a member up to speak without Mute Members", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  const server = discord.guild("g");
+  const townHall = discord.stageChannel(server, "town-hall");
+  const alice = discord.member(server, "alice");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    ...discord.clientOptions,
+  });
+  await discord.start(client);
+  const joined = once(client, Events.VoiceStateUpdate);
+  alice.joinVoice(townHall);
+  const [, voice] = (await joined) as [unknown, VoiceState];
+
+  // Act
+  const raised = voice.setSuppressed(false);
+
+  // Assert
+  await expect(raised).rejects.toMatchObject({ code: 50013 });
+});
+
+it("raises the bot's own hand on stage with Request to Speak", async () => {
+  // Arrange
+  const discord = await createDiscord();
+  const server = discord.guild("g");
+  const townHall = discord.stageChannel(server, "town-hall");
+  const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    ...discord.clientOptions,
+  });
+  await discord.start(client, { permissions: Permission.RequestToSpeak });
+  const guild = client.guilds.cache.get(server.id)!;
+  const joined = once(client, Events.VoiceStateUpdate);
+  guild.shard.send({
+    op: 4,
+    d: {
+      guild_id: guild.id,
+      channel_id: townHall.id,
+      self_mute: false,
+      self_deaf: false,
+    },
+  });
+  await joined;
+  const raised = once(client, Events.VoiceStateUpdate);
+
+  // Act
+  await guild.members.me!.voice.setRequestToSpeak(true);
+
+  // Assert
+  const [, after] = (await raised) as [unknown, VoiceState];
+  expect(after.requestToSpeakTimestamp).not.toBeNull();
 });

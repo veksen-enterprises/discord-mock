@@ -299,11 +299,11 @@ export interface Member<G extends string = string> extends Handle<"member", G> {
    */
   lockThread(thread: Thread<G>): void;
   /**
-   * Joins `channel`, or moves there from another voice channel. The bot hears `voiceStateUpdate`
+   * Joins a voice or stage channel, or moves there from another one. The bot hears `voiceStateUpdate`
    * with GUILD_VOICE_STATES. Needs Connect there, which `@everyone` has unless an overwrite denies it.
    * @example alice.joinVoice(lobby); // a bot that logs voice activity should post
    */
-  joinVoice(channel: VoiceChannel<G>): void;
+  joinVoice(channel: VoiceChannel<G> | StageChannel<G>): void;
   /** Leaves voice. */
   leaveVoice(): void;
   /**
@@ -1192,7 +1192,7 @@ class MemberActor {
     ).code;
   }
 
-  joinVoice(channel: VoiceChannel): void {
+  joinVoice(channel: VoiceChannel | StageChannel): void {
     this.markAction();
     this.mock.joinVoice(
       this.guild(),

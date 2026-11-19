@@ -76,7 +76,7 @@ it("should record the result when the winner reports", async () => {
 | a member with permissions                        | `discord.member(server, "Mod", { permissions: Permission.ModerateMembers })`                                                                        |
 | a member Discord hasn't seen for a while (prune) | `discord.member(server, "Ghost", { inactiveDays: 40 })`                                                                                             |
 | someone joins through an invite                  | `const code = alice.createInvite(general)`, then `discord.member(server, "Carol", { invite: code })`                                                |
-| join, move, leave voice                          | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`                                               |
+| join, move, leave voice or a stage               | `const lobby = discord.voiceChannel(server, "lobby")`, `alice.joinVoice(lobby)`, `alice.leaveVoice()`; a stage channel works the same way           |
 | a music bot plays in voice                       | `alice.joinVoice(lobby)`, `await alice.runCommand(general, "play")`, `await discord.waitForSound(lobby)`; the bot's client needs GuildVoiceStates   |
 | create, edit, delete an event                    | `const raid = host.createEvent("Raid", lobby, new Date("2026-12-01T20:00Z"))`, `host.editEvent(raid, { name: "Raid 2" })`, `host.deleteEvent(raid)` |
 | mark an event Interested, or take it back        | `alice.markInterested(raid)`, `alice.unmarkInterested(raid)`; the bot needs Partials.User or the user cached to hear it                             |

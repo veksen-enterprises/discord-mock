@@ -6,7 +6,7 @@ More of Discord's API works when your bot calls it, instead of failing the test 
 
 - Members: `guild.members.list()` and `search()` (search used to come back as Unknown Member), `members.bulkBan()`, `members.me.setNickname()`, `roles.fetch(id)`, `roles.fetchMemberCounts()`, and `setPosition()` on roles and channels.
 - Scheduled events: the bot can create, edit, start, end and delete events, and read who is interested. New: `member.markInterested(event)` and `member.unmarkInterested(event)`, which the bot hears as `guildScheduledEventUserAdd` and `guildScheduledEventUserRemove`.
-- Stages: the bot can open, retitle and end a stage it moderates.
+- Stages: the bot can open, retitle and end a stage it moderates, bring a member up to speak or move them back to the audience, and raise its own hand. `member.joinVoice()` now takes a stage channel.
 - Stickers: the bot can upload, edit and delete guild stickers. Application emojis: the bot can upload, list, rename and delete them.
 - Soundboard: the bot can upload, list, edit and delete guild sounds, and hears each change. `client.guilds.fetchSoundboardSounds()` works.
 - Threads: `threads.fetchArchived({ type: "private" })`, with or without `fetchAll`. The public list no longer includes private threads.
